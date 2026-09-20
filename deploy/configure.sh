@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# SYLU OJ · 安装后配置与品牌落地（对应实施计划 §1.2 §10 §11 §30 §31 §32 §33 §34 §40）
+#
+# 设计立场：**能用 Hydro 原生设置解决的，绝不写插件。**
+# 站点名称、Logo、页脚附加内容、关于页正文，Hydro 控制面板里都能直接改，
+# 改完还能被升级保留下来；插件只用来补原生做不到的部分。
+#
+# 用法：
+#   bash deploy/configure.sh                      # 打印配置清单（只读，不改任何东西）
+#   bash deploy/configure.sh --install-addon      # 额外安装 sylu-brand 插件
+#   bash deploy/configure.sh --verify --url https://oj.example.edu.cn/
+#                                                 # 校验线上页面是否符合规范
+#
+# 本脚本**不会**直接写 Hydro 的系统设置：设置属于运行数据，
+# 应当通过控制面板落入 MongoDB 的 system/config 文档（§56：跨系统一律走官方接口）。
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+. "${SCRIPT_DIR}/lib/common.sh"
+
+INSTALL_ADDON=0
+VERIFY=0
+SITE_URL=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --install-addon) INSTALL_ADDON=1; shift ;;
+        --verify) VERIFY=1; shift ;;
+        --url) SITE_URL="${2:-}"; shift 2 ;;
+        -h | --help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) die "未知参数：$1" ;;
+    esac
+done
+
+banner "品牌与站点配置" "原生设置优先，插件只补原生做不到的"
+
+# ============================================================
+log_step "0. 前置检查"
+# ============================================================
+if [ "$(id -u)" -eq 0 ]; then
+    require_hydro_cli
+    SVC="$(hydro_service_active || true)"
+    log_info "Hydro 服务状态：${SVC}"
+    log_info "站点内部地址：http://127.0.0.1:8888/ -> HTTP $(hydro_http_probe)"
+else
+    log_warn "非 root 运行：将跳过服务检查与插件安装，只打印配置清单。"
+fi
+
+# ============================================================
+log_step "1. 控制面板里要改的原生设置（这是主要工作，不是插件）"
+# ============================================================
+cat <<'EOF'
+  路径：登录管理员 → 控制面板 → 系统设置（需要再次验证管理员密码）
+
+  【必改】站点身份
+     server.name                     SYLU OJ
+                                     ← 页头站点名。不要写"沈阳理工大学官方 OJ"
+     server.url                      https://<你的域名>/      （必须以 / 结尾！）
+                                     ← Server BaseURL，填错会导致跳转、邮件、榜单链接全错
+     server.language                 zh_CN
+     server.port                     8888（保持默认，对外由 Caddy/Nginx 反代）
+
+  【必改】品牌视觉（§32 §34）
+     ui-default.nav_logo_dark        你的 Logo 地址（建议 /sylu-brand/logo.svg）
+                                     ← 原生支持，不需要改任何模板
+     ui-default.footer_extra_html    页脚附加 HTML，一行一条，例如：
+                                       <span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>
+                                       <span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>
+                                     ← 免责声明走这里，零插件、零侵入
+
+  【建议】关于页与公告（§40）
+     ui-default.about                关于本站正文（Markdown）。放入：
+                                       平台使用须知 / 判题环境 / 反馈方式 / 隐私说明
+                                     以及"非学校官方信息系统"声明。
+
+  【建议】收敛访问面（§13 §39）
+     limit.problem_files_max         100       （单题文件数上限，防误传大包）
+     limit.problem_files_max_size    268435456 （单题文件总大小，字节）
+     server.login                    true      （保留内置注册；§10 允许正常注册）
+
+  【不要做】
+     ✗ 不要删除或隐藏页脚的 "Powered by Hydro"
+       （ui-default/templates/partials/footer.html 明确写明：除非购买企业授权，
+         不得隐藏、修改或移除该版权信息；§31 同样要求保留）
+     ✗ 不要在客户端决定角色（§10）：注册一律默认普通用户，权限只在服务端授予
+
+  验证：改完刷新首页，确认浏览器标签页标题变成 SYLU OJ。
+EOF
+
+# ============================================================
+log_step "2. 用户与权限（§9 §10 §11）"
+# ============================================================
+cat <<'EOF'
+  V1 只保留四类身份：Guest / Student / Teacher / Admin，全部走 Hydro 原生权限系统，
+  不新建角色表。
+
+  注册规则（§10）：
+     · 允许正常注册，注册后默认普通用户
+     · 前端**绝对禁止**提交 role=admin / role=teacher —— 身份只能由服务端权限控制
+
+  教师授权（§11，V1 人工授权）：
+     普通账号注册 → 管理员确认身份 → 管理员在「用户管理 / 域权限」里授予
+     常用命令：
+       hydrooj cli user setSuperAdmin <uid>      # 仅系统维护号，不要日常使用
+     域内授权请用控制面板 → 域 → 用户/角色，不要在库里直接改（§56）
+
+  账号纪律（§8）：
+     · 建一个 system-admin 专用于系统维护
+     · 开发者日常刷题用普通账号
+     · 不要用 admin/admin、123456 这类弱口令，也不与学生账号共用
+EOF
+
+# ============================================================
+log_step "3. 图形化确认：去控制面板逐项打勾"
+# ============================================================
+cat <<'EOF'
+     [ ] server.name        已改为 SYLU OJ
+     [ ] server.url         已填完整地址且以 / 结尾
+     [ ] nav_logo_dark      已指向本站 Logo
+     [ ] footer_extra_html  已加入非官方声明
+     [ ] ui-default.about   已写入使用须知 / 判题环境 / 反馈方式 / 隐私说明
+     [ ] 已建立 system-admin 专用维护账号，且未使用弱口令
+     [ ] 已注册一个普通账号，验证注册 / 登录 / 退出链路
+EOF
+
+# ============================================================
+log_step "4. 可选：安装 sylu-brand 插件（只补原生做不到的两件事）"
+# ============================================================
+ADDON_DIR="${SYLU_OJ_ROOT}/addons/sylu-brand"
+if [ "$INSTALL_ADDON" = 1 ]; then
+    [ "$(id -u)" -eq 0 ] || die "安装插件需要 root"
+    [ -f "${ADDON_DIR}/index.js" ] || die "找不到插件：${ADDON_DIR}/index.js"
+    log_info "插件目录：${ADDON_DIR}"
+    log_info "作用：顶栏「关于本站」入口 + 一页聚合的平台须知（§40）"
+    log_info "不作用：站点名称、Logo、页脚 —— 那些用上面第 1 步的原生设置"
+    record_note "configure.sh 安装 sylu-brand 插件"
+    hydrooj addon add "$ADDON_DIR"
+    log_ok "已登记插件。接下来需要重启 Hydro 使其生效："
+    log_info "  pm2 restart hydrooj      # 或 systemctl restart hydro"
+    log_warn "重启后请检查浏览器是否出现「Addon load fail」通知；"
+    log_warn "若失败，站点本身不受影响，按 addons/sylu-brand/README.md 排查。"
+else
+    log_info "未指定 --install-addon，跳过。"
+    log_info "要装请执行：bash deploy/configure.sh --install-addon"
+fi
+
+# ============================================================
+log_step "5. 线上校验（--verify）"
+# ============================================================
+if [ "$VERIFY" = 1 ]; then
+    [ -n "$SITE_URL" ] || SITE_URL="http://127.0.0.1:8888/"
+    log_info "检查目标：${SITE_URL}"
+
+    PK_PASS=0; PK_WARN=0; PK_FAIL=0
+
+    CODE="$(curl -s -o /tmp/sylu-home.html -w '%{http_code}' --max-time 15 "$SITE_URL" 2>/dev/null || echo 000)"
+    case "$CODE" in
+        200) pk_pass "首页返回 200" ;;
+        000) pk_fail "首页无法访问（DNS / HTTPS / 反代 / 防火墙，逐项排查）" ;;
+        *) pk_fail "首页返回 HTTP ${CODE}（期望 200）" ;;
+    esac
+
+    if [ -s /tmp/sylu-home.html ]; then
+        if grep -qi 'Powered by' /tmp/sylu-home.html && grep -qi 'hydro' /tmp/sylu-home.html; then
+            pk_pass "页脚保留 Powered by Hydro 归属声明（§31，不得删除）"
+        else
+            pk_fail "页脚找不到 Powered by Hydro —— 违反 §31 与上游版权声明，必须恢复"
+        fi
+
+        if grep -qi '沈阳理工大学' /tmp/sylu-home.html; then
+            if grep -qiE '非官方|不是.*官方|学生维护' /tmp/sylu-home.html; then
+                pk_pass "已声明非官方定位（§30）"
+            else
+                pk_warn "页面出现校名但没有非官方声明，建议在 ui-default.footer_extra_html 补上（§30）"
+            fi
+        else
+            pk_warn "页面未出现校名（可能还没设 server.name）"
+        fi
+
+        if grep -q 'foo\|example\.com\|TODO\|lorem' /tmp/sylu-home.html; then
+            pk_warn "页面含占位文本（foo/example/TODO/lorem），上线前需清理（§65）"
+        else
+            pk_pass "未发现明显占位文本"
+        fi
+
+        # §65 无假数据：首页出现"注册用户 X 万"这类未接真实数据的文案要拦下
+        if grep -qiE '[0-9]+\s*万\s*(用户|学生)|累计提交\s*[0-9]+' /tmp/sylu-home.html; then
+            pk_warn "首页疑似存在写死的统计数字，请确认是否已接真实数据（§29 §65）"
+        else
+            pk_pass "未见写死的统计数字"
+        fi
+    fi
+
+    # §65 无死链接：关键路由必须可达（未登录应 200/302，不应 404/500）
+    BASE="${SITE_URL%/}"
+    for ROUTE in /p /ranking /contest /homework /user/register /user/login; do
+        C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${BASE}${ROUTE}" 2>/dev/null || echo 000)"
+        case "$C" in
+            200 | 301 | 302 | 303) pk_pass "路由 ${ROUTE} 可达（HTTP ${C}）" ;;
+            404) pk_fail "路由 ${ROUTE} 返回 404 —— 死链接（§65）" ;;
+            000) pk_fail "路由 ${ROUTE} 无响应" ;;
+            *) pk_warn "路由 ${ROUTE} 返回 HTTP ${C}" ;;
+        esac
+    done
+
+    pk_summary
+else
+    log_info "未指定 --verify，跳过线上校验。"
+    log_info "上线前请执行：bash deploy/configure.sh --verify --url https://你的域名/"
+fi
+
+record_note "configure.sh 执行完毕 install_addon=${INSTALL_ADDON} verify=${VERIFY}"
+printf '\n%s下一步：bash deploy/healthcheck.sh --gate   （§7 第一道 Gate 复检）%s\n' "$C_BOLD" "$C_OFF"

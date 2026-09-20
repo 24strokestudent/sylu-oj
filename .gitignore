@@ -1,11 +1,46 @@
 # Include your project-specific ignores in this file
 # Read about how to use .gitignore: https://help.github.com/articles/ignoring-files
 # Useful .gitignore templates: https://github.com/github/gitignore
+
+# 依赖与构建产物
 node_modules
 dist
+build
 .cache
-# IDE / macOS
+*.tsbuildinfo
+
+# IDE / macOS / Windows
 .idea
 *.iml
 .DS_Store
+Thumbs.db
 *.local
+
+# —— 安全：以下内容一律不得进入版本库（实施计划 §44）——
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+known_hosts
+*credentials*
+*credential*.json
+secrets/
+secret/
+backup/
+backups/
+*.dump
+deploy/local.env
+
+# 部署/运维本地状态与日志
+deploy/.state/
+*.log
+
+# 本地参考代码（Hydro 上游只读副本等）
+.ref/
+# 本地端到端验证产物
+.e2e/

@@ -1,0 +1,15 @@
+{
+  "pid": "SYS001",
+  "title": "SYS001 A+B（内部判题验收集）",
+  "description": "这是一道**仅用于内部判题环境验收**的题目，不属于对外题库。\n\n读入两个整数 a 和 b，输出它们的和。\n\n本题由 test/judge-suite 维护，用于验证 Hydro 的 C / C++ / Python 评测链路是否正常，以及 AC / WA / CE / RE / TLE / MLE / OLE 七种结果能否被正确区分。",
+  "input_format": "一行两个整数 a, b（-10^9 <= a, b <= 10^9）。",
+  "output_format": "一个整数，表示 a + b。",
+  "time_limit": 1,
+  "memory_limit": 256,
+  "tags": ["内部验收", "系统测试"],
+  "difficulty": 1,
+  "samples": [
+    { "input": "1 2", "output": "3" },
+    { "input": "100 200", "output": "300" }
+  ]
+}
