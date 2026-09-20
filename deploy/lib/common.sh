@@ -135,21 +135,28 @@ record_note() {
 }
 
 # 记录当前版本快照（供 rollback 使用）
+# 注意：所有探测都加 timeout，避免某个命令卡住把整个部署流程挂死。
 snapshot_versions() {
     ensure_state_dir
+    ensure_nix_path
     local f="${SYLU_STATE_DIR}/versions-$(date '+%Y%m%d-%H%M%S').env"
     {
         echo "RECORDED_AT=$(date '+%Y-%m-%dT%H:%M:%S%z')"
         echo "OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
         echo "KERNEL=$(uname -r)"
         echo "ARCH=$(uname -m)"
-        echo "NODE=$(node -v 2>/dev/null || echo none)"
-        echo "NPM=$(npm -v 2>/dev/null || echo none)"
-        echo "HYDROOJ=$(hydrooj --version 2>/dev/null | head -1 || echo none)"
-        echo "MONGOD=$(mongod --version 2>/dev/null | head -1 || echo none)"
-        echo "MONGOSH=$(mongosh --version 2>/dev/null || echo none)"
-        echo "HYDRO_SANDBOX=$(hydro-sandbox --version 2>/dev/null | head -1 || echo none)"
-        echo "PM2=$(pm2 --version 2>/dev/null || echo none)"
+        echo "NODE=$(timeout 10 node -v 2>/dev/null || echo none)"
+        echo "NPM=$(timeout 10 npm -v 2>/dev/null || echo none)"
+        echo "YARN=$(timeout 10 yarn --version 2>/dev/null || echo none)"
+        echo "HYDROOJ=$(hydro_version 2>/dev/null || echo none)"
+        echo "HYDRO_UI=$(hydro_pkg_version @hydrooj/ui-default 2>/dev/null || echo none)"
+        echo "HYDRO_JUDGE=$(hydro_pkg_version @hydrooj/hydrojudge 2>/dev/null || echo none)"
+        echo "MONGOD=$(timeout 20 mongod --version 2>/dev/null | head -1 || echo none)"
+        echo "MONGOSH=$(timeout 20 mongosh --version 2>/dev/null | head -1 || echo none)"
+        echo "HYDRO_SANDBOX=$(timeout 10 go-judge --version 2>/dev/null | head -1 || echo none)"
+        echo "PM2=$(timeout 20 pm2 --version 2>/dev/null || echo none)"
+        echo "CADDY=$(timeout 10 caddy version 2>/dev/null | head -1 || echo none)"
+        echo "DB_VER=$(hydro_db_ver 2>/dev/null || echo none)"
     } >"$f"
     ln -sfn "$f" "${SYLU_STATE_DIR}/versions-latest.env"
     printf '%s\n' "$f"
@@ -203,15 +210,21 @@ hydro_service_active() {
 }
 
 # 输出 Hydro 各组件版本（JSON），失败返回非 0
+# 注意：`hydrooj cli <...>` 是**非交互**子命令，不会挂；但仍加 timeout 兜底，
+# 避免 CLI 内部等锁/连不上库时把调用方一起拖住。
 hydro_versions_json() {
     has_hydro_cli || return 1
-    hydrooj cli execute "return global.Hydro.version" 2>/dev/null || return 1
+    timeout 60 hydrooj cli execute "return global.Hydro.version" 2>/dev/null || return 1
 }
 
 # HTTP 探活：返回状态码
+# 注意：curl 连接失败时会把 "000" 写进 -w 的输出，如果这里再 `|| echo 000`，
+# 就会拼成 "000000"，看起来像个诡异的错误码。所以只兜底"完全没输出"的情况。
 hydro_http_probe() {
-    local url="${1:-http://127.0.0.1:8888/}"
-    curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || echo "000"
+    local url="${1:-http://127.0.0.1:8888/}" code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || true)"
+    [ -n "$code" ] || code="000"
+    printf '%s\n' "$code"
 }
 
 # ---------- 版本与升级所需信息 ----------
@@ -220,9 +233,24 @@ hydro_http_probe() {
 # 升级必须整组一起动，只升 hydrooj 会出现 ui/judge 版本错配。
 SYLU_HYDRO_PKGS="hydrooj @hydrooj/ui-default @hydrooj/hydrojudge @hydrooj/fps-importer @hydrooj/a11y"
 
-hydro_version() {
+# 读取某个 yarn global 包的版本号。
+# 为什么不用 `hydrooj --version`：hydrooj CLI **没有** --version 这个选项，
+# 传进去会被当成子命令解析失败，随后掉进交互式 REPL 等 stdin；
+# 在非交互脚本里表现为**永久挂起**（被 timeout 杀掉，退出码 124），
+# 会把整个部署流程卡死。唯一可靠的取法：直接读该包的 package.json。
+hydro_pkg_version() {
     has_hydro_cli || return 1
-    hydrooj --version 2>/dev/null | tr -d '\r' | head -1
+    local ygd
+    ygd="$(yarn_global_dir 2>/dev/null || true)"
+    [ -n "$ygd" ] || return 1
+    local v=""
+    v="$(timeout 20 node -p "require('${ygd}/node_modules/${1}/package.json').version" 2>/dev/null | tr -d '\r' | head -1)" || true
+    [ -n "$v" ] || return 1
+    printf '%s\n' "$v"
+}
+
+hydro_version() {
+    hydro_pkg_version hydrooj
 }
 
 # 数据库版本标记 db.ver（见 packages/hydrooj/src/service/migration.ts）
@@ -230,19 +258,61 @@ hydro_version() {
 # 关键结论：**db.ver 一旦变大，就说明数据库已经迁移过了。**
 # 此时只回滚代码是危险的 —— 旧版本启动时看到 db.ver > expected 会直接
 # 以 "You are likely trying to apply a downgrade" 阻断启动（除非 --ignore-version）。
+#
+# 【踩坑记录】hydrooj CLI 的输出去噪非常麻烦，实测格式：
+#     Process 45781 running as master          <-- 行首数字是 PID
+#     Using mongodb external event bus
+#     20 19:51:02   common [I] Locale init: …
+#     20 19:51:02 settings [I] Successfully loaded config
+#     …
+#     97                                        <-- 这才是 system get db.ver 的真正结果
+# 每行日志的"行首 20"非常容易被误当成 db.ver（实际它只是个日志前缀，与 db.ver 无关）；
+# 而 head -1 抠数字会抓到 PID。真正的返回值是**唯一一行纯数字行**。
+# 所以这里首选直连 MongoDB 只读查询（结果权威、无噪声），CLI 仅作兜底。
+# 注：URI 会以参数形式出现在 mongosh 的进程命令行里 —— 该机仅 root 可登录，可接受。
 hydro_db_ver() {
+    local uri v
+    uri="$(hydro_mongo_uri 2>/dev/null || true)"
+    if [ -n "$uri" ] && command -v mongosh >/dev/null 2>&1; then
+        v="$(timeout 40 mongosh "$uri" --quiet \
+            --eval 'JSON.stringify((db.system.findOne({_id:"db.ver"})||{}).value)' 2>/dev/null \
+            | tr -d '\r" ' | tail -1 || true)"
+        case "$v" in '' | *undefined* | *null*) v="" ;; esac
+        if [ -n "$v" ]; then printf '%s\n' "$v"; return 0; fi
+    fi
     has_hydro_cli || return 1
-    local out
-    out="$(hydrooj cli system get db.ver 2>/dev/null | tr -d '\r' | tail -1)"
-    case "$out" in
-        '' | undefined | null)
-            out="$(hydrooj cli execute "return global.Hydro.model.system.get('db.ver')" 2>/dev/null | tr -d '\r' | tail -1)"
-            ;;
-    esac
-    case "$out" in
-        '' | undefined | null) return 1 ;;
-    esac
+    v="$(timeout 40 hydrooj cli system get db.ver 2>/dev/null | tr -d '\r' | grep -xE '[0-9]+' | tail -1 || true)"
+    [ -n "$v" ] || return 1
+    printf '%s\n' "$v"
+}
+
+# ---------- 系统设置读写（走官方 CLI，不直接写库） ----------
+# Hydro 的 CLI 分发规则（见 packages/hydrooj/src/entry/cli.ts）：
+#     hydrooj cli <modelName> <func> [args...]   ->   global.Hydro.model[modelName][func](...args)
+# 所以：
+#     hydrooj cli system get <key>          ->  model.system.get(key)
+#     hydrooj cli system set <key> <value>  ->  model.system.set(key, value, broadcast=true)
+# 这条路与控制面板「系统设置」是同一条代码路径 —— 属于官方接口（§56），
+# 比直接改 MongoDB 的 system 文档安全，也不会被后续迁移覆盖。
+#
+# 输出解析的坑：CLI 会把日志混在 stdout 里，且每行日志带 "<序号> <时间>" 前缀，
+# 真正的返回值是**最后一行非日志行**（例如 db.ver 查询会先吐一堆 loader 日志）。
+HYDRO_LOG_NOISE='^([0-9]+ [0-9]{2}:[0-9]{2}:[0-9]{2}|Process [0-9]+ running as master|Using mongodb external event bus|Module require)'
+
+hydro_sys_get() {
+    has_hydro_cli || return 1
+    local key="$1" out
+    out="$(timeout 60 hydrooj cli system get "$key" 2>/dev/null | tr -d '\r' \
+        | grep -vE "$HYDRO_LOG_NOISE" | tail -1 || true)"
+    [ -n "$out" ] || return 1
     printf '%s\n' "$out"
+}
+
+hydro_sys_set() {
+    has_hydro_cli || return 1
+    local key="$1" value="$2"
+    # broadcast 默认 true，会把变更广播给已启动的 worker
+    timeout 90 hydrooj cli system set "$key" "$value" >/dev/null 2>&1
 }
 
 # ---------- pm2（官方安装用 pm2 托管 hydrooj / hydrojudge / mongodb / caddy） ----------

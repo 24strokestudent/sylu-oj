@@ -44,10 +44,10 @@ Hydro 官方安装脚本 `https://hydro.ac/setup.sh`（实测版本 **v3.0.1**�
 
 | 路径 | 内容 | 备注 |
 | --- | --- | --- |
-| `~/.hydro/config.json` | 数据库连接串（含口令） | 权限应 `600` |
-| `~/.hydro/judge.yaml` | 评测机配置 | **含默认口令，必须改**，权限 `600` |
+| `~/.hydro/config.json` | 数据库连接串（含口令） | 官方写出来是 `644`，**要手动 `chmod 600`** |
+| `~/.hydro/judge.yaml` | 评测机配置 | **官方 setup.sh v3.0.1 并不生成这个文件**（见 §6.7）；本机实测不存在 |
 | `~/.hydro/Caddyfile` | 反代与域名/HTTPS | 改域名后 `caddy reload` |
-| `~/.hydro/mount.yaml` | 评测沙箱挂载与资源限制 | §16 沙箱隔离的核心 |
+| `~/.hydro/mount.yaml` | 评测沙箱挂载与资源限制 | §16 沙箱隔离的核心；**本机评测就是靠它工作的** |
 | `~/.hydro/addon.json` | 插件清单 | 官方默认写入 4 个 `@hydrooj/*` 包 |
 | `~/.hydro/static` | 前端静态资源 | Caddy 直接从这里读 |
 | `/data/db`、`/data/file` | 数据库文件、用户上传文件 | 备份要覆盖 |
@@ -123,6 +123,40 @@ bash deploy/healthcheck.sh --gate
 
 **这三项没通过之前，禁止开始任何 UI 改造。**
 
+#### 已实测通过（2026-09-20，主机 101.42.27.44）
+
+Gate 用真实 HTTP 请求跑通（`curl` 打 `http://127.0.0.1:8888`），结论如下：
+
+| 检查项 | 结果 | 证据 |
+| --- | --- | --- |
+| 注册链路（§10） | 通过 | `POST /register {mail}` → 302 `/register/<code>`；再 `POST /register/<code> {password,verifyPassword,uname}` → 302 `/home/settings/preference` |
+| 登录链路 | 通过 | `POST /login {uname,password,rememberme}` → 302 `/` |
+| 管理员会话 | 通过 | 带会话访问首页：`<title>首页 - SYLU OJ</title>`，导航含 `system-admin` 与退出入口 |
+| 管理面板（管理员） | 通过 | `/manage/dashboard` → 200；`/manage/config`、`/manage/setting`、`/manage/userpriv`、`/manage/script` → 302 `/user/sudo`（Hydro 的二次验密，属正常行为） |
+| 管理面板（未登录） | 通过 | `/manage/config` → 302 `/login?redirect=%2Fmanage%2Fconfig` |
+| 普通用户无管理权 | 通过 | `default.priv = 16842756` = `PRIV_USER_PROFILE｜PRIV_CREATE_FILE｜PRIV_SEND_MESSAGE`；**不含** `PRIV_EDIT_SYSTEM` / `PRIV_SET_PERM` / `PRIV_JUDGE` / `PRIV_REJUDGE` / `PRIV_MANAGE_ALL_DOMAIN` / `PRIV_UNLIMITED_ACCESS` |
+
+**两个必须知道的上游行为**（都实测踩过，详见 §6.7 §6.8）：
+
+1. **`@hydrooj/a11y` 会把 uid 2 自动提成超级管理员。**
+   所以"第一个注册的用户"天然就是超管 —— 这是 Hydro 的引导机制，不是漏洞。
+   结果：**别拿随便一个测试账号当第一个用户**，否则它会悄悄拿到 `PRIV_ALL(-1)`。
+   本机处理方式：按 §8 建了专用的 `system-admin`（uid 3）并 `setSuperAdmin`，
+   临时验证账号已用官方脚本停用：
+   ```bash
+   hydrooj cli user setSuperAdmin 3                      # 指定超管
+   hydrooj cli script cleanUserEffect '{"uid":2}'        # 停用（priv 置 0，登录 403）
+   ```
+
+2. **注册是「两步 token」流程，默认不发信也能走完。**
+   本机 `smtp.verify=true` 但 `smtp.user` 未配置，于是第一步 POST 会**直接 302 到
+   `/register/<code>`**，把 token 放在 URL 里 —— 不需要邮箱就能注册。
+   代价：`/register` 有 `limitRate('send_mail', 60, 1, mail)`，
+   **同一邮箱 60 秒内只能申请一次 token**，自动化脚本连续注册要用不同邮箱。
+
+管理员账号：`system-admin`（uid 3）。首次部署生成的密码写在服务器
+`/root/.sylu-oj/admin-credentials.txt`（权限 600，仅 root 可读）。
+
 ### 第 4 步 · 域名与 HTTPS（§41）
 
 编辑 `~/.hydro/Caddyfile`，把默认的 `:80` 改成你的域名，然后：
@@ -160,25 +194,59 @@ bash deploy/configure.sh --install-addon
 
 ### 第 6 步 · 评测机配置（§8、§14）
 
-编辑 `~/.hydro/judge.yaml`：
+**先确认这台机器是哪种评测形态** —— 它决定你到底要不要碰 `judge.yaml`：
 
-```yaml
-hosts:
-  local:
-    server_url: https://<你的域名>/      # ← 官方默认写的是 https://hydro.ac/，必须改
-    uname: judge                         # ← 建议改成独立账号
-    password: <强口令>                    # ← 官方默认是 examplepassword，必须改！
+| 形态 | 特征 | 要配 `judge.yaml` 吗 |
+| --- | --- | --- |
+| **内嵌评测机**（官方 `setup.sh` 默认装法，**本机就是这种**） | pm2 里有 `hydro-sandbox`；`@hydrooj/hydrojudge` 作为 addon 跑在 hydrooj 进程内；沙箱监听 `localhost:5050` | **不需要** |
+| 独立 / 远端评测机 | 单独跑 `hydrojudge` 进程；`judge.yaml` 里配 `server_url` / `uname` / `password` | 需要 |
+
+判断依据就在 `@hydrooj/hydrojudge/src/config.ts`：
+
+```js
+let config = global.Hydro
+    ? JudgeSettings({})                          // 跑在 hydrooj 进程内 → 只用默认值
+    : (() => { /* 读 ~/.hydro/judge.yaml */ })();  // 独立进程 → 才读 judge.yaml
 ```
 
-然后：
+内嵌形态下生效的是 `JudgeSettings({})` 的默认值，关键的几项：
+
+- `sandbox_host = http://localhost:5050` ← 正好对上 `hydro-sandbox` 的监听地址
+- `disable = false`（内置评测机默认开启）
+- `memoryMax = 512m`、`processLimit = 32`、`parallelism = 2`、`total_time_limit = 60`
+
+**本机实测（2026-09-20）：**
 
 ```bash
-pm2 restart hydrojudge
-pm2 save
+ls ~/.hydro/judge.yaml          # → 不存在（官方 setup.sh v3.0.1 不生成这个文件）
+curl -s -o /dev/null -w '%{http_code}' http://localhost:5050/version    # → 200
+pm2 describe hydro-sandbox | grep 'script args'
+#   -c "ulimit -s unlimited && hydro-sandbox -mount-conf /root/.hydro/mount.yaml -http-addr=localhost:5050"
 ```
 
-**`examplepassword` 是公开的默认口令，不改等于把评测机对外开放。**
-`deploy/secret-scan.sh` 会专门把这一项标为高危。
+数据库里能查到已成功的评测记录（`status:1` = Accepted，`score:100`，`lang:"cc"`），
+说明「提交 → 沙箱 → 判分」整条链路是通的。
+
+**结论：这台机器上不存在"默认口令 `examplepassword` 没改"的风险 —— 因为压根没有 judge.yaml。**
+`deploy/secret-scan.sh` 里对 `examplepassword` 的检查，在纯内嵌评测机的机器上会自然报"未命中"，这是正常的。
+
+**真正要守的安全边界是沙箱端口（§16）。**
+`sandbox_host` 走的是**明文 HTTP 且不做认证** —— 谁能连上 5050，谁就能在沙箱里跑任意代码。
+所以 5050 必须只听 `127.0.0.1`。本机实测：
+
+```bash
+ss -ltnp | grep 5050      # → 127.0.0.1:5050 与 [::1]:5050，没有 0.0.0.0
+```
+
+**想改内嵌评测机的参数怎么办？** 实测结论是：**没有官方设置入口**。
+`@hydrooj/hydrojudge` 没有注册任何 Hydro 系统设置（`grep -rn SystemSetting` 在其源码里无结果），
+`hydrooj cli system get judge.sandbox_host` 读出来也是 `undefined`。
+所以别指望 `hydrooj cli system set judge.*` 能生效。真要调，只有两条路：
+
+1. 改上游代码走 `overrideConfig`（属于 Core Patch，要按 §1.2 留 `.patch`）；
+2. 把评测机拆成独立部署，那时才用 `judge.yaml`，也才有"改默认口令"这件事。
+
+> `deploy/healthcheck.sh` 与 `deploy/secret-scan.sh` 只做只读探测，不会去写评测机配置。
 
 ### 第 7 步 · 题目导入（§18–§25）
 
@@ -224,28 +292,51 @@ bash deploy/configure.sh --verify --url https://<你的域名>/
 ## 4. 版本记录表（装完请如实填写）
 
 > 升级、回滚、排查问题时，这张表比记忆可靠。
+> **`db.ver` 是升级/回滚的安全闸门**（见 §6.6 与 §5.5），必须一并记录。
+
+**首次安装实测记录**（主机 `101.42.27.44`，记录时间 2026-09-20 19:53 +0800）：
 
 | 项 | 版本 / 值 | 记录时间 |
 | --- | --- | --- |
-| 操作系统 | | |
-| 内核 | | |
-| 架构 | | |
-| Node.js | | |
-| yarn | | |
-| pm2 | | |
-| **hydrooj** | | |
-| `@hydrooj/ui-default` | | |
-| `@hydrooj/hydrojudge` | | |
-| MongoDB | | |
-| go-judge / hydro-sandbox | | |
-| Caddy | | |
-| 官方 setup.sh 版本 | v3.0.1（脚本内自报） | |
+| 操作系统 | Debian GNU/Linux 12 (bookworm) | 2026-09-20 |
+| 内核 | 6.1.0-20-amd64 | 2026-09-20 |
+| 架构 | x86_64 | 2026-09-20 |
+| Node.js | v24.19.0（npm 11.17.0） | 2026-09-20 |
+| yarn | 1.22.22 | 2026-09-20 |
+| pm2 | 6.0.14 | 2026-09-20 |
+| **hydrooj** | **5.0.7** | 2026-09-20 |
+| `@hydrooj/ui-default` | 4.58.5 | 2026-09-20 |
+| `@hydrooj/hydrojudge` | 4.0.6 | 2026-09-20 |
+| MongoDB | v7.0.28（mongosh 2.9.1） | 2026-09-20 |
+| go-judge / hydro-sandbox | v1.12.3 | 2026-09-20 |
+| Caddy | 2.11.4 | 2026-09-20 |
+| **db.ver（数据库迁移标记）** | **97** | 2026-09-20 |
+| 官方 setup.sh 版本 | v3.0.1（脚本内自报） | 2026-09-20 |
+
+> 说明：`hydrooj`、`@hydrooj/ui-default`、`@hydrooj/hydrojudge`、`@hydrooj/fps-importer`、
+> `@hydrooj/a11y` 由官方脚本**整组**安装，升级时也必须整组一起升（见 §5.4）。
 
 自动记录版：
 
 ```bash
 cat /root/.sylu-oj/versions-latest.env
 ```
+
+**怎么查这些值（都别用 `hydrooj --version`）**：
+
+```bash
+# hydrooj 版本：直接读包描述文件
+node -p "require('$(yarn global dir)/node_modules/hydrooj/package.json').version"
+
+# db.ver：直连 Mongo 只读查询（最可靠）
+URI="$(node -p 'JSON.parse(require("fs").readFileSync(process.env.HOME+"/.hydro/config.json","utf8")).uri')"
+mongosh "$URI" --quiet --eval 'db.system.findOne({_id:"db.ver"}).value'
+```
+
+> **`hydrooj --version` 会挂死。** hydrooj CLI 没有 `--version` 选项，
+> 传进去会被当作子命令解析失败，随后掉进交互式 REPL 等 stdin，
+> 在脚本里表现为永久挂起（`timeout` 杀掉时退出码 124）。
+> `deploy/lib/common.sh` 里的 `hydro_version()` / `hydro_pkg_version()` 已改为读 package.json。
 
 ---
 
@@ -373,6 +464,76 @@ hydrooj addon list
 评测的时间限制、比赛时间都依赖系统时间。`deploy/preflight.sh` 会检查 NTP/DNS，
 装完请确认 `timedatectl` 显示的是 `Asia/Shanghai` 且已同步。
 
+### 6.7 内嵌评测机没有 `judge.yaml`（别去找默认口令）
+
+官方 `setup.sh` 默认装出来的是**内嵌评测机**：`@hydrooj/hydrojudge` 跑在 hydrooj 进程里，
+沙箱是独立的 `hydro-sandbox` 进程监听 `localhost:5050`。
+这种情况下 `judge.yaml` **不会生成、也不需要**，配置直接取 `JudgeSettings({})` 的默认值。
+详见 §3 第 6 步。
+
+### 6.8 第一个注册的用户会自动变成超级管理员
+
+上游 `@hydrooj/a11y` 插件里有这么一段（`node_modules/@hydrooj/a11y/index.ts`）：
+
+```js
+ctx.on('handler/after/UserRegisterWithCode#post', async (that) => {
+    if (that.session.uid === 2) await UserModel.setSuperAdmin(2);
+});
+```
+
+所以 **uid 2（第一个真实注册用户）会被自动赋予 `PRIV_ALL`（`priv = -1`）**。
+这是 Hydro 的引导机制（官方欢迎文案里"用 `hydrooj cli user setSuperAdmin 2`"就是这么被自动化的），
+**不是漏洞**。但要记住：
+
+- **别拿随便一个测试账号去当"第一个用户"**，它会悄悄拿到全部权限。
+- 规范做法：第一个账号就建成专用维护号（本机是 `system-admin`），
+  再显式指定超管：`hydrooj cli user setSuperAdmin <uid>`。
+- 想停用某个账号，用官方脚本把它降为 `priv = 0`（登录会被拒）：
+  ```bash
+  hydrooj cli script cleanUserEffect '{"uid":2}'
+  ```
+  Hydro **没有**删除用户文档的 CLI，别直接 `db.user.deleteOne()` 删 —— 会留下
+  `domain.user` / `oauth` 等孤儿引用（§56：一律走官方接口）。
+
+### 6.9 `hydrooj --version` 会把脚本挂死
+
+hydrooj CLI **没有** `--version` 这个选项。传进去会被当成子命令解析失败，
+随后掉进交互式 REPL 等 stdin，在非交互脚本里表现为**永久挂起**
+（`timeout` 杀掉时退出码 `124`）。本仓库的 `deploy/install-hydro.sh` 曾经就卡在这里。
+
+取版本号请直接读包描述文件：
+
+```bash
+node -p "require('$(yarn global dir)/node_modules/hydrooj/package.json').version"
+```
+
+**顺带一个解析坑**：`hydrooj cli` 会把日志和返回值混在同一个 stdout 流里，
+而且每行日志前面还带 `"<序号> <时间>"` 前缀，例如：
+
+```
+Process 45781 running as master          ← 行首数字是 PID
+Using mongodb external event bus
+20 19:51:02   common [I] Locale init: …   ← 行首的 20 非常容易被误当成 db.ver
+97                                        ← 这才是 system get db.ver 的真实结果
+```
+
+所以**不要**用 `grep -oE '[0-9]+' | head -1` 抠数字（会抓到 PID），
+也不要 `tail -1`（会拿到日志尾巴）。`deploy/lib/common.sh` 里的做法是：
+优先直连 MongoDB 只读查询，兜底才走 CLI 并用 `grep -xE '[0-9]+' | tail -1` 取最后一行纯数字。
+
+### 6.10 注册是「两步 token」流程，且按邮箱限流
+
+`/register` 不是一次 POST 就建号，而是：
+
+1. `POST /register {mail}` → 生成 token；
+   **若 SMTP 未配置**（`smtp.verify=true` 但 `smtp.user` 为空）→ 直接 **302 到 `/register/<code>`**，
+   token 就在 URL 里，**不收邮件也能注册**；
+2. `POST /register/<code> {password, verifyPassword, uname}` → 建号并自动登录。
+
+坑在限流：第一步有 `limitRate('send_mail', 60, 1, mail)`，
+**同一个邮箱 60 秒内只能申请一次 token**，第二次会返回错误页。
+写自动化脚本连续注册多个账号时，务必用**不同的邮箱**。
+
 ---
 
 ## 7. 故障排查速查
@@ -392,20 +553,39 @@ hydrooj addon list
 
 ## 8. 诚实说明：哪些验证过、哪些没有
 
-本仓库的所有脚本都经过**静态检查**（`bash -n`）与**能在本机执行的部分**的实测，
-但部署类脚本**尚未在真实 Debian 12 + Hydro 服务器上跑过**。
-原因是本机是 Windows，没有 Hydro 运行环境。
+**2026-09-20：本文档的部署流程已在真实 Debian 12 服务器（`101.42.27.44`）上跑通第一轮。**
+下方区分「真机实测通过」与「仍待验证」，不混为一谈。
+
+### 8.1 真机实测通过（Debian 12 / Hydro 5.0.7）
 
 | 部分 | 验证状态 |
 | --- | --- |
+| `deploy/preflight.sh` | ✅ 真机跑完，32 项通过 / 0 失败 |
+| `deploy/install-hydro.sh` | ✅ 官方 `setup.sh` 装完；4 个 pm2 进程 online；HTTP 200 |
+| `deploy/configure.sh --apply` | ✅ 真机写入 5 项设置（0 失败），首页标题已变 `SYLU OJ`、页脚声明已出现 |
+| §7 第一道 Gate | ✅ 注册 / 登录 / 管理员会话 / 管理面板权限，全部用真实 HTTP 请求验证（见 §3 第 3 步） |
+| `deploy/lib/common.sh` 版本探测 | ✅ `hydro_version` / `hydro_pkg_version` / `hydro_db_ver` 三个函数在真机上秒回 |
+| 评测链路 | ✅ 数据库中存在 `status:1`（Accepted）`score:100` 的记录；`localhost:5050/version` 返回 200 |
+| 沙箱与数据库隔离 | ✅ 实测 `27017` / `5050` / `2019` / `8888` **全部只听 127.0.0.1**，对外仅开放 22 与 80 |
 | `tools/problem-importer` | ✅ 已实测：自测 34 项断言全通过；端到端 preflight/convert/verify 跑通 |
 | `test/judge-suite` 题面与用例 | ✅ 已实测：本地校验 10 项全通过（含 WA/AC 判定） |
 | `deploy/secret-scan.sh` | ✅ 已实测：在仓库上运行，结果干净 |
-| `deploy/` 其余脚本 | ⚠️ 已语法校验 + 依据上游源码编写，**待真机验证** |
-| `addons/sylu-brand` | ⚠️ 已按 Hydro Addon API 编写并对 `hydrooj` 做兼容降级，**待真机验证** |
-| 所有 `pm2` / `hydrooj cli` 命令 | ⚠️ 取自官方 `setup.sh` 实测载荷与 `hydro-dev/Hydro` 源码，**待真机验证** |
 
-**上真机时请按本文档顺序逐步执行**，每一步都有自检输出。
+### 8.2 仍待真机验证
+
+| 部分 | 状态 | 原因 |
+| --- | --- | --- |
+| `deploy/update.sh`（§47 升级） | ⚠️ 未验证 | 需要真的发一次新版本才能试；**且升级会推进 `db.ver`，属单向操作** |
+| `deploy/rollback.sh`（§49 回滚） | ⚠️ 只验证了 `--list` 只读模式 | 同上 |
+| `deploy/restore-check.sh`（§46 恢复演练） | ⚠️ 未验证 | 目前还没有第一份备份（§45 第 8 步未执行） |
+| `deploy/backup.sh` + 异地副本 | ⚠️ 未执行 | 还没跑过一次真备份，异地副本也没有 |
+| 域名与 HTTPS（§41） | ⚠️ 未配置 | 目前裸 IP + HTTP/80；**上线前必须补** |
+| `addons/sylu-brand` 插件 | ⚠️ 未安装未验证 | 品牌目前全部用原生设置实现，插件尚未 `hydrooj addon add` |
+| 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
+
+**结论：目前状态是「能跑通第一道 Gate」，不是「可以上线」。**
+上线判定请看 `docs/ACCEPTANCE.md`（§72）。
+
 如与文档不符，以**脚本的实际输出**为准，并回来更新本文档。
 
 ---

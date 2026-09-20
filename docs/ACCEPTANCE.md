@@ -128,7 +128,9 @@ bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 
 - [ ] 连续提交同一份 AC 代码 5 次，5 次都是 Accepted
 - [ ] 同时提交 3 份 TLE 代码，评测机不卡死、其它提交仍能正常判
-- [ ] 判题机重启（`pm2 restart hydrojudge`）后，队列里的提交能继续被处理
+- [ ] 判题机重启后，队列里的提交能继续被处理
+      （**内嵌评测机形态**：`pm2 restart hydrooj hydro-sandbox`；
+      独立评测机形态才是 `pm2 restart hydrojudge`。本机是前者，见 DEPLOY.md §6.7）
 
 ---
 
@@ -166,10 +168,25 @@ bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 
 - [ ] `deploy/secret-scan.sh` 无高危项（§44）
 - [ ] 没有密钥 / 口令 / 私钥被提交进仓库
-- [ ] `~/.hydro/config.json`、`~/.hydro/judge.yaml` 权限为 `600`
-- [ ] **`~/.hydro/judge.yaml` 的默认口令 `examplepassword` 已修改**（§8）
-- [ ] `judge.yaml` 的 `server_url` 已改成自己的域名（不是 `https://hydro.ac/`）
+- [ ] `~/.hydro/config.json` 权限为 `600`（官方写出来是 `644`，**要手动改**）
+- [ ] `~/.hydro` 目录权限为 `700`
+- [ ] 如果是**独立/远端评测机**部署：`~/.hydro/judge.yaml` 权限 `600`、
+      **默认口令 `examplepassword` 已修改**、`server_url` 已改成自己的域名
+      （不是 `https://hydro.ac/`）
+- [ ] 如果是**内嵌评测机**部署（官方 `setup.sh` 默认，**本机即此形态**）：
+      `judge.yaml` 不存在属正常，**改判**——确认沙箱端口只在本机监听：
+      ```bash
+      ss -ltnp | grep 5050     # 必须只有 127.0.0.1 / ::1，不能有 0.0.0.0
+      ```
+      （原因见 DEPLOY.md §6.7：`sandbox_host` 是明文 HTTP 且无认证，暴露即等于 RCE）
 - [ ] 数据库用的是独立账号 + 强口令（不是 root 空口令）
+- [ ] 没有**多余的超级管理员**：除专用维护号外，不应有 `priv = -1` 的用户
+      （只读查一下；上游 `@hydrooj/a11y` 会把 **uid 2 自动提成超管**，见 DEPLOY.md §6.8）
+      ```bash
+      URI=$(node -p 'JSON.parse(require("fs").readFileSync(process.env.HOME+"/.hydro/config.json","utf8")).uri')
+      mongosh "$URI" --quiet --eval 'db.user.find({},{_id:1,uname:1,priv:1}).toArray().forEach(u=>print(JSON.stringify(u)))'
+      # priv = -1 才是超级管理员；priv = 0 是已停用
+      ```
 
 ### D3 禁止实现复核（§69）
 
@@ -244,7 +261,7 @@ bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 ## H. 运维与交接（计划 §60–§64 验收域）
 
 - [ ] `docs/DEPLOY.md` 与本机实际环境一致（版本记录表已填写）
-- [ ] 日志可查：`pm2 logs hydrooj` / `hydrojudge` / `hydro-sandbox` 均正常输出
+- [ ] 日志可查：`pm2 logs hydrooj` / `pm2 logs hydro-sandbox`（以及 `caddy` / `mongodb`）均正常输出
 - [ ] 已配置日志轮转（`pm2-logrotate`，官方安装已装）
 - [ ] `bash deploy/healthcheck.sh` 已接入定时任务或监控，异常有人收到
 - [ ] 已指定至少一名运维负责人，并完成一次交接讲解
@@ -263,19 +280,26 @@ bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 
 | # | 门槛 | 依据 | 由谁确认 |
 | --- | --- | --- | --- |
-| 1 | 第一道 Gate 全过（管理员登录 + 普通用户注册 + 登录） | §7 | |
+| 1 | 第一道 Gate 全过（管理员登录 + 普通用户注册 + 登录） | §7 | ✅ 2026-09-20 实测通过 |
 | 2 | `healthcheck.sh --gate` 退出码 0 | §7 §51 | |
 | 3 | 语言矩阵全部实测通过（C / C++17 / Python 3 / Java 17） | §14 | |
 | 4 | SYS001 判题结果表**全部吻合** | §15 | |
 | 5 | **沙箱红线**：`network_test` 与 `filesystem_test` 全部被拦 | §16 | |
 | 6 | 生产走 HTTPS，证书有效 | §41 | |
-| 7 | MongoDB 只监听 127.0.0.1，且未对公网开放 | §42 | |
-| 8 | `secret-scan.sh` 无高危；默认口令 `examplepassword` 已改 | §44 | |
+| 7 | MongoDB 只监听 127.0.0.1，且未对公网开放 | §42 | ✅ 2026-09-20 实测通过 |
+| 8 | `secret-scan.sh` 无高危 | §44 | ✅ 2026-09-20 实测通过 |
+| 8b | **按评测形态核对默认口令**：独立评测机→`judge.yaml` 的 `examplepassword` 已改；内嵌评测机→无该文件，改为核对沙箱端口未暴露（DEPLOY.md §6.7） | §8 §16 | ✅ 内嵌形态，沙箱仅听 127.0.0.1 |
+| 8c | 没有多余的超管账号（上游会把 uid 2 自动提权，DEPLOY.md §6.8） | §8 | ✅ uid 3 为唯一超管 |
 | 9 | 备份可用 + **已完成一次真实恢复演练** | §45 §46 | |
 | 10 | 回滚路径已验证（`rollback.sh --list` 可用；知道迁移后不能只回代码） | §49 | |
 | 11 | 无 §69 禁止实现 | §69 | |
 | 12 | 无假数据、无死链接、无占位文本 | §65 | |
-| 13 | 页脚保留 `Powered by Hydro`；页面声明非官方 | §31 §30 | |
+| 13 | 页脚保留 `Powered by Hydro`；页面声明非官方 | §31 §30 | ✅ 2026-09-20 实测通过 |
+
+> **当前状态（2026-09-20）：不允许上线。**
+> 已达成的只有：Hydro 装好、品牌落地、第一道 Gate 通过、隔离与凭据检查通过。
+> 仍缺：HTTPS/域名、题库导入、语言矩阵实测、沙箱红线用例、备份与恢复演练。
+> 逐项状态见 `docs/DEPLOY.md` §8。
 
 ### I2 上线判定结论
 

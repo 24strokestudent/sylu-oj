@@ -46,7 +46,9 @@ case "$LOCAL_CODE" in
 esac
 
 if [ -n "${SYLU_SITE_URL:-}" ]; then
-    EXT_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${SYLU_SITE_URL%/}/" 2>/dev/null || echo 000)"
+    # 注意别写成 `|| echo 000`：curl 失败时本身就会输出 000，会拼成 000000
+    EXT_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "${SYLU_SITE_URL%/}/" 2>/dev/null || true)"
+    [ -n "$EXT_CODE" ] || EXT_CODE="000"
     case "$EXT_CODE" in
         200) pk_pass "公网入口 ${SYLU_SITE_URL} -> HTTP 200" ;;
         000) pk_fail "公网入口 ${SYLU_SITE_URL} 无法访问（DNS / 证书 / 反代 / 安全组）" ;;

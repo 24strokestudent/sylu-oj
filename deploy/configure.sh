@@ -2,17 +2,21 @@
 # SYLU OJ · 安装后配置与品牌落地（对应实施计划 §1.2 §10 §11 §30 §31 §32 §33 §34 §40）
 #
 # 设计立场：**能用 Hydro 原生设置解决的，绝不写插件。**
-# 站点名称、Logo、页脚附加内容、关于页正文，Hydro 控制面板里都能直接改，
+# 站点名称、Logo、页脚附加内容、关于页正文，Hydro 都原生支持，
 # 改完还能被升级保留下来；插件只用来补原生做不到的部分。
 #
 # 用法：
-#   bash deploy/configure.sh                      # 打印配置清单（只读，不改任何东西）
-#   bash deploy/configure.sh --install-addon      # 额外安装 sylu-brand 插件
+#   bash deploy/configure.sh                       # 打印配置清单（只读，不改任何东西）
+#   bash deploy/configure.sh --apply \
+#        --site-url http://1.2.3.4/                # 写入品牌设置（§30 §32 §34 §40）
+#   bash deploy/configure.sh --install-addon       # 额外安装 sylu-brand 插件
 #   bash deploy/configure.sh --verify --url https://oj.example.edu.cn/
-#                                                 # 校验线上页面是否符合规范
+#                                                  # 校验线上页面是否符合规范
 #
-# 本脚本**不会**直接写 Hydro 的系统设置：设置属于运行数据，
-# 应当通过控制面板落入 MongoDB 的 system/config 文档（§56：跨系统一律走官方接口）。
+# 关于「谁来写设置」：设置是运行数据（存在 MongoDB 的 system 集合里），
+# 但本脚本**不直接写库**，而是调用 `hydrooj cli system set` ——
+# 它与控制面板「系统设置」走的是同一条代码路径，属于官方接口（§56）。
+# 不直接写库的原因：会被后续数据库迁移覆盖，且绕过 Schema 校验。
 
 set -euo pipefail
 
@@ -21,15 +25,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/lib/common.sh"
 
 INSTALL_ADDON=0
+APPLY=0
 VERIFY=0
 SITE_URL=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --apply) APPLY=1; shift ;;
         --install-addon) INSTALL_ADDON=1; shift ;;
         --verify) VERIFY=1; shift ;;
-        --url) SITE_URL="${2:-}"; shift 2 ;;
-        -h | --help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --url | --site-url) SITE_URL="${2:-}"; shift 2 ;;
+        -h | --help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "未知参数：$1" ;;
     esac
 done
@@ -88,6 +94,111 @@ cat <<'EOF'
 
   验证：改完刷新首页，确认浏览器标签页标题变成 SYLU OJ。
 EOF
+
+# ============================================================
+log_step "1b. --apply：把上面这些设置真正写进去（官方 CLI）"
+# ============================================================
+if [ "$APPLY" = 1 ]; then
+    [ "$(id -u)" -eq 0 ] || die "--apply 需要 root（要调用 hydrooj CLI）"
+    require_hydro_cli
+
+    if [ -z "$SITE_URL" ]; then
+        SITE_URL="$(hydro_sys_get server.url 2>/dev/null || true)"
+    fi
+    case "$SITE_URL" in
+        */) ;;
+        '') die "拿不到 server.url。请显式指定：--site-url http://<IP>/ 或 --site-url https://<域名>/" ;;
+        *) die "server.url 必须以 / 结尾（当前：${SITE_URL}）。否则站内跳转、榜单、邮件链接会错位（§33，见 docs/DEPLOY.md §6.3）" ;;
+    esac
+
+    # footer_extra_html 按行拆分：footer.html 会 .split('\n') 遍历，
+    # 每条自动包一层 <li class="footer__extra-link-item">，所以这里**不要**自己写 <li>。
+    FOOTER_HTML="$(printf '%s\n' \
+        '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>' \
+        '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>')"
+
+    # §40 关于页正文：只写事实，不编造统计数字、不放假联系方式（§29 §65）
+    ABOUT_MD="$(cat <<'ABOUT'
+## 关于本站
+
+SYLU OJ 是一个面向程序设计学习与算法训练的在线评测平台，由学生自行搭建与维护。
+
+**本站不是学校官方信息系统。** 本站发布的内容、数据与评测结果均不代表学校立场；
+如与学校官方教学平台存在出入，请以学校官方发布为准。
+
+### 平台使用须知
+
+- 注册即表示你同意遵守本站使用规范；请勿上传任何隐私数据、涉密信息或他人作品。
+- 请勿提交恶意代码、尝试攻击评测环境或干扰他人正常使用。
+- 题目、题解与提交记录默认对已登录用户可见；请不要在代码里写入个人敏感信息。
+
+### 判题环境
+
+评测在沙箱中运行，与网站服务相互隔离。题目的编译选项与资源限制以题目页面说明为准。
+
+### 反馈方式
+
+遇到题目描述错误、判题异常或站点无法访问等问题，请在本站「讨论」区发帖说明，
+或联系本站维护账号。我们会尽量处理，但不承诺处理时限。
+
+### 隐私说明
+
+本站只收集运行所必需的信息（账号、提交记录、评测结果），不用于任何商业用途。
+请不要在本站存放或提交任何你希望保密的内容。
+ABOUT
+)"
+
+    # 写入 = 读原值 -> 写 -> 读回校验。单条失败不影响后续条目。
+    apply_setting() {
+        local key="$1" value="$2" before want after
+        before="$(hydro_sys_get "$key" 2>/dev/null || true)"
+        want="$(printf '%s\n' "$value" | tail -1)"
+        if [ "$before" = "$want" ]; then
+            pk_pass "${key} 已是目标值，跳过"
+            return 0
+        fi
+        if ! hydro_sys_set "$key" "$value"; then
+            pk_fail "写入失败：${key}"
+            return 0
+        fi
+        after="$(hydro_sys_get "$key" 2>/dev/null || true)"
+        if [ "$after" = "$before" ]; then
+            pk_warn "${key} 写入后读回值未变化（原值：${before:-（空）}）"
+        else
+            pk_pass "${key} 已写入"
+            if [ -n "$before" ]; then
+                log_info "    原值：$(printf '%s' "$before" | head -c 80)"
+            fi
+        fi
+        return 0
+    }
+
+    PK_PASS=0; PK_WARN=0; PK_FAIL=0
+    apply_setting server.name "$SYLU_SITE_NAME"
+    apply_setting server.url "$SITE_URL"
+    apply_setting server.language zh_CN
+    apply_setting ui-default.footer_extra_html "$FOOTER_HTML"
+    apply_setting ui-default.about "$ABOUT_MD"
+    pk_summary
+
+    # server.url 会被部分组件在启动时读入并缓存，改完重启一次最稳
+    log_info "重启 hydrooj 使 server.url 生效 ..."
+    if hydro_restart hydrooj; then
+        log_ok "已重启 hydrooj"
+    else
+        log_warn "自动重启失败，请手动执行：pm2 restart hydrooj"
+    fi
+
+    # 有意不动 nav_logo_dark：本站还没有 Logo 资源，保持上游默认值，
+    # 免得指向一个不存在的文件变成死图（§65）。
+    log_warn "ui-default.nav_logo_dark 未改动：本站还没有 Logo 资源，先保持上游默认值。"
+    log_warn "等有真实 Logo 再设，免得指向不存在的文件变成死图（§65）。"
+
+    record_note "configure.sh --apply site_url=${SITE_URL}"
+else
+    log_info "未指定 --apply，仅打印清单，不做任何改动。"
+    log_info "要写入请执行：bash deploy/configure.sh --apply --site-url http://<域名或IP>/"
+fi
 
 # ============================================================
 log_step "2. 用户与权限（§9 §10 §11）"
@@ -155,7 +266,8 @@ if [ "$VERIFY" = 1 ]; then
 
     PK_PASS=0; PK_WARN=0; PK_FAIL=0
 
-    CODE="$(curl -s -o /tmp/sylu-home.html -w '%{http_code}' --max-time 15 "$SITE_URL" 2>/dev/null || echo 000)"
+    CODE="$(curl -s -o /tmp/sylu-home.html -w '%{http_code}' --max-time 15 "$SITE_URL" 2>/dev/null || true)"
+    [ -n "$CODE" ] || CODE="000"
     case "$CODE" in
         200) pk_pass "首页返回 200" ;;
         000) pk_fail "首页无法访问（DNS / HTTPS / 反代 / 防火墙，逐项排查）" ;;
@@ -196,7 +308,8 @@ if [ "$VERIFY" = 1 ]; then
     # §65 无死链接：关键路由必须可达（未登录应 200/302，不应 404/500）
     BASE="${SITE_URL%/}"
     for ROUTE in /p /ranking /contest /homework /user/register /user/login; do
-        C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${BASE}${ROUTE}" 2>/dev/null || echo 000)"
+        C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${BASE}${ROUTE}" 2>/dev/null || true)"
+        [ -n "$C" ] || C="000"
         case "$C" in
             200 | 301 | 302 | 303) pk_pass "路由 ${ROUTE} 可达（HTTP ${C}）" ;;
             404) pk_fail "路由 ${ROUTE} 返回 404 —— 死链接（§65）" ;;

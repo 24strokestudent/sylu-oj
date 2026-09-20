@@ -94,7 +94,11 @@ esac
 
 # Hydro 的 MongoDB 依赖 avx 指令集，虚拟机常默认关闭
 if [ -r /proc/cpuinfo ]; then
-    if grep -mw1 -q avx /proc/cpuinfo; then
+    # 注意：不要写 `grep -mw1`，-m 的取值必须是纯数字，`-mw1` 会报
+    # "grep: invalid max count" 并把检查误判为 FAIL。
+    # 这里也不需要 -w：支持 avx2/avx512 的 CPU 一定支持 avx，
+    # 而任何含 "avx" 子串的 flag 都说明有 avx 能力。
+    if grep -q avx /proc/cpuinfo; then
         pk_pass "CPU 支持 avx 指令集"
     else
         pk_fail "CPU 未暴露 avx 指令集（虚拟机请开启 avx 透传），MongoDB 可能无法启动"
@@ -222,7 +226,7 @@ else
 fi
 
 if has_hydro_cli; then
-    pk_warn "已存在 hydrooj 命令：$(hydrooj --version 2>/dev/null | head -1)"
+    pk_warn "已存在 hydrooj 命令：$(hydro_version 2>/dev/null || echo '版本未知')"
 else
     pk_pass "未发现既有 hydrooj 命令"
 fi

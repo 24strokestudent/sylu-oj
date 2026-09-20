@@ -103,12 +103,15 @@ add_pattern "硬编码口令" HIGH \
     '(password|passwd|pwd|secret|token|apikey|api_key)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{4,}["'"'"']' \
     "疑似硬编码凭据"
 
-# ---------- Hydro 已知默认口令（部署后必须改） ----------
+# ---------- Hydro 已知默认口令 ----------
+# 注意适用范围：`examplepassword` 是**独立/远端评测机**部署时 ~/.hydro/judge.yaml 的官方默认口令。
+# 官方 setup.sh 默认装的「内嵌评测机」**不生成 judge.yaml**，配置取 JudgeSettings({}) 默认值，
+# 因此这类机器上本项检查报"未命中"是正常的，不代表漏检（详见 docs/DEPLOY.md §6.7）。
 # 这是**公开的默认值**，出现在文档里正是"要你去改它"的提醒，属于正常内容；
 # 所以这个特征排除 *.md，只在配置/脚本里命中时才算问题。
 add_pattern "Hydro 评测机默认口令" HIGH \
     'examplepassword' \
-    "这是 Hydro ~/.hydro/judge.yaml 的官方默认密码（见官方 setup.sh），上线前必须修改" \
+    "Hydro 独立评测机 judge.yaml 的官方默认密码，上线前必须修改（内嵌评测机无此文件，见 DEPLOY.md §6.7）" \
     '*.md'
 
 # ---------- §69 明令禁止的实现 ----------
