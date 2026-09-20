@@ -225,3 +225,10 @@ Procfile    text
 *.out -text
 *.ans -text
 
+## 文档与配置：统一 LF，免得在 Windows 上反复冒出 "LF will be replaced by CRLF" 噪音
+*.md   text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.txt  text eol=lf
+
