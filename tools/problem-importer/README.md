@@ -6,7 +6,7 @@
 源题库 ZIP → 解析 → 规范化 → 预检 → 预览 → 标准程序验证 → 生成 Hydro 可导入格式
 ```
 
-零第三方依赖（只用 Node 内置模块），因为 §23 要求的安全预检必须在**解压之前**就拿到全部条目元数据。
+核心 ZIP 预检保持零运行时 ZIP 依赖；YAML 使用 `yaml` 库严格解析（重复键、别名和多行题面不能用正则可靠处理）。
 
 ## 为什么需要它
 
@@ -29,7 +29,7 @@ node bin/sylu-import.mjs preflight 源题库.zip
 node bin/sylu-import.mjs preview 源题库.zip
 
 # 3) 验证标准程序：用包内 solution.cpp / solution.py 跑全部测试点（§25）
-node bin/sylu-import.mjs verify 源题库.zip
+node bin/sylu-import.mjs verify 源题库.zip --trusted
 
 # 4) 生成 Hydro 可导入包
 node bin/sylu-import.mjs convert 源题库.zip -o hydro-import.zip
@@ -44,6 +44,7 @@ node bin/sylu-import.mjs convert 源题库.zip -o hydro-import.zip
 | `--prefix p` | 给自动推导的题号加前缀，避免和已有题号冲突 |
 | `--json` | 预检结果输出 JSON，便于接 CI |
 | `--no-color` | 关闭颜色 |
+| `--trusted` | 明确允许在本机执行包内标准程序；默认拒绝，生产验证应使用 Hydro 沙箱 |
 
 退出码：`0` 通过（可能带警告）／`1` 有错误或被禁止发布／`2` 参数错误。
 

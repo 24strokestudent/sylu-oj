@@ -51,16 +51,17 @@ banner "升级（§47）" "先备份 → 再升级 → 后验收；数据库迁�
 
 require_root
 require_hydro_cli
-ensure_state_dir
-ensure_cmd pm2 pm2 "Hydro 由 pm2 托管"
-ensure_cmd yarn yarn "Hydro 是用 yarn global 安装的"
+if [ "$DRY_RUN" != 1 ]; then ensure_state_dir; fi
+require_cmd pm2 "Hydro 由 pm2 托管"
+require_cmd yarn "Hydro 是用 yarn global 安装的"
 
 # ------------------------------------------------------------
 log_step "1. 升级前状态快照"
 # ------------------------------------------------------------
 VER_BEFORE="$(hydro_version || echo unknown)"
 DBVER_BEFORE="$(hydro_db_ver || echo unknown)"
-SNAP_BEFORE="$(snapshot_versions)"
+SNAP_BEFORE=""
+if [ "$DRY_RUN" != 1 ]; then SNAP_BEFORE="$(snapshot_versions)"; fi
 STAMP="$(date '+%Y%m%d-%H%M%S')"
 STATE_FILE="${SYLU_STATE_DIR}/upgrade-${STAMP}.env"
 
@@ -110,7 +111,7 @@ if [ "$DO_BACKUP" = 1 ]; then
 else
     log_warn "--no-backup：本次**没有**做升级前备份。"
     log_warn "数据库迁移不可逆，一旦升级失败将无法恢复到升级前状态。"
-    if ! confirm "确认在没有备份的情况下继续升级？"; then
+    if [ "$DRY_RUN" != 1 ] && ! confirm "确认在没有备份的情况下继续升级？"; then
         die "已取消。"
     fi
 fi
@@ -280,6 +281,9 @@ if [ "$MIGRATED" = 1 ]; then
   备份文件位置：$( [ -n "${SYLU_BACKUP_DIR:-}" ] && echo "$SYLU_BACKUP_DIR" || echo "/var/backups/sylu-oj" )
   版本快照：$STATE_FILE
 EOF
+elif [ "$DBVER_BEFORE" = "unknown" ] || [ "$DBVER_AFTER" = "unknown" ]; then
+    log_err "无法确认数据库迁移状态，禁止据此判定代码回滚安全"
+    MIGRATED=unknown
 else
     log_ok "db.ver 未变化 —— 没有发生数据库迁移，必要时可以安全地只回滚代码（§49）"
 fi
@@ -303,7 +307,7 @@ cat <<'EOF'
         bash deploy/rollback.sh --from-backup <备份 zip>
 EOF
 
-if [ "$HC_RC" != 0 ] || [ "$CODE" = "000" ]; then
+if [ "$HC_RC" != 0 ] || [[ ! "$CODE" =~ ^(200|301|302|303)$ ]] || [ "$MIGRATED" = unknown ]; then
     printf '\n%s升级后体检存在失败项，请按上面的回滚指引处理（§49）。%s\n' "$C_RED$C_BOLD" "$C_OFF"
     exit 1
 fi

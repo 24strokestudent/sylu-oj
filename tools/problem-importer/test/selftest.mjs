@@ -9,7 +9,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { writeZip } from '../src/zip.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
+import { writeZip, readCentralDirectory, extractEntry } from '../src/zip.mjs';
 import {
     analyzeArchive, buildHydroPackage, derivePid, parseTimeToMs, parseMemoryToMB,
 } from '../src/importer.mjs';
@@ -354,6 +357,129 @@ test('重名题号自动去重且仍合法', () => {
     const back = analyzeArchive(out, { archiveName: 'out.zip' });
     const pids = back.problems.map((p) => p.pid);
     assert.equal(new Set(pids).size, 2, `题号重复：${pids.join(',')}`);
+});
+
+
+console.log('\n=== 7. 审查回归：安全边界与无损转换 ===');
+
+test('安全预检失败后不提取任何题目', () => {
+    const r = analyze([['../evil.txt', 'x'], ...OK_PROBLEM]);
+    assert.equal(r.problems.length, 0);
+});
+
+test('YAML 题面、引号、标签与样例完整往返', () => {
+    const original = analyze(OK_PROBLEM).problems[0];
+    original.title = 'true';
+    original.tags = ['null', '123', 'a # b', 'a,b'];
+    original.content = '# 标题\n\n输入: "a"\n  缩进\n\n末尾';
+    const archive = buildHydroPackage([original]);
+    const entry = readCentralDirectory(archive).entries.find((e) => e.name.endsWith('problem.yaml'));
+    const metadata = parse(extractEntry(archive, entry).toString());
+    assert.equal(metadata.title, 'true');
+    assert.deepEqual(metadata.tag, original.tags);
+    const back = analyzeArchive(archive).problems[0];
+    assert.equal(back.content, original.content);
+    assert.deepEqual(back.tags, original.tags);
+});
+
+test('实际输出题号唯一且符合 Hydro 规则', () => {
+    const p = analyze(OK_PROBLEM).problems[0];
+    const archive = buildHydroPackage([p, p, p]);
+    const pids = readCentralDirectory(archive).entries.filter((e) => e.name.endsWith('problem.yaml'))
+        .map((e) => parse(extractEntry(archive, e).toString()).pid);
+    assert.equal(new Set(pids).size, 3);
+    assert.ok(pids.every((pid) => /^(?:[a-z0-9]{1,10}-)?[a-z][0-9a-z]*$/i.test(pid)));
+});
+
+test('题号规范化结果可重现', () => {
+    assert.equal(derivePid('123-456'), derivePid('123-456'));
+});
+
+test('.out.txt 不会被误识别为输入，字母 .in.txt 可配对', () => {
+    const r = analyze([['x/problem.json', '{"pid":"px","title":"X"}'],
+        ['x/alpha.in.txt', '1'], ['x/alpha.out.txt', '2'],
+        ['x/2.in.txt', '3'], ['x/2.ans.txt', '4']]);
+    assert.equal(r.problems[0].pairs.length, 2);
+    assert.equal(r.problems[0].problems.errors.length, 0);
+});
+
+test('显式元数据题号优先于目录名', () => {
+    const r = analyze([['directory/problem.json', '{"pid":"p42","title":"X"}'],
+        ['directory/testdata/1.in', '1'], ['directory/testdata/1.out', '2']]);
+    assert.equal(r.problems[0].pid, 'p42');
+});
+
+test('非对象元数据、非法编码、重复 YAML 键均拒绝', () => {
+    for (const [name, content] of [['problem.json', '[]'], ['problem.json', 'null'],
+        ['problem.json', Buffer.from([0xff])], ['problem.yaml', 'title: A\ntitle: B\n']]) {
+        const r = analyze([[`x/${name}`, content], ['x/1.in', '1'], ['x/1.out', '2']]);
+        assert.ok(hasError(r, /元数据/));
+    }
+});
+
+test('显式非法限制不会静默使用默认值', () => {
+    for (const val of [0, -1, 'bad', '1.2.3s']) {
+        const r = analyze([['x/problem.json', JSON.stringify({title:'X', time_limit:val})],
+            ['x/1.in', '1'], ['x/1.out', '2']]);
+        assert.ok(hasError(r, /时间限制/));
+    }
+    assert.equal(parseTimeToMs(Infinity), null);
+    assert.equal(parseMemoryToMB('1.2.3m'), null);
+});
+
+test('篡改解压大小与 CRC=0 都必须拒绝', () => {
+    for (const [offset, value] of [[24, 1], [16, 0]]) {
+        const archive = writeZip([['x.txt', 'hello']]);
+        const cd = archive.readUInt32LE(archive.length - 6);
+        archive.writeUInt32LE(value, cd + offset);
+        const entry = readCentralDirectory(archive).entries[0];
+        assert.throws(() => extractEntry(archive, entry), /大小|CRC/);
+    }
+});
+
+test('非法 UTF-8 文件名与中央目录长度越界被拒绝', () => {
+    const archive = writeZip([['x.txt', 'hello']]);
+    const cd = archive.readUInt32LE(archive.length - 6);
+    const badName = Buffer.from(archive);
+    badName[cd + 46] = 0xff;
+    assert.throws(() => readCentralDirectory(badName));
+    archive.writeUInt16LE(65535, cd + 28);
+    assert.throws(() => readCentralDirectory(archive), /越界/);
+});
+
+test('本地头文件名不一致被拒绝', () => {
+    const archive = writeZip([['x.txt', 'hello']]);
+    archive[30] = 0x79;
+    assert.throws(() => extractEntry(archive, readCentralDirectory(archive).entries[0]), /不一致/);
+});
+
+test('50 题转换后题面与所有测试数据无损', () => {
+    const source = Array.from({length: 50}, (_, i) => [
+        [`p${i}/problem.json`, JSON.stringify({pid:`p${i}`, title:`题目 ${i}`, content:`内容\n${i}`})],
+        [`p${i}/1.in`, `${i}\n`], [`p${i}/1.out`, `${i * 2}\n`],
+    ]).flat();
+    const first = analyze(source);
+    const back = analyzeArchive(buildHydroPackage(first.problems));
+    assert.equal(back.problems.length, 50);
+    for (let i=0; i<50; i++) {
+        assert.equal(back.problems[i].content, first.problems[i].content);
+        assert.deepEqual(back.problems[i].pairs[0].input.buf, first.problems[i].pairs[0].input.buf);
+        assert.deepEqual(back.problems[i].pairs[0].output.buf, first.problems[i].pairs[0].output.buf);
+    }
+});
+
+test('verify 未授权不执行；缺失程序返回失败且 JSON 可解析', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sylu-cli-'));
+    try {
+        const input = path.join(dir, 'input.zip');
+        fs.writeFileSync(input, writeZip(OK_PROBLEM));
+        const cli = fileURLToPath(new URL('../bin/sylu-import.mjs', import.meta.url));
+        const blocked = spawnSync(process.execPath, [cli, 'verify', input], {encoding:'utf8'});
+        assert.equal(blocked.status, 2);
+        const skipped = spawnSync(process.execPath, [cli, 'verify', input, '--trusted', '--json'], {encoding:'utf8'});
+        assert.equal(skipped.status, 1);
+        assert.ok(JSON.parse(skipped.stdout)[0].skipped);
+    } finally { fs.rmSync(dir, {recursive:true, force:true}); }
 });
 
 // ---------------------------------------------------------------- 汇总

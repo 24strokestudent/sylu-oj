@@ -21,6 +21,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import child from 'node:child_process';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { readCentralDirectory, extractEntry, writeZip } from './zip.mjs';
 
 // ---------------- 常量与限制 ----------------
@@ -70,7 +71,7 @@ export function derivePid(sourceKey, { prefix = '' } = {}) {
     if (!/^[A-Za-z]/.test(s)) s = `p${s}`;
     if (!s) s = 'problem';
     s = s.slice(0, 40).replace(/-+$/, '');
-    return ALLOWED_PID.test(s) ? s : `p${Math.random().toString(36).slice(2, 10)}`;
+    return ALLOWED_PID.test(s) ? s : `p${crypto.createHash('sha256').update(String(sourceKey)).digest('hex').slice(0, 12)}`;
 }
 
 /** 保证题号唯一（Hydro 的 pid 不允许重复） */
@@ -95,11 +96,12 @@ const HUMAN = (n) => {
 export function parseTimeToMs(v) {
     if (v === undefined || v === null || v === '') return null;
     if (typeof v === 'number') {
+        if (!Number.isFinite(v) || v <= 0) return null;
         // 纯数字按秒处理（沿用多数 OJ 的 time_limit 习惯）
         return v > 0 && v < 1000 ? Math.round(v * 1000) : Math.round(v);
     }
     const s = String(v).trim().toLowerCase();
-    const m = s.match(/^([\d.]+)\s*(ms|s|sec|second|秒)?$/);
+    const m = s.match(/^(\d+(?:\.\d+)?)\s*(ms|s|sec|second|秒)?$/);
     if (!m) return null;
     const n = Number.parseFloat(m[1]);
     if (!Number.isFinite(n) || n <= 0) return null;
@@ -119,7 +121,7 @@ export function parseMemoryToMB(v) {
         return Math.round(v);
     }
     const s = String(v).trim().toLowerCase();
-    const m = s.match(/^([\d.]+)\s*(m|mb|mib|k|kb|g|gb)?$/);
+    const m = s.match(/^(\d+(?:\.\d+)?)\s*(m|mb|mib|k|kb|g|gb)?$/);
     if (!m) return null;
     const n = Number.parseFloat(m[1]);
     if (!Number.isFinite(n) || n <= 0) return null;
@@ -131,38 +133,16 @@ export function parseMemoryToMB(v) {
 
 const isTextishBlank = (buf) => buf.length === 0 || buf.toString('utf8').trim() === '';
 
-/** 极简 YAML 读取：只支持本工具会遇到的键值 / 简单数组结构，避免引入依赖 */
+/** 使用完整 YAML 解析，保留多行题面与引号语义；题目元数据不需要别名。 */
 export function parseSimpleYaml(text) {
-    const out = {};
-    let currentArray = null;
-    for (const rawLine of text.split(/\r?\n/)) {
-        const line = rawLine.replace(/\s+#.*$/, '');
-        if (!line.trim()) continue;
-        if (/^\s*-\s+/.test(line) && currentArray) {
-            const v = line.replace(/^\s*-\s+/, '').trim().replace(/^['"]|['"]$/g, '');
-            currentArray.push(v);
-            continue;
-        }
-        const idx = line.indexOf(':');
-        if (idx < 0) continue;
-        const key = line.slice(0, idx).trim();
-        let val = line.slice(idx + 1).trim();
-        if (val === '') {
-            currentArray = [];
-            out[key] = currentArray;
-            continue;
-        }
-        currentArray = null;
-        if (val === 'true' || val === 'false') { out[key] = val === 'true'; continue; }
-        if (/^-?\d+(\.\d+)?$/.test(val)) { out[key] = Number(val); continue; }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            out[key] = val.slice(1, -1).split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
-            continue;
-        }
-        out[key] = val.replace(/^['"]|['"]$/g, '');
+    const value = parseYaml(text, { maxAliasCount: 0, uniqueKeys: true, stringKeys: true });
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('元数据必须是对象');
     }
-    return out;
+    return value;
 }
+
+const decodeText = (buf) => new TextDecoder('utf-8', { fatal: true }).decode(buf);
 
 // ---------------- 测试点配对（对齐 Hydro 的匹配规则） ----------------
 
@@ -203,10 +183,10 @@ function pairTests(fileEntries) {
     const usedOutputs = new Set();
 
     for (const e of fileEntries) {
-        if (!isInputFile(e.name)) continue;
+        if (!isInputFile(e.name) || isOutputFile(e.name)) continue;
         // 纯 .txt 只有数字化的主文件名才当作测试输入，避免把 readme.txt 这类误判
         const lower = path.posix.basename(e.name).toLowerCase();
-        if (lower.endsWith('.txt') && !/\d/.test(stemOf(e.name))) continue;
+        if (lower.endsWith('.txt') && !lower.endsWith('.in.txt') && !/\d/.test(stemOf(e.name))) continue;
 
         const key = sortKey(stemOf(e.name));
         const hit = (byStem.get(key) || []).find((o) => !usedOutputs.has(o.name));
@@ -302,6 +282,9 @@ export function analyzeArchive(buf, { archiveName = 'archive.zip', pidPrefix = '
         diag.error(`解压后总体积 ${HUMAN(totalUncomp)} 超过上限 ${HUMAN(LIMITS.maxTotalUncompressed)}`);
     }
     diag.info(`条带统计：${entries.length} 个条目，压缩后 ${HUMAN(totalComp)}，解压后 ${HUMAN(totalUncomp)}`);
+
+    // 元数据预检不通过时不能继续分配解压内存。
+    if (diag.hasErrors()) return { problems: [], diag, stats: { entries: entries.length, totalComp, totalUncomp } };
 
     // ---- 读出内容，识别结构 ----
     const files = [];
@@ -403,16 +386,16 @@ function buildProblem(key, files, diag, opts = {}) {
         const isTestDir = /(^|\/)testdata\//.test(f.rel);
         const lowerRel = f.rel.toLowerCase();
 
-        if (base === 'problem.json') {
+        if (['problem.json', 'problem.yaml', 'problem.yml', 'config.yaml', 'config.yml'].includes(base)) {
             try {
-                metaDoc = JSON.parse(f.buf.toString('utf8'));
+                const text = decodeText(f.buf);
+                const value = base.endsWith('.json') ? JSON.parse(text) : parseSimpleYaml(text);
+                if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('元数据必须是对象');
+                if (base.startsWith('problem.')) metaDoc = { ...(metaDoc || {}), ...value };
+                else Object.assign(meta, value);
             } catch (e) {
-                problem.problems.error(`problem.json 不是合法 JSON：${e.message}`, f.rel);
+                problem.problems.error(`${base} 不是合法 JSON/YAML 或 UTF-8 元数据：${e.message}`, f.rel);
             }
-        } else if (base === 'problem.yaml' || base === 'problem.yml') {
-            metaDoc = { ...(metaDoc || {}), ...parseSimpleYaml(f.buf.toString('utf8')) };
-        } else if (base === 'config.yaml' || base === 'config.yml') {
-            Object.assign(meta, parseSimpleYaml(f.buf.toString('utf8')));
         } else if (/\.(in|out|ans|txt)$/i.test(base) && !lowerRel.includes('/source') && !lowerRel.includes('/solution')) {
             problem.tests.push(f);
         } else if (/^solution\.(cpp|cc|cxx|c|py|java|pas)$/i.test(base)) {
@@ -428,8 +411,6 @@ function buildProblem(key, files, diag, opts = {}) {
             if (!/\.(in|out|ans|txt)$/i.test(lower)) return false;
             return /\/testdata\//.test(lower) || /\/data\//.test(lower) || /\/data$/.test(path.posix.dirname(lower));
         });
-        const nestedConfig = files.find((f) => /\/testdata\/config\.ya?ml$/i.test(f.rel));
-        if (nestedConfig && !Object.keys(meta).length) Object.assign(meta, parseSimpleYaml(nestedConfig.buf.toString('utf8')));
         // 目录形态下问题标识取目录名
         const first = nestedTestdata[0].rel;
         const segs = first.split('/');
@@ -437,7 +418,7 @@ function buildProblem(key, files, diag, opts = {}) {
     }
 
     if (metaDoc) {
-        problem.pid = problem.pid || metaDoc.pid || metaDoc.problem_id || metaDoc.id || null;
+        problem.pid = metaDoc.pid || metaDoc.problem_id || metaDoc.id || problem.pid || null;
         problem.title = metaDoc.title || metaDoc.name || null;
         problem.content = metaDoc.content || null;
         problem.difficulty = normalizeDifficulty(metaDoc.difficulty);
@@ -459,6 +440,19 @@ function buildProblem(key, files, diag, opts = {}) {
     }
     if (!problem.title) problem.title = problem.pid || problem.sourceKey;
     if (!problem.content) problem.content = `# ${problem.title}\n\n（源文件未提供题面，请在 Hydro 中补充完整题面后再发布）`;
+
+    // 显式填写的非法限制不能悄悄退回默认值。
+    for (const source of [metaDoc, metaDoc?.limits, meta]) {
+        if (!source) continue;
+        for (const [keys, parse, label] of [
+            [['time', 'time_limit', 'timeLimit'], parseTimeToMs, '时间限制'],
+            [['memory', 'memory_limit', 'memoryLimit'], parseMemoryToMB, '内存限制'],
+        ]) {
+            for (const key of keys) {
+                if (source[key] !== undefined && parse(source[key]) === null) problem.problems.error(`${label}无效：${source[key]}`);
+            }
+        }
+    }
 
     // ---- 校验 ----
     if (!problem.pid) {
@@ -484,6 +478,7 @@ function buildProblem(key, files, diag, opts = {}) {
 
     // ---- 测试点配对 ----
     const { pairs, missingOut, orphanOut } = pairTests(problem.tests);
+    pairs.sort((a, b) => caseNumber(a.input.name) - caseNumber(b.input.name) || a.input.name.localeCompare(b.input.name));
     problem.pairs = pairs;
     problem.missingOut = missingOut;
     problem.orphanOut = orphanOut;
@@ -558,7 +553,7 @@ function normalizeTags(t) {
 function normalizeSamples(s) {
     if (!s) return [];
     const arr = Array.isArray(s) ? s : [s];
-    return arr.map((x) => {
+    return arr.filter((x) => x !== null && x !== undefined).map((x) => {
         if (typeof x === 'string') return { input: x, output: '' };
         return {
             input: x.input ?? x.in ?? '',
@@ -600,45 +595,17 @@ function composeContent(m) {
 
 // ---------------- 生成 Hydro 可导入 ZIP ----------------
 
-const yamlString = (s) => {
-    const str = String(s);
-    if (str === '' || /[:#\-?*&!|>'"%@`{}\[\],\n]/.test(str) || /^\s|\s$/.test(str)) {
-        return JSON.stringify(str);
-    }
-    return str;
-};
-
 export function buildHydroPackage(problems, { includeSolutions = false } = {}) {
     const files = [];
     const usedPids = new Set();
 
     for (const p of problems) {
-        let pid = p.pid;
-        let suffix = 1;
-        while (usedPids.has(pid)) pid = `${p.pid}-${++suffix}`;
+        const pid = uniquePid(p.pid, usedPids);
         usedPids.add(pid);
-
-        const yamlLines = [
-            '---',
-            `pid: ${yamlString(pid)}`,
-            `title: ${yamlString(p.title)}`,
-        ];
-        if (p.difficulty) yamlLines.push(`difficulty: ${p.difficulty}`);
-        if (p.tags.length) {
-            yamlLines.push('tag:');
-            for (const t of p.tags) yamlLines.push(`  - ${yamlString(t)}`);
-        }
-        yamlLines.push('content: |');
-        for (const line of String(p.content || '').split('\n')) yamlLines.push(`  ${line}`);
-
-        files.push([`${pid}/problem.yaml`, Buffer.from(`${yamlLines.join('\n')}\n`, 'utf8')]);
-
-        const configLines = [
-            '---',
-            `time: ${p.timeMs}ms`,
-            `memory: ${p.memoryMB}m`,
-        ];
-        files.push([`${pid}/testdata/config.yaml`, Buffer.from(`${configLines.join('\n')}\n`, 'utf8')]);
+        const metadata = { pid, title: String(p.title), content: String(p.content || ''), tag: p.tags };
+        if (p.difficulty) metadata.difficulty = p.difficulty;
+        files.push([`${pid}/problem.yaml`, stringifyYaml(metadata)]);
+        files.push([`${pid}/testdata/config.yaml`, stringifyYaml({ time: `${p.timeMs}ms`, memory: `${p.memoryMB}m` })]);
 
         p.pairs.forEach((pair, i) => {
             const idx = i + 1;
@@ -736,7 +703,8 @@ export function detectToolchain() {
  * 编译并运行题目的标准程序，逐测试点比对。
  * §20/§25：标准程序必须 100% AC，否则禁止发布。
  */
-export function verifySolutions(problem, { timeoutMs = 10000 } = {}) {
+export function verifySolutions(problem, { timeoutMs = 10000, trusted = false } = {}) {
+    if (!trusted) throw new Error('标准程序会在本机执行；仅对可信来源传入 trusted: true');
     const tools = detectToolchain();
     const result = { pid: problem.pid, compile: null, cases: [], skipped: null, total: problem.pairs.length, passed: 0 };
 
@@ -759,7 +727,7 @@ export function verifySolutions(problem, { timeoutMs = 10000 } = {}) {
             if (!compiler) { result.skipped = '本机没有 g++/gcc，跳过标准程序验证'; return result; }
             const exe = path.join(tmp, process.platform === 'win32' ? 'sol.exe' : 'sol');
             try {
-                child.execSync(`"${compiler}" -O2 -std=c++17 -o "${exe}" "${srcPath}"`, { stdio: 'pipe', timeout: 120000 });
+                child.execFileSync(compiler, ['-O2', ext === '.c' ? '-std=c17' : '-std=c++17', '-o', exe, srcPath], { stdio: 'pipe', timeout: 120000 });
                 result.compile = 'PASS';
             } catch (e) {
                 result.compile = 'FAIL';
@@ -779,16 +747,14 @@ export function verifySolutions(problem, { timeoutMs = 10000 } = {}) {
         }
 
         for (const pair of problem.pairs) {
-            const inFile = path.join(tmp, 'input.txt');
-            fs.writeFileSync(inFile, pair.input.buf);
             let expected = pair.output.buf.toString('utf8');
             let actual = '';
             let status = 'PASS';
             try {
-                const out = child.execSync(
-                    `"${runCmd}" ${runArgs.map((a) => `"${a}"`).join(' ')} < "${inFile}"`,
-                    { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' },
-                );
+                const out = child.execFileSync(runCmd, runArgs, {
+                    input: pair.input.buf, cwd: tmp, timeout: timeoutMs,
+                    maxBuffer: 64 * 1024 * 1024, encoding: 'buffer',
+                });
                 actual = out.toString('utf8');
             } catch (e) {
                 status = e.killed || e.signal ? 'TLE/RE' : 'RE';

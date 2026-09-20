@@ -18,6 +18,7 @@
 #   30 3 * * *  cd /root/sylu-oj && bash deploy/backup.sh >> /var/log/sylu-oj-backup.log 2>&1
 
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
@@ -49,6 +50,11 @@ ensure_state_dir
 ensure_cmd zip zip "hydrooj backup 打包时需要"
 ensure_cmd unzip unzip "备份完整性校验时需要"
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+[[ "$KEEP_DAILY" =~ ^[1-9][0-9]*$ && "$KEEP_WEEKLY" =~ ^[1-9][0-9]*$ ]] || die "备份保留数必须为正整数"
+require_cmd flock "防止并发备份共用 Hydro 临时目录"
+exec 9>"${SYLU_STATE_DIR}/backup.lock"
+flock -n 9 || die "已有备份任务运行"
 
 # ============================================================
 log_step "0. 磁盘余量（§52 先看空间，别把盘写满）"
@@ -76,9 +82,9 @@ log_info "备份文件会与这份快照放在一起，便于回滚时对照"
 # ============================================================
 log_step "2. 执行 Hydro 官方备份"
 # ============================================================
-WORK_DIR="${SYLU_STATE_DIR}/work"
+WORK_DIR="$(mktemp -d "${SYLU_STATE_DIR}/backup-work.XXXXXX")"
+trap 'if [ "$KEEP_LOCAL_TMP" != 1 ]; then rm -rf -- "$WORK_DIR"; fi' EXIT
 cd_safe_workdir "$WORK_DIR"
-BEFORE_LIST="$(ls -1 "$WORK_DIR"/backup-*.zip 2>/dev/null || true)"
 
 ARGS=(backup --withAddons)
 if [ "$OFFSITE" = 1 ]; then
@@ -87,46 +93,44 @@ if [ "$OFFSITE" = 1 ]; then
     fi
     ensure_cmd restic restic "异地备份需要 restic"
     log_info "异地仓库：${RESTIC_REPO}"
-    # 注意：密码通过参数传递给 hydrooj，本脚本不会把它写进任何文件
+    # 先校验本地备份，再通过 restic 环境变量传递凭据。
     record_note "backup: 使用 restic 异地仓库"
 fi
 
 log_info "执行：hydrooj ${ARGS[*]}"
 record_note "backup.sh 开始"
-if ! hydrooj "${ARGS[@]}"; then
-    die "hydrooj backup 失败，请查看上方输出。备份未完成 —— 不要继续后续操作。"
+if ! hydrooj "${ARGS[@]}" >"${SYLU_LOG_DIR}/backup-last.log" 2>&1; then
+    die "hydrooj backup 失败，详情见受限日志 ${SYLU_LOG_DIR}/backup-last.log。"
 fi
 
 # ============================================================
 log_step "3. 归集与完整性校验"
 # ============================================================
-NEW_ZIP=""
+shopt -s nullglob
+ZIPS=("$WORK_DIR"/backup-*.zip)
+[ "${#ZIPS[@]}" -eq 1 ] || die "本次备份没有生成唯一 ZIP，不能复用旧备份"
+NEW_ZIP="${ZIPS[0]}"
+unzip -tq "$NEW_ZIP" >/dev/null 2>&1 || die "备份 ZIP 完整性校验失败"
+STAMP="$(date '+%Y%m%d-%H%M%S')"
+TARGET="${BACKUP_DIR}/sylu-oj-${STAMP}.zip"
+[ ! -e "$TARGET" ] || die "同名备份已存在：$TARGET"
+mv "$NEW_ZIP" "$TARGET"
+cp "$SNAP" "${BACKUP_DIR}/versions-${STAMP}.env"
+log_ok "本地备份校验通过：$(basename "$TARGET")"
+
 if [ "$OFFSITE" = 1 ]; then
-    log_ok "已推送到 restic 仓库：${RESTIC_REPO}"
-    log_warn "restic 快照无法用 unzip 直接校验；请用 deploy/restore-check.sh 定期做恢复演练"
-else
-    AFTER_LIST="$(ls -1 "$WORK_DIR"/backup-*.zip 2>/dev/null || true)"
-    NEW_ZIP="$(comm -13 <(printf '%s\n' "$BEFORE_LIST" | sort) <(printf '%s\n' "$AFTER_LIST" | sort) | tail -1 || true)"
-    [ -n "$NEW_ZIP" ] || NEW_ZIP="$(ls -1t "$WORK_DIR"/backup-*.zip 2>/dev/null | head -1 || true)"
-    [ -n "$NEW_ZIP" ] || die "备份命令成功了，但找不到生成的 zip —— 请检查 hydrooj 版本的 backup 输出路径"
+    RESTIC_REPOSITORY="$RESTIC_REPO" RESTIC_PASSWORD="$RESTIC_PASS" \
+        restic backup "$TARGET" "${BACKUP_DIR}/versions-${STAMP}.env" --tag sylu-oj \
+        || die "异地上传失败，本地备份已保留：$TARGET"
+    RESTIC_REPOSITORY="$RESTIC_REPO" RESTIC_PASSWORD="$RESTIC_PASS" \
+        restic forget --tag sylu-oj --group-by host,tags --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
+        || die "异地保留策略执行失败"
+    log_ok "异地副本已上传"
+fi
 
-    STAMP="$(date '+%Y%m%d-%H%M%S')"
-    TARGET="${BACKUP_DIR}/sylu-oj-${STAMP}.zip"
-    mv "$NEW_ZIP" "$TARGET"
-    cp "$SNAP" "${BACKUP_DIR}/versions-${STAMP}.env" 2>/dev/null || true
-
-    if unzip -tq "$TARGET" >/dev/null 2>&1; then
-        log_ok "备份完整性校验通过：$(basename "$TARGET")（$(du -h "$TARGET" | cut -f1)）"
-    else
-        die "备份 zip 校验失败：$TARGET —— 这是一个无效备份，请勿依赖它"
-    fi
-
-    # 周日额外留一份周备
-    if [ "$(date '+%u')" = "7" ]; then
-        mkdir -p "${BACKUP_DIR}/weekly"
-        cp "$TARGET" "${BACKUP_DIR}/weekly/sylu-oj-week-$(date '+%G-W%V').zip"
-        log_ok "本周周备已归档：sylu-oj-week-$(date '+%G-W%V').zip"
-    fi
+if [ "$(date '+%u')" = "7" ]; then
+    mkdir -p "${BACKUP_DIR}/weekly"
+    cp "$TARGET" "${BACKUP_DIR}/weekly/sylu-oj-week-$(date '+%G-W%V').zip"
 fi
 
 # ============================================================
@@ -135,14 +139,20 @@ log_step "4. 保留策略（7 日 + 4 周）"
 keep_newest() { # $1=目录 $2=保留数 $3=glob
     local dir="$1" keep="$2" pattern="$3"
     local files
-    files="$(ls -1t ${dir}/${pattern} 2>/dev/null || true)"
+    local matches=("$dir"/$pattern)
+    [ "${#matches[@]}" -gt 0 ] || return 0
+    files="$(ls -1t -- "${matches[@]}")"
     [ -n "$files" ] || return 0
     local i=0
     while IFS= read -r f; do
         [ -n "$f" ] || continue
         i=$((i + 1))
         if [ "$i" -gt "$keep" ]; then
-            rm -f "$f"
+            rm -f -- "$f"
+            if [[ "$(basename "$f")" == sylu-oj-[0-9]*.zip ]]; then
+                local stamp="${f##*/sylu-oj-}"
+                rm -f -- "${dir}/versions-${stamp%.zip}.env"
+            fi
             log_info "清理旧备份：$(basename "$f")"
         fi
     done <<<"$files"
@@ -151,7 +161,9 @@ keep_newest() { # $1=目录 $2=保留数 $3=glob
 keep_newest "$BACKUP_DIR" "$KEEP_DAILY" 'sylu-oj-*.zip'
 keep_newest "${BACKUP_DIR}/weekly" "$KEEP_WEEKLY" 'sylu-oj-week-*.zip'
 
-log_ok "当前保留：每日 $(ls -1 ${BACKUP_DIR}/sylu-oj-*.zip 2>/dev/null | wc -l) 份 / 每周 $(ls -1 ${BACKUP_DIR}/weekly/sylu-oj-week-*.zip 2>/dev/null | wc -l) 份"
+DAILY_FILES=("${BACKUP_DIR}"/sylu-oj-*.zip)
+WEEKLY_FILES=("${BACKUP_DIR}"/weekly/sylu-oj-week-*.zip)
+log_ok "当前保留：每日 ${#DAILY_FILES[@]} 份 / 每周 ${#WEEKLY_FILES[@]} 份"
 
 # ============================================================
 log_step "5. 异地副本检查（§45 必做项）"

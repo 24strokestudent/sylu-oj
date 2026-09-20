@@ -266,7 +266,9 @@ if [ "$VERIFY" = 1 ]; then
 
     PK_PASS=0; PK_WARN=0; PK_FAIL=0
 
-    CODE="$(curl -s -o /tmp/sylu-home.html -w '%{http_code}' --max-time 15 "$SITE_URL" 2>/dev/null || true)"
+    PAGE_FILE="$(mktemp)"
+    trap 'rm -f -- "$PAGE_FILE"' EXIT
+    CODE="$(curl -s -o "$PAGE_FILE" -w '%{http_code}' --max-time 15 "$SITE_URL" 2>/dev/null || true)"
     [ -n "$CODE" ] || CODE="000"
     case "$CODE" in
         200) pk_pass "首页返回 200" ;;
@@ -274,15 +276,15 @@ if [ "$VERIFY" = 1 ]; then
         *) pk_fail "首页返回 HTTP ${CODE}（期望 200）" ;;
     esac
 
-    if [ -s /tmp/sylu-home.html ]; then
-        if grep -qi 'Powered by' /tmp/sylu-home.html && grep -qi 'hydro' /tmp/sylu-home.html; then
+    if [ -s "$PAGE_FILE" ]; then
+        if grep -qi 'Powered by' "$PAGE_FILE" && grep -qi 'hydro' "$PAGE_FILE"; then
             pk_pass "页脚保留 Powered by Hydro 归属声明（§31，不得删除）"
         else
             pk_fail "页脚找不到 Powered by Hydro —— 违反 §31 与上游版权声明，必须恢复"
         fi
 
-        if grep -qi '沈阳理工大学' /tmp/sylu-home.html; then
-            if grep -qiE '非官方|不是.*官方|学生维护' /tmp/sylu-home.html; then
+        if grep -qi '沈阳理工大学' "$PAGE_FILE"; then
+            if grep -qiE '非官方|不是.*官方|学生维护' "$PAGE_FILE"; then
                 pk_pass "已声明非官方定位（§30）"
             else
                 pk_warn "页面出现校名但没有非官方声明，建议在 ui-default.footer_extra_html 补上（§30）"
@@ -291,14 +293,14 @@ if [ "$VERIFY" = 1 ]; then
             pk_warn "页面未出现校名（可能还没设 server.name）"
         fi
 
-        if grep -q 'foo\|example\.com\|TODO\|lorem' /tmp/sylu-home.html; then
+        if grep -q 'foo\|example\.com\|TODO\|lorem' "$PAGE_FILE"; then
             pk_warn "页面含占位文本（foo/example/TODO/lorem），上线前需清理（§65）"
         else
             pk_pass "未发现明显占位文本"
         fi
 
         # §65 无假数据：首页出现"注册用户 X 万"这类未接真实数据的文案要拦下
-        if grep -qiE '[0-9]+\s*万\s*(用户|学生)|累计提交\s*[0-9]+' /tmp/sylu-home.html; then
+        if grep -qiE '[0-9]+\s*万\s*(用户|学生)|累计提交\s*[0-9]+' "$PAGE_FILE"; then
             pk_warn "首页疑似存在写死的统计数字，请确认是否已接真实数据（§29 §65）"
         else
             pk_pass "未见写死的统计数字"
@@ -307,18 +309,19 @@ if [ "$VERIFY" = 1 ]; then
 
     # §65 无死链接：关键路由必须可达（未登录应 200/302，不应 404/500）
     BASE="${SITE_URL%/}"
-    for ROUTE in /p /ranking /contest /homework /user/register /user/login; do
+    for ROUTE in /p /ranking /contest /homework /register /login; do
         C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${BASE}${ROUTE}" 2>/dev/null || true)"
         [ -n "$C" ] || C="000"
         case "$C" in
             200 | 301 | 302 | 303) pk_pass "路由 ${ROUTE} 可达（HTTP ${C}）" ;;
             404) pk_fail "路由 ${ROUTE} 返回 404 —— 死链接（§65）" ;;
             000) pk_fail "路由 ${ROUTE} 无响应" ;;
-            *) pk_warn "路由 ${ROUTE} 返回 HTTP ${C}" ;;
+            *) pk_fail "路由 ${ROUTE} 返回 HTTP ${C}" ;;
         esac
     done
 
     pk_summary
+    [ "$PK_FAIL" -eq 0 ] || exit 1
 else
     log_info "未指定 --verify，跳过线上校验。"
     log_info "上线前请执行：bash deploy/configure.sh --verify --url https://你的域名/"

@@ -13,6 +13,7 @@
  *   --prefix <str>        为自动推导的题号加前缀，避免与已有题号冲突
  *   --json                以 JSON 输出预检结果（便于接 CI）
  *   --no-color            关闭颜色
+ *   --trusted             允许在本机执行可信来源的标准程序（没有沙箱隔离）
  *   -h, --help
  */
 
@@ -34,6 +35,7 @@ for (let i = 0; i < argv.length; i++) {
     else if (a === '--prefix') { options.prefix = argv[++i] || ''; }
     else if (a === '--json') { options.json = true; options.color = false; }
     else if (a === '--no-color') { options.color = false; }
+    else if (a === '--trusted') { options.trusted = true; }
     else if (a === '-h' || a === '--help') { printHelp(); process.exit(0); }
     else positional.push(a);
 }
@@ -143,7 +145,15 @@ function runPreflight() {
 
 // ---------------------------------------------------------------- verify
 function runVerify() {
-    const targets = pickProblems().filter((p) => p.problems.errors.length === 0);
+    if (globalErrors().length || problemErrors()) {
+        console.error('预检存在错误，已中止标准程序验证');
+        return 1;
+    }
+    if (!options.trusted) {
+        console.error('verify 会在本机执行压缩包中的代码，没有沙箱隔离；可信来源请显式加 --trusted，否则请在 Hydro 沙箱中验证。');
+        return 2;
+    }
+    const targets = pickProblems();
     if (!targets.length) {
         console.log(c.red('没有通过预检的题目，无法验证标准程序'));
         return 1;
@@ -152,7 +162,7 @@ function runVerify() {
     let skipped = 0;
     const reports = [];
     for (const p of targets) {
-        const r = verifySolutions(p);
+        const r = verifySolutions(p, { trusted: true });
         reports.push(r);
         if (r.skipped) skipped++;
         else if (r.passed !== r.total) failed++;
@@ -162,13 +172,14 @@ function runVerify() {
         }
     }
     if (options.json) console.log(JSON.stringify(reports, null, 2));
+    if (options.json) return failed || skipped ? 1 : 0;
     if (failed) {
         console.log(c.red(c.bold(`结论：${failed} 道题的标准程序未通过全部测试点 —— 按 §20 禁止发布`)));
         return 1;
     }
-    if (skipped === targets.length) {
-        console.log(c.yellow('结论：所有题都缺少可用的标准程序或本机缺少编译环境，未做验证'));
-        return 0;
+    if (skipped) {
+        console.log(c.yellow(`结论：${skipped} 道题未完成标准程序验证`));
+        return 1;
     }
     console.log(c.green(c.bold('结论：所有有标准程序的题目均 100% 通过全部测试点')));
     return 0;

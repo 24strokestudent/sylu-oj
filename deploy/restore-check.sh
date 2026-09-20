@@ -100,7 +100,23 @@ fi
 log_step "3. 解出 dump"
 # ============================================================
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+SCRATCH_DB=""
+DRILL_MONGOD_STARTED=0
+MONGO_CLI="$(command -v mongosh || command -v mongo || true)"
+[ -n "$MONGO_CLI" ] || die "缺少 mongosh/mongo，无法核对与清理恢复库"
+cleanup() {
+    local rc=$?
+    trap - EXIT
+    if [ "$DRILL_MONGOD_STARTED" = 1 ]; then
+        mongod --dbpath "$TMP/mongodb" --shutdown >"$TMP/shutdown.log" 2>&1 || {
+            log_err "临时 MongoDB 未停止，保留目录：$TMP"
+            exit 1
+        }
+    fi
+    rm -rf -- "$TMP"
+    exit "$rc"
+}
+trap cleanup EXIT
 unzip -q "$BACKUP_FILE" -d "$TMP" || die "解压失败"
 DUMP_ROOT="$(find "$TMP" -maxdepth 3 -type d -name dump | head -1 || true)"
 [ -n "$DUMP_ROOT" ] || die "备份里没有 dump 目录 —— 可能只备份了文件存储（--dbOnly 的反面）"
@@ -116,7 +132,7 @@ log_info "集合清单："
 find "$DB_DIR" -name '*.bson' -printf '        %f\n' | sort | head -40
 
 # 顺带确认文件存储（用户上传/题目附加文件）在不在
-if [ -d "${TMP}/data/file" ] || find "$TMP" -maxdepth 3 -type d -name file -path '*data*' | grep -q .; then
+if [ -d "${TMP}/file" ] || [ -d "${TMP}/data/file" ]; then
     log_ok "备份包含 /data/file 文件存储"
 else
     log_warn "备份里未见 /data/file —— 用户上传文件可能没被备份，请确认是否接受"
@@ -125,8 +141,15 @@ fi
 # ============================================================
 log_step "4. 恢复到临时库（绝不碰生产库）"
 # ============================================================
-URI="$(hydro_mongo_uri || true)"
-[ -n "$URI" ] || die "读不到 MongoDB 连接串（${HYDRO_CONFIG}），无法执行恢复演练"
+# 使用独立 MongoDB 实例；生产账号通常仅有 hydro 库权限，不能拿它做跨库演练。
+require_cmd mongod "恢复演练需要启动独立临时 MongoDB"
+PORT="$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
+mkdir -p "$TMP/mongodb"
+mongod --dbpath "$TMP/mongodb" --bind_ip 127.0.0.1 --port "$PORT" \
+    --nounixsocket --fork --logpath "$TMP/mongod.log" >"$TMP/start.log" 2>&1 \
+    || die "无法启动临时 MongoDB"
+DRILL_MONGOD_STARTED=1
+URI="mongodb://127.0.0.1:${PORT}"
 MONGO_CLI_RESTORE="$(command -v mongorestore || true)"
 if [ -z "$MONGO_CLI_RESTORE" ]; then
     log_warn "未安装 mongorestore（mongodb-database-tools），无法做真实恢复"
@@ -136,7 +159,7 @@ if [ -z "$MONGO_CLI_RESTORE" ]; then
 fi
 
 STAMP="$(date '+%Y%m%d%H%M%S')"
-SCRATCH_DB="hydro_restorecheck_${STAMP}"
+SCRATCH_DB="hydro_restorecheck_${STAMP}_$$_${RANDOM}"
 if [ "$SCRATCH_DB" = "$SRC_DB" ]; then
     die "临时库名与生产库同名 —— 已中止（这是保护措施，不允许绕过）"
 fi
@@ -148,11 +171,10 @@ record_note "restore-check 开始 file=$(basename "$BACKUP_FILE") scratch=${SCRA
 
 if "$MONGO_CLI_RESTORE" --uri "$URI" \
         --nsFrom "${SRC_DB}.*" --nsTo "${SCRATCH_DB}.*" \
-        --drop "$DB_DIR" >"${TMP}/restore.log" 2>&1; then
+        "$DUMP_ROOT" >"${TMP}/restore.log" 2>&1; then
     log_ok "mongorestore 成功（日志：$(grep -ci . "${TMP}/restore.log") 行）"
 else
     tail -30 "${TMP}/restore.log" | sed 's/^/        /'
-    rm -f "$MONGO_CLI_RESTORE" 2>/dev/null || true
     die "mongorestore 失败 —— 这份备份**不可恢复**。必须立即排查并重新备份。"
 fi
 
@@ -164,13 +186,13 @@ if [ -z "$MONGO_CLI" ]; then
     log_warn "没有 mongosh/mongo，跳过分集合核对"
 else
     COUNT_SCRIPT='
-        const db = db.getSiblingDB("'"$SCRATCH_DB"'");
-        const names = db.getCollectionNames().sort();
+        const restored = db.getSiblingDB("'"$SCRATCH_DB"'");
+        const names = restored.getCollectionNames().sort();
         const out = {};
-        for (const n of names) out[n] = db.getCollection(n).estimatedDocumentCount();
+        for (const n of names) out[n] = restored.getCollection(n).estimatedDocumentCount();
         print(JSON.stringify(out));
     '
-    COUNTS="$("$MONGO_CLI" "$URI" --quiet --eval "$COUNT_SCRIPT" 2>/dev/null || echo '{}')"
+    COUNTS="$("$MONGO_CLI" "$URI" --quiet --eval "$COUNT_SCRIPT" 2>/dev/null)" || die "无法查询恢复库集合"
     log_info "各集合文档数："
     printf '%s' "$COUNTS" | node -e '
         let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
@@ -184,7 +206,7 @@ else
         if ! printf '%s' "$COUNTS" | grep -q "\"${C}\""; then MISSING="${MISSING} ${C}"; fi
     done
     if [ -n "$MISSING" ]; then
-        log_err "恢复后的库里缺少关键集合：${MISSING}"
+        die "恢复后的库里缺少关键集合：${MISSING}"
     else
         log_ok "关键集合齐全（domain / user / document）"
     fi
@@ -201,9 +223,7 @@ else
         log_warn "恢复后题目数为 0 —— 确认一下备份时题库本来就是空的，还是备份漏了"
     fi
 
-    log_info "清理临时库 ${SCRATCH_DB} ..."
-    "$MONGO_CLI" "$URI" --quiet --eval "db.getSiblingDB('${SCRATCH_DB}').dropDatabase()" >/dev/null 2>&1 \
-        && log_ok "临时库已删除" || log_warn "临时库删除失败，请手动清理：${SCRATCH_DB}"
+
 fi
 
 # ============================================================

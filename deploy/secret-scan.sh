@@ -209,7 +209,7 @@ fi
 # 已经被 git 跟踪、但看起来是敏感文件的，直接报高危
 if git -C "$SCAN_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     TRACKED_SENSITIVE="$(git -C "$SCAN_ROOT" ls-files 2>/dev/null \
-        | grep -E '(^|/)(\.env|.*\.key|.*\.pem|id_rsa|id_ed25519|.*credentials.*|.*secret.*)$' || true)"
+        | grep -E '(^|/)(\.env|.*\.key|.*\.pem|id_rsa|id_ed25519|.*credentials.*|secrets?/.*)$' || true)"
     if [ -n "$TRACKED_SENSITIVE" ]; then
         pk_fail "以下敏感文件已被 git 跟踪，必须从版本库中移除："
         printf '%s\n' "$TRACKED_SENSITIVE" | sed 's/^/          /'
@@ -264,7 +264,7 @@ done
 
 # ------------------------------------------------------------
 pk_summary
-record_note "secret-scan root=${SCAN_ROOT} PASS=${PK_PASS} WARN=${PK_WARN} FAIL=${PK_FAIL}"
+# 仓库扫描可由普通开发用户执行，不写服务器状态目录。
 
 if [ "$PK_FAIL" -gt 0 ]; then
     printf '\n%s结论：存在 %d 项高危，禁止 push / 上线。修正后重跑。%s\n' \

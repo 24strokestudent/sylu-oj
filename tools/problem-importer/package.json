@@ -17,6 +17,8 @@
     "verify": "node bin/sylu-import.mjs verify",
     "selftest": "node test/selftest.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
   "license": "MIT"
 }

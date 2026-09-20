@@ -42,7 +42,7 @@ LOCAL_CODE="$(hydro_http_probe 'http://127.0.0.1:8888/')"
 case "$LOCAL_CODE" in
     200 | 301 | 302 | 303) pk_pass "Hydro 内部端口 127.0.0.1:8888 -> HTTP ${LOCAL_CODE}" ;;
     000) pk_fail "127.0.0.1:8888 无响应（服务挂了或改了监听端口）" ;;
-    *) pk_warn "127.0.0.1:8888 返回 HTTP ${LOCAL_CODE}" ;;
+    *) pk_fail "127.0.0.1:8888 返回 HTTP ${LOCAL_CODE}" ;;
 esac
 
 if [ -n "${SYLU_SITE_URL:-}" ]; then
@@ -57,7 +57,7 @@ if [ -n "${SYLU_SITE_URL:-}" ]; then
     # HTTPS 证书有效期（§41 生产必须 HTTPS）
     HOSTNAME_="$(printf '%s' "$SYLU_SITE_URL" | sed -E 's#^https?://([^/:]+).*#\1#')"
     if command -v openssl >/dev/null 2>&1; then
-        EXP="$(echo | openssl s_client -servername "$HOSTNAME_" -connect "${HOSTNAME_}:443" 2>/dev/null \
+        EXP="$(echo | timeout 15 openssl s_client -servername "$HOSTNAME_" -connect "${HOSTNAME_}:443" 2>/dev/null \
             | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)"
         if [ -n "$EXP" ]; then
             SECONDS_LEFT=$(( $(date -d "$EXP" +%s) - $(date +%s) ))
@@ -90,7 +90,12 @@ fi
 # Hydro 需要的端口是否都在监听（80/443 由反代负责）
 for P in 2019 5050 8888; do
     if command -v ss >/dev/null 2>&1 && ss -H -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${P}$"; then
-        pk_pass "端口 ${P} 正在监听"
+        ADDRS="$(ss -H -ltn | awk -v port="$P" '$4 ~ ":"port"$" {print $4}')"
+        if printf '%s\n' "$ADDRS" | grep -vE "^(127\.0\.0\.1|\[::1\]|::1):${P}$" >/dev/null; then
+            pk_fail "内部端口 ${P} 监听非本机地址"
+        else
+            pk_pass "内部端口 ${P} 仅本机监听"
+        fi
     else
         pk_warn "端口 ${P} 未监听（若使用独立评测机或未启用该组件可忽略）"
     fi
@@ -105,8 +110,9 @@ EOF
 # ============================================================
 log_step "MongoDB"
 # ============================================================
-mongo_bind_ok
-case "$?" in
+MONGO_BIND_RC=0
+mongo_bind_ok || MONGO_BIND_RC=$?
+case "$MONGO_BIND_RC" in
     0) pk_pass "MongoDB 仅监听 127.0.0.1（§42 硬性要求）" ;;
     1) pk_fail "MongoDB 监听了非本机地址 —— 数据库暴露风险，立即修正" ;;
     2) pk_warn "无 ss 命令，无法确认 MongoDB 监听地址" ;;
@@ -180,9 +186,9 @@ if [ "$MODE" = "gate" ]; then
     log_step "Gate 逐项对照（§7）"
     cat <<'EOF'
     机器可判定项（见上面结果）：
-      [x] Hydro Web 页面打开
-      [x] MongoDB 正常
-      [x] Hydro 服务正常
+      [ ] Hydro Web 页面打开（以上方检查结果为准）
+      [ ] MongoDB 正常（以上方检查结果为准）
+      [ ] Hydro 服务正常（以上方检查结果为准）
       [~] Judge 服务正常        ← 需要人工提交 SYS001 验收集确认
       [~] Sandbox 正常          ← 需要人工跑 test/sandbox-suite 确认
 

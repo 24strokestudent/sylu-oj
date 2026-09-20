@@ -57,7 +57,7 @@ done
 
 BACKUP_DIR="${SYLU_BACKUP_DIR:-/var/backups/sylu-oj}"
 require_root
-ensure_state_dir
+if [ "$DRY_RUN" != 1 ] && [ "$MODE" != list ]; then ensure_state_dir; fi
 
 # ============================================================
 # --list：把所有可用的回滚点列出来
@@ -140,7 +140,7 @@ if [ "$MODE" = "code" ]; then
     done
 
     log_step "数据库迁移安全检查"
-    if [ -z "$SAFE_DBVER" ] || [ "$SAFE_DBVER" = "unknown" ]; then
+    if [ -z "$SAFE_DBVER" ] || [ "$SAFE_DBVER" = "unknown" ] || [ "$CUR_DBVER" = "unknown" ]; then
         log_warn "找不到 ${TARGET_VER} 对应的升级前记录，无法自动判断是否安全。"
         if [ "$FORCE" != 1 ]; then
             cat <<EOF
@@ -239,7 +239,7 @@ EOF
     esac
 
     record_note "rollback.sh(code) 完成 ${CUR_VER} -> ${TARGET_VER} dbver=${CUR_DBVER}"
-    bash "${SCRIPT_DIR}/healthcheck.sh" || true
+    bash "${SCRIPT_DIR}/healthcheck.sh" || die "恢复后健康检查失败"
     printf '\n%s代码回滚完成：%s -> %s%s\n' "$C_GREEN$C_BOLD" "$CUR_VER" "$TARGET_VER" "$C_OFF"
     exit 0
 fi
@@ -324,11 +324,11 @@ EOF
     done
     case "$CODE" in
         200 | 301 | 302 | 303) log_ok "服务已恢复（HTTP ${CODE}）" ;;
-        *) log_err "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj" ;;
+        *) die "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj" ;;
     esac
 
     record_note "rollback.sh(backup) 完成 file=${BACKUP_FILE} code=${CODE}"
-    bash "${SCRIPT_DIR}/healthcheck.sh" || true
+    bash "${SCRIPT_DIR}/healthcheck.sh" || die "恢复后健康检查失败"
 
     cat <<'EOF'
 

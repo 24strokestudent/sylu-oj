@@ -40,14 +40,14 @@ export function crc32(buf) {
 
 /** 文件名解码：优先 UTF-8 标志位，否则依次尝试 UTF-8 / GBK */
 function decodeName(bytes, utf8Flag) {
-    if (utf8Flag) return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    if (utf8Flag) return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     try {
         return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     } catch {
         try {
-            return new TextDecoder('gbk', { fatal: false }).decode(bytes);
+            return new TextDecoder('gbk', { fatal: true }).decode(bytes);
         } catch {
-            return new TextDecoder('latin1').decode(bytes);
+            throw new ZipError('文件名不是合法 UTF-8/GBK 编码');
         }
     }
 }
@@ -65,7 +65,7 @@ export function readCentralDirectory(buf) {
     const searchFrom = Math.max(0, buf.length - 65557);
     let eocd = -1;
     for (let i = buf.length - 22; i >= searchFrom; i--) {
-        if (buf.readUInt32LE(i) === EOCD_SIG) { eocd = i; break; }
+        if (buf.readUInt32LE(i) === EOCD_SIG && i + 22 + buf.readUInt16LE(i + 20) === buf.length) { eocd = i; break; }
     }
     if (eocd < 0) throw new ZipError('找不到 ZIP 结束记录（EOCD），文件可能被截断');
 
@@ -74,6 +74,7 @@ export function readCentralDirectory(buf) {
     let cdOffset = buf.readUInt32LE(eocd + 16);
     const commentLen = buf.readUInt16LE(eocd + 20);
     const comment = buf.toString('utf8', eocd + 22, Math.min(eocd + 22 + commentLen, buf.length));
+    if (buf.readUInt16LE(eocd + 4) || buf.readUInt16LE(eocd + 6)) throw new ZipError('不支持分卷 ZIP');
 
     // ZIP64：当标准字段溢出时，从 ZIP64 EOCD 取真实值
     if (entryCount === 0xffff || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
@@ -89,12 +90,12 @@ export function readCentralDirectory(buf) {
     }
 
     if (entryCount > MAX_ENTRIES) throw new ZipError(`条目数 ${entryCount} 异常，已超过上限 ${MAX_ENTRIES}`);
-    if (cdOffset + cdSize > buf.length) throw new ZipError('中央目录越界，文件不完整或已损坏');
+    if (!Number.isSafeInteger(cdOffset + cdSize) || cdOffset + cdSize > eocd) throw new ZipError('中央目录越界，文件不完整或已损坏');
 
     const entries = [];
     let p = cdOffset;
     for (let i = 0; i < entryCount; i++) {
-        if (p + 46 > buf.length || buf.readUInt32LE(p) !== CD_SIG) {
+        if (p + 46 > cdOffset + cdSize || buf.readUInt32LE(p) !== CD_SIG) {
             throw new ZipError(`中央目录第 ${i + 1} 条记录损坏`);
         }
         const flags = buf.readUInt16LE(p + 8);
@@ -105,6 +106,7 @@ export function readCentralDirectory(buf) {
         const nameLen = buf.readUInt16LE(p + 28);
         const extraLen = buf.readUInt16LE(p + 30);
         const cmtLen = buf.readUInt16LE(p + 32);
+        if (p + 46 + nameLen + extraLen + cmtLen > cdOffset + cdSize) throw new ZipError('中央目录条目越界');
         const externalAttrs = buf.readUInt32LE(p + 38);
         let localOffset = buf.readUInt32LE(p + 42);
 
@@ -118,7 +120,10 @@ export function readCentralDirectory(buf) {
             while (q + 4 <= extraEnd) {
                 const hid = buf.readUInt16LE(q);
                 const hlen = buf.readUInt16LE(q + 2);
+                if (q + 4 + hlen > extraEnd) throw new ZipError('ZIP64 扩展字段越界');
                 if (hid === 0x0001) {
+                    const needed = [uncompSize, compSize, localOffset].filter((n) => n === 0xffffffff).length * 8;
+                    if (hlen < needed) throw new ZipError('ZIP64 扩展字段不完整');
                     let r = q + 4;
                     if (uncompSize === 0xffffffff && r + 8 <= extraEnd) { uncompSize = Number(buf.readBigUInt64LE(r)); r += 8; }
                     if (compSize === 0xffffffff && r + 8 <= extraEnd) { compSize = Number(buf.readBigUInt64LE(r)); r += 8; }
@@ -130,6 +135,7 @@ export function readCentralDirectory(buf) {
         }
 
         const unixMode = externalAttrs >>> 16;
+        if (![compSize, uncompSize, localOffset].every((n) => Number.isSafeInteger(n) && n >= 0 && n !== 0xffffffff)) throw new ZipError('ZIP64 尺寸或偏移无效');
         entries.push({
             name,
             nameBytes,
@@ -156,7 +162,7 @@ export function readCentralDirectory(buf) {
 /** 解压单个条目，返回 Buffer。会再次校验名称安全性。 */
 export function extractEntry(buf, entry, { maxBytes = 512 * 1024 * 1024 } = {}) {
     const p = entry.localOffset;
-    if (p + 30 > buf.length || buf.readUInt32LE(p) !== LFH_SIG) {
+    if (!Number.isSafeInteger(p) || p < 0 || p + 30 > buf.length || buf.readUInt32LE(p) !== LFH_SIG) {
         throw new ZipError(`条目 ${entry.name} 的本地头损坏`);
     }
     const nameLen = buf.readUInt16LE(p + 26);
@@ -164,19 +170,27 @@ export function extractEntry(buf, entry, { maxBytes = 512 * 1024 * 1024 } = {}) 
     const dataStart = p + 30 + nameLen + extraLen;
     const dataEnd = dataStart + entry.compSize;
     if (dataEnd > buf.length) throw new ZipError(`条目 ${entry.name} 数据越界`);
+    if (!buf.subarray(p + 30, p + 30 + nameLen).equals(entry.nameBytes)
+        || buf.readUInt16LE(p + 8) !== entry.method || buf.readUInt16LE(p + 6) !== entry.flags) {
+        throw new ZipError(`条目 ${entry.name} 本地头与中央目录不一致`);
+    }
 
     if (entry.encrypted) throw new ZipError(`条目 ${entry.name} 已加密，无法处理`);
     if (entry.uncompSize > maxBytes) throw new ZipError(`条目 ${entry.name} 解压后 ${entry.uncompSize} 字节，超过上限`);
 
     const raw = buf.subarray(dataStart, dataEnd);
     let out;
-    if (entry.method === 0) out = Buffer.from(raw);
+    if (entry.method === 0) {
+        if (raw.length > maxBytes) throw new ZipError(`条目 ${entry.name} 超过解压上限`);
+        out = Buffer.from(raw);
+    }
     else if (entry.method === 8) {
-        out = zlib.inflateRawSync(raw, { maxOutputLength: maxBytes });
+        out = zlib.inflateRawSync(raw, { maxOutputLength: Math.max(1, Math.min(maxBytes, entry.uncompSize)) });
     } else {
         throw new ZipError(`条目 ${entry.name} 使用了不支持的压缩算法 ${entry.method}`);
     }
-    if (entry.crc && out.length && crc32(out) !== entry.crc) {
+    if (out.length !== entry.uncompSize) throw new ZipError(`条目 ${entry.name} 实际大小与声明不一致`);
+    if (crc32(out) !== entry.crc) {
         throw new ZipError(`条目 ${entry.name} CRC 校验失败，文件已损坏`);
     }
     return out;
