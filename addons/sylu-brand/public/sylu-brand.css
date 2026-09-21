@@ -247,6 +247,30 @@ body {
 .page--homepage .richmedia > div:first-child > div:last-child pre { margin: 0; padding: 18px; color: #f5eee8; background: #231815; font: 13px/1.65 "SFMono-Regular", Consolas, monospace; }
 .page--homepage .richmedia > div:first-child > div:last-child > div:last-child { color: #d5e5ce; background: #33412f; }
 
+/* 示例区会被 Prism 包装；只修正首页示例，保留题目页的复制工具。 */
+.page--homepage .richmedia > div:first-child > div:last-child .code-toolbar {
+  padding: 0;
+  background: #231815;
+}
+.page--homepage .richmedia > div:first-child > div:last-child pre,
+.page--homepage .richmedia > div:first-child > div:last-child pre code {
+  color: #f5eee8;
+  background: #231815;
+  text-shadow: none;
+  border: 0;
+  border-radius: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.page--homepage .richmedia > div:first-child > div:last-child .code-toolbar .toolbar { display: none !important; }
+.page--homepage .richmedia > div:first-child > div { min-width: 0; }
+
+/* 长题名与时间分行，避免浮动时间侵入下一条题目。 */
+.page--homepage .col--problem-name p { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 12px 0; }
+.page--homepage .col--problem-name p + p { border-top: 1px solid var(--sylu-border); }
+.page--homepage .col--problem-name p > span { float: none !important; color: #687266; font-size: 12px; }
+.page--homepage .section.side:has(.group-list:empty) { display: none; }
+
 .page--homepage .richmedia h1,
 .page--homepage .richmedia h2,
 .page--homepage .richmedia h3 {

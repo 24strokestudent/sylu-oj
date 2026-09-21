@@ -117,7 +117,7 @@ if [ "$APPLY" = 1 ]; then
     FOOTER_HTML="$(printf '%s\n' \
         '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>' \
         '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>' \
-        '<link rel="stylesheet" href="/sylu-brand.css">')"
+        '<link rel="stylesheet" href="/sylu-brand.css?v=20260921">')"
 
     # §40 关于页正文：只写事实，不编造统计数字、不放假联系方式（§29 §65）
     ABOUT_MD="$(cat <<'ABOUT'
@@ -187,21 +187,28 @@ ABOUT
 <div class="sylu-hero">
   <div>
     <p class="sylu-hero-kicker">WELCOME TO SYLU OJ</p>
-    <h1>欢迎来到<em>沈阳理工</em> OJ</h1>
-    <p class="sylu-hero-desc">一个面向程序设计学习与算法训练的在线评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>
+    <h1>欢迎来到<em>沈阳理工</em> OJ 网</h1>
+    <p class="sylu-hero-desc">一个面向全校师生的在线编程评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>
     <div class="sylu-hero-actions"><a href="/p">开始刷题</a><a href="/training">浏览训练</a></div>
   </div>
   <div class="sylu-code-window"><div class="sylu-code-bar">main.cpp</div><pre><code>#include &lt;iostream&gt;
 using namespace std;
-int main() { int a, b; cin &gt;&gt; a &gt;&gt; b; cout &lt;&lt; a + b; }</code></pre><div class="sylu-code-result">● Accepted · 在线评测</div></div>
+int main() {
+  int a, b;
+  cin &gt;&gt; a &gt;&gt; b;
+  cout &lt;&lt; a + b &lt;&lt; endl;
+  return 0;
+}</code></pre><div class="sylu-code-result">● Accepted · 在线评测</div></div>
 </div>
 
-### 从这里开始
+<p>判题 · 比赛 · 训练 · 交流，一站式编程学习平台。</p>
+
+### 核心功能
 
 - [浏览题库](/p)：按标签和难度查找题目，提交代码并查看评测结果。
 - [训练](/training)：进入题单，按计划持续练习。
 - [比赛](/contest)：参加站内比赛，实时查看排名。
-- [作业](/homework)：查看教师发布的作业与截止时间。
+- [讨论社区](/discuss)：交流解题思路，反馈题面与评测问题。
 
 ### 评测环境
 
