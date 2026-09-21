@@ -44,3 +44,7 @@ deploy/.state/
 .ref/
 # 本地端到端验证产物
 .e2e/
+
+# UI 渲染沙箱产物与依赖
+test/ui/out/
+test/ui/node_modules/
