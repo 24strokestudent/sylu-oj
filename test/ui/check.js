@@ -31,10 +31,13 @@ const ALLOWED_OVERRIDES = [
 const HOMEPAGE_PREFIX = 'partials/homepage/';
 
 // RATCHET 基线：2026-09-21 首页模板化之后实测。改造前是 53 / 51 / 2，
-// 剩下的都是公告富文本不得不用的语义标签选择器，以及 #4 待办的导航品牌 hack。
+// 首页模板化降到 8 / 4，导航品牌改成真实 DOM 后降到 8 / 1。
+// 剩下的 8 条 richmedia 与这 1 条 first-child 都挂在公告富文本的语义标签上：
+// 公告是自由 markdown，class 会被过滤器剥掉，只能按标签排版；那 1 条也只是
+// "块首标题不留上边距"的排版规则，不是猜我们自己组件的 DOM 位置。
 const DEBT_BASELINE = {
     '本站 CSS 中的 richmedia 深层选择器': 8,
-    '本站 CSS 中的 first-child 位置选择器': 4,
+    '本站 CSS 中的 first-child 位置选择器': 1,
 };
 
 // HARD：清零一次就锁死，不许再长回来。
@@ -160,6 +163,31 @@ function checkHomepageTemplate() {
     if (!bad) pass('首屏归属正确：模板出一份 Hero，公告只出纯文本');
 }
 
+function checkNavBrand() {
+    // 计划 §8.2：品牌区要有真实 DOM。改造前站名是 CSS 伪元素 content 塞的，
+    // 读屏读不到、也不响应式；现在它必须由 partials/nav.html 渲染出来。
+    const home = path.join(OUT, 'home-student.html');
+    const base = path.join(OUT, 'baseline-guest.html');
+    if (!fs.existsSync(home) || !fs.existsSync(base)) { fail('缺少 home-student/baseline-guest，先跑 render.js --all'); return; }
+    const h = fs.readFileSync(home, 'utf8');
+    const b = fs.readFileSync(base, 'utf8');
+    let bad = 0;
+    const tests = [
+        [/<li class="nav__list-item sylu-brand">/.test(h), 'home-student.html 没有品牌 <li>，nav.html 覆盖没生效'],
+        [/class="sylu-brand__name">[^<{]+</.test(h), '品牌名没有渲染成真实文本节点'],
+        [/class="sylu-brand__tagline">在线程序设计与评测平台</.test(h), '副标题没有出现在 DOM 里'],
+        [!/class="[^"]*\bsylu-brand/.test(b), 'baseline-guest.html 用上了品牌类名，基线页被本站模板污染了'],
+    ];
+    for (const [ok, msg] of tests) if (!ok) { fail(msg); bad++; }
+    // 伪元素塞正文这件事本身也要能门住：CSS 里再出现站名常量就是 hack 复活。
+    const cssDir = path.join(ADDON, 'public', 'sylu', 'css');
+    for (const f of fs.readdirSync(cssDir)) {
+        const s = fs.readFileSync(path.join(cssDir, f), 'utf8');
+        if (/content:\s*"[^"]*SYLU/.test(s)) { fail(`${f} 又用伪元素 content 写站名，§8.2 的 hack 复活了`); bad++; }
+    }
+    if (!bad) pass('导航品牌是真实 DOM，且未回退到伪元素文案');
+}
+
 function checkCssWiring() {
     const dir = path.join(ADDON, 'public', 'sylu', 'css');
     const real = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.css')).map((f) => f.slice(0, -4)) : [];
@@ -231,6 +259,7 @@ function main() {
     checkAssetLinks();
     checkHomepageSections();
     checkHomepageTemplate();
+    checkNavBrand();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);

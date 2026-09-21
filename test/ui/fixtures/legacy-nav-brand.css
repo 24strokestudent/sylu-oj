@@ -1,0 +1,21 @@
+/* 冻结快照：改造前 shell.css 里的导航品牌 hack —— 站名用伪元素 content 塞进第一个 li。
+   addons/sylu-brand 已改由 templates/partials/nav.html 给出真实品牌 DOM，这段规则随之删除；
+   但 baseline-* 要复刻的正是删除之前的线上形态，缺了它基线页会连站名都不显示。
+   只服务 test/ui，不随 addon 发布，也不计入 RATCHET 统计。
+   取回方式：git show 9c4d01f:addons/sylu-brand/public/sylu/css/shell.css */
+.nav__list--main > .nav__list-item:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 14px;
+}
+
+.nav__list--main > .nav__list-item:first-child::after {
+  content: "SYLU OJ\A 在线程序设计与评测平台";
+  white-space: pre;
+  color: var(--sylu-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+}

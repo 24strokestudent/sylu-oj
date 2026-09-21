@@ -39,11 +39,17 @@ function go(){
   var c=document.createElement('canvas'); c.width=w; c.height=h;
   var x=c.getContext('2d'); x.drawImage(imgs[0],0,0); var da=x.getImageData(0,0,w,h).data;
   x.clearRect(0,0,w,h); x.drawImage(imgs[1],0,0); var db=x.getImageData(0,0,w,h).data;
-  var diff=0, tot=w*h;
+  var diff=0, tot=w*h, box=null;
   for(var p=0;p<da.length;p+=4){
-    if(Math.abs(da[p]-db[p])>6||Math.abs(da[p+1]-db[p+1])>6||Math.abs(da[p+2]-db[p+2])>6) diff++;
+    if(Math.abs(da[p]-db[p])>6||Math.abs(da[p+1]-db[p+1])>6||Math.abs(da[p+2]-db[p+2])>6){
+      diff++;
+      var i=p/4, x=i%w, y=(i/w)|0;
+      // 只报百分比的话，"差在哪一行"还得靠肉眼翻两张长图，所以顺手记差异包围盒
+      box = box ? [Math.min(box[0],x), Math.min(box[1],y), Math.max(box[2],x), Math.max(box[3],y)] : [x,y,x,y];
+    }
   }
-  document.title=(res||'')+'DIFF '+(diff/tot*100).toFixed(3)+'% ('+diff+'/'+tot+')';
+  var bbox = box ? ' BBOX '+box[0]+','+box[1]+' '+(box[2]-box[0]+1)+'x'+(box[3]-box[1]+1) : '';
+  document.title=(res||'')+'DIFF '+(diff/tot*100).toFixed(3)+'% ('+diff+'/'+tot+')'+bbox;
 }
 load(A,0); load(B,1);
 <\/script></body>`;

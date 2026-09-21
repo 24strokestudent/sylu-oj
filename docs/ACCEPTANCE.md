@@ -20,6 +20,7 @@ bash deploy/healthcheck.sh --gate        # §7  第一道 Gate
 bash deploy/secret-scan.sh               # §44 密钥与 §69 危险实现扫描
 bash deploy/configure.sh --verify --url https://<你的域名>/   # §65 线上页面检查
 bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
+node test/ui/check.js                    # §8 §9 前端红线：模板覆盖范围、选择器债务、品牌归属
 ```
 
 | 命令 | 期望 | 实际 | 结论 |
@@ -29,6 +30,7 @@ bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 | `secret-scan.sh` | 退出码 0，无高危 | | |
 | `configure.sh --verify` | 无 FAIL | | |
 | `check-fixtures.sh` | 全绿 | | |
+| `test/ui/check.js` | 退出码 0（离线渲染，不需要起服务） | | |
 
 > 脚本判不了的（人脑才知道对不对的），在下面各章逐项人工过。
 

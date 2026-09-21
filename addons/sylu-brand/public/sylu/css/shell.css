@@ -1,5 +1,5 @@
-/* 页面外壳：主内容区、导航、页脚。导航的品牌结构是唯一仍需按位置猜 DOM 的地方，
-   已在 "真实导航结构" 一步替换；此处其余规则均绑定 Hydro 的稳定类名。 */
+/* 页面外壳：主内容区、导航、页脚。全部绑定 Hydro 的稳定类名，或本站模板自己的
+   .sylu-* 类名；不再出现按 DOM 位置猜的选择器。 */
 .main {
   padding-top: 28px;
   padding-bottom: 40px;
@@ -17,23 +17,40 @@
   object-fit: contain;
 }
 
-/* LEGACY(导航品牌结构)：把 "SYLU OJ / 在线程序设计与评测平台" 用伪元素塞进第一个导航项。
-   正确做法是覆盖 partials/nav.html 让品牌有自己的 DOM，这一步做完即删。 */
-.nav__list--main > .nav__list-item:first-child {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* 品牌区：DOM 来自 addons/sylu-brand/templates/partials/nav.html。
+   这里是本站第一处"类名对得上模板"的导航样式——之前站名是伪元素 content 塞的，
+   读屏读不到、窄屏没法单独处理，而且必须依赖"它是第一个 li"这个位置假设。 */
+.sylu-brand {
   margin-right: 14px;
 }
 
-.nav__list--main > .nav__list-item:first-child::after {
-  content: "SYLU OJ\A 在线程序设计与评测平台";
-  white-space: pre;
+.sylu-brand__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   color: var(--sylu-ink);
+}
+
+.sylu-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sylu-brand__name {
   font-size: 16px;
   font-weight: 700;
-  line-height: 1.25;
   letter-spacing: .02em;
+}
+
+.sylu-brand__tagline {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sylu-muted);
+}
+
+.sylu-brand__link:hover .sylu-brand__name {
+  color: var(--sylu-primary);
 }
 
 .nav__item {

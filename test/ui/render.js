@@ -148,7 +148,11 @@ function renderPage({
     else links.push('<link rel="stylesheet" href="http://101.42.27.44/theme-4.58.5.css">');
     const rel = `${PUB_REL}/`;
     const cssDir = path.join(ADDON, 'public', 'sylu', 'css');
+    // skipCss：整份被冻结进 fixtures 的文件不能再挂当前版。两者同名规则会互相覆盖，
+    // 结果是基线页得到一个"改造前和改造后各一部分"的混合外观，基线就不可信了。
+    const skip = opts.skipCss || [];
     for (const f of CSS_FILES) {
+        if (skip.includes(f)) continue;
         if (fs.existsSync(path.join(cssDir, f))) links.push(`<link rel="stylesheet" href="${rel}sylu/css/${f}">`);
     }
     // baseline-* 复刻的是"改造前"首页：那套按 DOM 位置写的样式已经从 addon 里删掉了，
@@ -199,10 +203,14 @@ function homepageState(role, config, bulletin) {
  * （不启用 addon）、并挂上 fixtures 里的冻结样式；home-* 是改造后形态，
  * 公告只留纯文本，首屏改由 addon 的 main.html 承载。
  */
-const LEGACY_CSS = ['fixtures/legacy-home.css', 'fixtures/legacy-responsive.css'];
+const LEGACY_CSS = ['fixtures/legacy-nav-brand.css', 'fixtures/legacy-home.css', 'fixtures/legacy-responsive.css'];
+// 冻结快照本身就是 home.css / responsive.css 在改造前的全文，所以这两个文件在
+// 基线场景里换成快照、不再挂当前版；legacy-nav-brand.css 只是当前 shell.css
+// 里被删掉的那一段，因此 shell.css 照常加载。顺序保持"tokens→base→shell→home→responsive"。
+const LEGACY_SKIP = ['home.css', 'responsive.css'];
 const SCENARIOS = {
-    'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS },
-    'baseline-student': { role: 'student', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS },
+    'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS, skipCss: LEGACY_SKIP },
+    'baseline-student': { role: 'student', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS, skipCss: LEGACY_SKIP },
     'home-guest': { role: 'guest', addon: true, bulletin: 'plain' },
     'home-student': { role: 'student', addon: true, bulletin: 'plain' },
     'home-teacher': { role: 'teacher', addon: true, bulletin: 'plain' },

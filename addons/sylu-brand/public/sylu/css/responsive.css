@@ -33,5 +33,9 @@
 
   .sylu-entries { grid-template-columns: minmax(0, 1fr); }
 
-  .nav__list--main > .nav__list-item:first-child::after { font-size: 13px; }
+  .sylu-brand { margin-right: 8px; }
+
+  .sylu-brand__name { font-size: 14px; }
+
+  .sylu-brand__tagline { font-size: 11px; }
 }

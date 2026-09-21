@@ -70,11 +70,14 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 - 覆盖首页模板 `templates/main.html`，把首屏 Hero、绿色收束条和四个快捷入口变成**代码里的结构**，
   不再靠往公告里塞 HTML + 深层 CSS 选择器实现
 - 覆盖 `templates/partials/homepage/discussion_nodes.html`，只多加了一条"没有版块就不渲染"的判断
+- 覆盖 `templates/partials/nav.html`，**只把第一个导航项换成有 DOM 的品牌区**
+  （Logo + 站名 + 副标题），其余 130 多行与上游逐字一致；上游若改动该文件，
+  整份重新对齐再重放这一处 delta，别只改本地副本
 - `homepage.yaml` 是首页模块编排的内容，部署时原样写入 `hydrooj.homepage`
 - 通过 `public/sylu/css/*.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
 
-它**不碰**用户系统、题库、Judge。模板只覆盖上列两份，且都是 addon 覆盖而非改 Hydro 源码（§49 A 级）；
-题库、记录、比赛、作业、讨论、排名与后台仍然完全使用上游模板。
+它**不碰**用户系统、题库、Judge。模板只覆盖上列三份，且都是 addon 覆盖而非改 Hydro 源码
+（§49 A/B 级）；题库、记录、比赛、作业、讨论、排名与后台仍然完全使用上游模板。
 
 ## 样式是怎么加载的
 
@@ -120,6 +123,8 @@ curl -sI http://127.0.0.1:8888/sylu/about | head -1        # 期望 200
 - [ ] `/sylu/about` 返回 200，正文含非官方声明
 - [ ] 页脚出现非官方声明，且 `Powered by Hydro` 链接仍在、可点
 - [ ] 站点名称已变为 `SYLU OJ`（浏览器标签页标题）
+- [ ] 顶栏站名与副标题能在 DevTools 的 DOM 里读到（`.sylu-brand__name` / `.sylu-brand__tagline`），
+      不是伪元素 content；读屏软件也能念出来（§8.2）
 - [ ] `git status` 中 Hydro Core 目录无任何改动（§72）
 - [ ] 手机宽度下该页面排版正常（§65）
 

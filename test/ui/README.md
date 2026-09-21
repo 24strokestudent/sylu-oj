@@ -49,6 +49,14 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 `compare.js` 从目标 ref 还原当时的样式，为每个场景造一份"旧样式孪生页"，两边出图后比像素。
 本次 CSS 拆分（437 行单文件 → 5 个职责文件 + 令牌）实测 **差异 0.000%（0/4557600 像素）**。
 
+基线页自身的可信度也用它量：`node compare.js fabcca8 --only baseline --widths 1440`
+实测 **baseline-guest 0.014% / baseline-student 0.004%**（阈值 0.1%），也就是
+`baseline-*` 确实等于改造前的样子，残差是文字抗锯齿级别的噪声。
+这个数第一次跑出来是 2.373%：当时基线页同时挂着当前 home.css 和它的冻结快照，
+同名规则互相覆盖，量到的是"改造前后各一半"的混合外观 —— 基线不忠实，所有以它为
+参照的比较都会得出假结论，所以 `render.js` 的场景表用 `skipCss` 把已被整份冻结的
+文件从当前样式里摘掉。
+
 ## 闸门查什么
 
 `check.js` 分两类：
@@ -57,8 +65,10 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
   addon 覆盖上游模板必须在 §49 的 A/B 级白名单内（C 级业务模板只能用 CSS）；
   `:has()` 已清零，长回来即 fail；首屏只由模板出一份 Hero，公告里不得带结构。
 - **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器两项计数只许下降。
-  首页模板化前是 53 / 51，模板化后 8 / 4 —— 剩下的都是公告富文本绕不开的语义标签，
-  以及导航品牌 hack（下一步覆盖 `partials/nav.html` 后清零）。
+  改造前是 53 / 51，首页模板化后 8 / 4，导航品牌改成真实 DOM 后 8 / 1 ——
+  剩下的都挂在公告富文本的语义标签上（class 会被过滤器剥掉，只能按标签排版）。
+- **品牌区**：站名与副标题必须由 `partials/nav.html` 渲染成真实文本节点；
+  CSS 里再出现 `content: "...SYLU..."` 直接 fail（§8.2 的伪元素 hack 不许复活）。
 - **装配一致性**：`public/sylu/css/` 目录、`configure.sh` 的 `CSS_ORDER`、
   `render.js` 的 `CSS_FILES` 三处必须同步——新增样式文件忘了挂链接会直接 fail。
   产物里每一条相对 `link/script/img` 引用也会解析一遍，文件不存在就 fail。
@@ -70,10 +80,21 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 
 ## fixtures/：冻结的改造前样式
 
-首页模板化之后，`public/sylu/css/` 里那套"按 DOM 位置猜公告"的样式被整体删除了。
-但 `baseline-*` 场景的存在意义就是复刻**删除之前**的线上页面，所以那套规则以
-`fixtures/legacy-home.css` + `fixtures/legacy-responsive.css` 的形式冻结在测试目录里，
-只挂给 `baseline-*`。它们不随 addon 发布，也不计入 RATCHET 统计。
+首页模板化之后，`public/sylu/css/` 里那套"按 DOM 位置猜公告"的样式被整体删除了；
+导航品牌改成真实 DOM 之后，shell.css 里往第一个 li 塞伪元素的那段也删了。
+但 `baseline-*` 场景的存在意义就是复刻**删除之前**的线上页面，所以它们以冻结快照的形式
+留在测试目录里，只挂给 `baseline-*`，不随 addon 发布，也不计入 RATCHET 统计：
+
+| 文件 | 冻结自 | 取回方式 |
+| --- | --- | --- |
+| `legacy-home.css` | home.css @ fabcca8（全文） | `git show fabcca8:addons/sylu-brand/public/sylu/css/home.css` |
+| `legacy-nav-brand.css` | shell.css 的导航品牌 hack @ 9c4d01f（仅那一段） | `git show 9c4d01f:addons/sylu-brand/public/sylu/css/shell.css` |
+| `legacy-responsive.css` | responsive.css @ fabcca8（全文） | `git show fabcca8:addons/sylu-brand/public/sylu/css/responsive.css` |
+
+全文冻结的两份在基线场景里是**替换**而不是追加（场景表的 `skipCss` 会把当前版
+home.css / responsive.css 摘掉）；`legacy-nav-brand.css` 只是一段，所以 shell.css
+照常加载。挂载后的层叠顺序仍是 tokens → base → shell(+品牌 hack) → home → responsive，
+与改造前一致。
 
 这样拆分的依据是 CSS 拆分那轮实测的 0.000% 像素差：新令牌/新分片 + 冻结的位置规则
 = 改造前的外观，两者可以叠加而不是互相覆盖。

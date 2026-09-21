@@ -148,8 +148,11 @@ async function main() {
     }
     fs.mkdirSync(SHOTS, { recursive: true });
 
+    // live-* 是抓线上现状的临时页，legacy-* 是 compare.js 造的"旧样式孪生页"，
+    // 都不属于常规场景：混进来的话全量出图会多出一批没人看的图。
+    const TEMP_PREFIX = /^(live|legacy)-/;
     const files = (pages.length ? pages : fs.readdirSync(OUT)
-        .filter((f) => f.endsWith('.html') && !f.startsWith('live-'))
+        .filter((f) => f.endsWith('.html') && !TEMP_PREFIX.test(f))
         .map((f) => f.replace(/\.html$/, '')))
         .map((p) => path.join(OUT, `${p}.html`))
         .filter((f) => fs.existsSync(f));

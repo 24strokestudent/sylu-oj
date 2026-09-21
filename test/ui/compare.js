@@ -24,6 +24,7 @@ const SHOTS = path.join(OUT, 'shots');
 const LEGACY = path.join(OUT, 'vendor', 'legacy');
 const ADDON_REL = 'addons/sylu-brand/public';
 const SCENARIOS = Object.keys(require('./render.js').SCENARIOS);
+const { CSS_FILES } = require('./render.js');
 
 function git(args) {
     return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024 * 32 });
@@ -33,6 +34,9 @@ function git(args) {
 function legacyStylesheets(ref) {
     const listing = git(['ls-tree', '-r', '--name-only', ref, '--', ADDON_REL])
         .split('\n').filter((f) => f.endsWith('.css'));
+    // 层叠顺序必须照搬真实装配顺序：git 给的是字典序，base/home/responsive/shell/tokens
+    // 一旦交错，同优先级的规则就会换赢家，比对结果里就会混进"孪生页自己的假差异"。
+    listing.sort((a, b) => orderOf(a) - orderOf(b));
     fs.rmSync(LEGACY, { recursive: true, force: true });
     fs.mkdirSync(LEGACY, { recursive: true });
     return listing.map((f, i) => {
@@ -41,6 +45,12 @@ function legacyStylesheets(ref) {
         fs.writeFileSync(to, body, 'utf8');
         return `vendor/legacy/${path.basename(to)}`;
     });
+}
+
+/** 拆分前的单文件 sylu-brand.css 排在最前，它没有同辈；拆分后的按 CSS_FILES 排 */
+function orderOf(file) {
+    const i = CSS_FILES.indexOf(path.basename(file));
+    return i < 0 ? -1 : i;
 }
 
 /**
