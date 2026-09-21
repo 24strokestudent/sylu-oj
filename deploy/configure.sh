@@ -125,7 +125,7 @@ if [ "$APPLY" = 1 ]; then
     # 链接清单同样由目录内容生成，避免"加了文件忘了挂链接"这种静默失效。
     CSS_DIR="${SYLU_OJ_ROOT}/addons/sylu-brand/public/sylu/css"
     # 层叠顺序由这个名单决定，改名单即改层叠；render.js 的 CSS_FILES 必须与之一致（check.js 断言）
-    CSS_ORDER="tokens base shell home about oj manage responsive"
+    CSS_ORDER="tokens base shell home about oj responsive"
     CSS_LINKS=()
     if [ -d "$CSS_DIR" ]; then
         CSS_V="$(cat "$CSS_DIR"/*.css 2>/dev/null | md5sum | cut -c1-8)"

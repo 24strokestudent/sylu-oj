@@ -32,17 +32,27 @@ const HOMEPAGE_PREFIX = 'partials/homepage/';
 
 // RATCHET 基线：2026-09-21 首页模板化之后实测。改造前是 53 / 51 / 2，
 // 首页模板化降到 8 / 4，导航品牌改成真实 DOM 后降到 8 / 1。
-// 剩下的 8 条 richmedia 与这 1 条 first-child 都挂在公告富文本的语义标签上：
-// 公告是自由 markdown，class 会被过滤器剥掉，只能按标签排版；那 1 条也只是
-// "块首标题不留上边距"的排版规则，不是猜我们自己组件的 DOM 位置。
+// 剩下的都挂在"自由 markdown 渲染出来的富文本"上：公告（home.css）和题面（oj.css）。
+// 这两块内容的 class 会被 markdown 过滤器剥掉，上游只留下 .richmedia 和裸的 h2/h3/p，
+// 所以排版只能按语义标签挂——这不是猜我们自己组件的 DOM 位置，而是没有别的位置可猜。
+// 2026-09-21 C 级题目详情接入时，题面富文本又加了 2 条 richmedia 引用与 2 条块首标题规则。
 const DEBT_BASELINE = {
-    '本站 CSS 中的 richmedia 深层选择器': 8,
-    '本站 CSS 中的 first-child 位置选择器': 1,
+    '本站 CSS 中的 richmedia 深层选择器': 10,
+    '本站 CSS 中的 first-child 位置选择器': 3,
+    // tokens.css 自称"颜色的唯一出处"，但首页的代码窗口和导航还留着 14 处字面色值
+    // （深色代码窗口的 6 组配色 + 导航 2 处）。oj.css 是这一轮新写的，一处字面色值都没有，
+    // 说明这个标准做得到；基线只许往下走，等首页配色收进令牌后升级为 HARD。
+    '本站 CSS 中的字面色值（tokens.css 之外）': 14,
 };
 
 // HARD：清零一次就锁死，不许再长回来。
 const DEBT_FORBIDDEN = {
     '本站 CSS 中的 :has() 选择器': /:has\(/g,
+};
+
+const COLOR_LITERAL = {
+    hex: /#[0-9a-fA-F]{3,8}\b/g,
+    func: /rgba?\(/g,
 };
 
 const LEAKS = ['DATETIME_SPAN_ERROR', 'Template render error', 'Cannot get template', 'undefined undefined'];
@@ -108,11 +118,16 @@ function checkDebtRatchet() {
     const files = cssFiles();
     if (!files.length) { pass('尚未产生拆分后的 CSS 文件'); return; }
     // 注释里会出现 :has() 这类字样，先剥掉注释再统计，否则指标会被文字描述干扰
-    const all = files.map((f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')).join('\n');
+    const strip = (f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const all = files.map(strip).join('\n');
     const count = (re) => (all.match(re) || []).length;
+    // 令牌文件本身就是色值出处，统计字面色值时把它排除掉
+    const palette = files.filter((f) => path.basename(f) !== 'tokens.css').map(strip).join('\n');
     const now = {
         '本站 CSS 中的 richmedia 深层选择器': count(/richmedia/g),
         '本站 CSS 中的 first-child 位置选择器': count(/first-child/g),
+        '本站 CSS 中的字面色值（tokens.css 之外）':
+            (palette.match(COLOR_LITERAL.hex) || []).length + (palette.match(COLOR_LITERAL.func) || []).length,
     };
     for (const k of Object.keys(DEBT_BASELINE)) {
         const cur = now[k] || 0;
@@ -356,6 +371,83 @@ function checkNavClearance() {
     if (!bad) pass('导航净空：.main 让位、品牌行高、图标尺寸都绑在 --sylu-nav-h 上');
 }
 
+/**
+ * C 级页面（题库 / 题目详情 / 提交记录列表 / 提交详情）的闸门。
+ * 这一组不覆盖上游模板，能改的只有 CSS，所以这里守的是 CSS 管不到的三件事：
+ *   1) 场景还在渲染，而且渲染出的是有正文的上游模板——夹具和模板一旦脱节，
+ *      Nunjucks 不会报错，只会静默交出空表格，据此出的截图全是假的；
+ *   2) 隐藏题只对有 PERM_VIEW_PROBLEM_HIDDEN 的身份出现（§49 红线）；
+ *   3) 判题状态用颜色区分时文字必须留着（计划 §13）。
+ */
+const TIER_C_MARKERS = {
+    'problems-guest': ['class="data-table hide-problem-tag"'],
+    'problems-student': ['class="data-table hide-problem-tag"'],
+    'problems-teacher': ['class="data-table hide-problem-tag"'],
+    'problems-admin': ['class="data-table hide-problem-tag"'],
+    'problem-guest': ['class="problem-content"'],
+    'problem-student': ['class="problem-content"'],
+    'problem-admin': ['class="problem-content"'],
+    'records-student': ['class="data-table record_main__table"'],
+    'record-student': ['class="data-table record_detail__table"', 'class="subtask"'],
+};
+
+function checkTierC() {
+    let bad = 0;
+    const read = (name) => {
+        const p = path.join(OUT, `${name}.html`);
+        if (!fs.existsSync(p)) return null;
+        return fs.readFileSync(p, 'utf8');
+    };
+    for (const [name, markers] of Object.entries(TIER_C_MARKERS)) {
+        const s = read(name);
+        if (s === null) { fail(`缺少 ${name}.html，先跑 node test/ui/render.js --all`); bad++; continue; }
+        for (const m of markers) {
+            if (!s.includes(m)) { fail(`${name}.html 里没有 ${m}：上游模板没渲染出正文，夹具与模板脱节了`); bad++; }
+        }
+        const rows = (s.match(/<tr data-pid="/g) || []).length;
+        if (/^problems-/.test(name) && rows < 9) {
+            fail(`${name}.html 的题目行只有 ${rows} 条，夹具的 PROBLEMS 至少该出 9 条`); bad++;
+        }
+    }
+    // 隐藏题：可见性必须跟着权限分叉，而不是靠夹具一刀切过滤。
+    // 只断言"学生看不到"是不够的——把夹具改成永远过滤掉隐藏题同样能过，
+    // 所以正例（管理员能看到）必须一起断言。
+    const HIDDEN_PID = 'data-pid="1009"';
+    for (const role of ['guest', 'student', 'teacher']) {
+        const s = read(`problems-${role}`) || '';
+        if (s.includes(HIDDEN_PID)) { fail(`problems-${role}.html 出现了隐藏题 1009：越权泄露赛前/待发布题目`); bad++; }
+    }
+    const admin = read('problems-admin') || '';
+    if (!admin.includes(HIDDEN_PID)) { fail('problems-admin.html 看不到隐藏题 1009：夹具的权限分支写反了，红线测不出回归'); bad++; }
+
+    // 游客没有递交权限，页面上只该出现"登录后递交"；学生反之。
+    const guest = read('problem-guest') || '';
+    const student = read('problem-student') || '';
+    if (!guest.includes('登录后递交')) { fail('problem-guest.html 没有"登录后递交"，游客分支变了'); bad++; }
+    if (student.includes('登录后递交')) { fail('problem-student.html 出现"登录后递交"，学生被当成游客渲染了'); bad++; }
+
+    // 状态列：颜色只是辅助，文字不许被 CSS 抹掉。
+    const cssDir = path.join(ADDON, 'public', 'sylu', 'css');
+    for (const f of fs.readdirSync(cssDir)) {
+        if (!f.endsWith('.css')) continue;
+        const css = fs.readFileSync(path.join(cssDir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const m of css.matchAll(/([^{}]*record-status--text[^{}]*)\{([^}]*)\}/g)) {
+            if (/display:\s*none/.test(m[2])) { fail(`${f} 用 display:none 隐藏了判题状态文字（计划 §13：颜色只是辅助）`); bad++; }
+        }
+    }
+    // 窄屏把状态列压成"图标 + 分数"时靠的是 font-size:0 配 > span 还原，两条必须成对出现，
+    // 只留前一条就会把分数一起压没，手机上只剩一个图标。
+    for (const f of ['oj.css', 'responsive.css']) {
+        const p = path.join(cssDir, f);
+        if (!fs.existsSync(p)) continue;
+        const css = fs.readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+        const zeroed = (css.match(/record-status--text\s*\{[^}]*font-size:\s*0\b/g) || []).length;
+        const restored = (css.match(/record-status--text\s*>\s*span\s*\{[^}]*font-size:\s*1[0-9]px/g) || []).length;
+        if (zeroed > restored) { fail(`${f} 有 ${zeroed} 处 font-size:0 压缩状态文字，但只有 ${restored} 处 > span 还原，手机上分数会消失`); bad++; }
+    }
+    if (!bad) pass(`C 级 9 页渲染正常，隐藏题按权限分叉，状态文字未被颜色化`);
+}
+
 function main() {
     console.log('== UI 回归闸门 ==');
     checkLeaks();
@@ -369,6 +461,7 @@ function main() {
     checkNavBrand();
     checkNavClearance();
     checkAboutPage();
+    checkTierC();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);

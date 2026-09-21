@@ -11,10 +11,15 @@
 cd test/ui && npm install          # nunjucks / js-yaml / markdown-it / puppeteer-core，不进主工程依赖
 node fetch-assets.js               # 从内测站抓 theme.css、iconfont 与线上 sylu-brand.css 到 out/vendor
 node render.js --all               # 渲染全部场景到 out/*.html
-node shot.js                       # 全场景 × 全断点出图到 out/shots
+node shot.js                       # 全场景 × 全断点出图到 out/shots（发现横向溢出即 exit 1）
 node check.js                      # 回归闸门，违反红线即 exit 1
 node diag.js home-student          # 布局量测（排查"渲染出来了但看不见"这类问题）
 ```
+
+`shot.js` 每张图顺带量一次 `documentElement.scrollWidth - clientWidth`。
+截图只能看出"右边内容突然没了"，看不出"有没有被切"，移动端表格溢出靠目视极易漏判，
+所以把它做成出图的一部分：任何一张溢出，命令就非零退出。
+（只比文档级宽度，不逐元素扫描——`.slideout-menu` 这类故意停在视口外的抽屉会被逐元素扫描误报。）
 
 ## 出图：窄屏只能走 puppeteer
 
@@ -57,6 +62,11 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 参照的比较都会得出假结论，所以 `render.js` 的场景表用 `skipCss` 把已被整份冻结的
 文件从当前样式里摘掉。
 
+`baseline-*` 现在默认不进比对列表。孪生页按定义要把 `fixtures/` 的冻结快照换成
+ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻结快照 vs 现版 skin"
+（实测稳定在 25% 上下，把整个 oj.css 从基线里去掉只挪动 0.01%），不是本轮改动量。
+要看基线页本身，显式指定 `--only baseline` 并配一个冻结那天对应的 ref（如 `fabcca8`）。
+
 ## 闸门查什么
 
 `check.js` 分两类：
@@ -64,9 +74,15 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 - **HARD**：渲染产物不得泄漏错误串；必须保留 `Powered by Hydro` 归属与"非官方"声明；
   addon 覆盖上游模板必须在 §49 的 A/B 级白名单内（C 级业务模板只能用 CSS）；
   `:has()` 已清零，长回来即 fail；首屏只由模板出一份 Hero，公告里不得带结构。
-- **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器两项计数只许下降。
-  改造前是 53 / 51，首页模板化后 8 / 4，导航品牌改成真实 DOM 后 8 / 1 ——
-  剩下的都挂在公告富文本的语义标签上（class 会被过滤器剥掉，只能按标签排版）。
+- **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器、tokens.css 之外的字面色值
+  三项计数只许下降。改造前是 53 / 51，首页模板化后 8 / 4，导航品牌改成真实 DOM 后 8 / 1，
+  题目详情接入后 10 / 3（新增两条挂在题面 markdown 的块首标题上，与公告同类）；
+  字面色值当前 14（首页深色代码窗口 12 + 导航 2），oj.css 是 0，说明这个标准做得到。
+- **C 级页面**（`checkTierC`）：题库/题面/记录/提交详情九个场景必须渲染出正文——
+  夹具与上游模板脱节时 Nunjucks 不报错，只交出一张空表，据此出的截图全是假的。
+  同一处还断言隐藏题 1009 只出现在 `problems-admin`（guest/student/teacher 三页都必须没有，
+  管理员必须**有**：只查反例会养出一个"永远过滤掉"的假通过）；
+  判题状态文字没被 `display:none` 抹掉；窄屏 `font-size:0` 压缩状态列必有 `> span` 还原配对。
 - **品牌区**：站名与副标题必须由 `partials/nav.html` 渲染成真实文本节点；
   CSS 里再出现 `content: "...SYLU..."` 直接 fail（§8.2 的伪元素 hack 不许复活）。
 - **装配一致性**：`public/sylu/css/` 目录、`configure.sh` 的 `CSS_ORDER`、
@@ -114,6 +130,14 @@ home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 
 | `baseline-guest` | 仅上游 | 未登录 | 含 Hero HTML | 复刻线上现状 |
 | `baseline-student` | 仅上游 | 学生 | 含 Hero HTML | 复刻线上现状 |
 | `home-guest/student/teacher/admin` | 上游 + addon | 四档权限 | 纯文本 | 改造后效果 |
+| `about-student` | addon `sylu/about.html` | 学生 | — | §25 关于页 |
+| `problems-guest/student/teacher/admin` | 仅上游 `problem_main.html` | 四档权限 | — | 题库 + 隐藏题可见性 |
+| `problem-guest/student/admin` | 仅上游 `problem_detail.html` | 三档权限 | — | 题面与递交入口的权限分叉 |
+| `records-student` / `record-student` | 仅上游 `record_main/record_detail.html` | 学生 | — | 记录列表与判题详情 |
+
+C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造出这些页面的 body
+（形状取自 `handler/problem.ts:183-193 / 355-368`、`handler/record.ts:119-133 / 218-220`，
+登记在 `PAGE_BODIES` 里；新增场景没登记会直接抛错，不会静默出一张空白页）。
 
 `baseline-*` 用 `HERO_BULLETIN`（改造前 `configure.sh` 往公告里塞的那段 HTML 的冻结副本），
 因为线上现状就是"整块首屏塞进公告"；`home-*` 用纯文本公告，首屏改由模板承载。
@@ -145,6 +169,29 @@ home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 
 
 - 这是**渲染**沙箱，不是**运行**沙箱：点击、表单、评测轮询、MDE 编辑器都不在覆盖范围内。
   交互链路仍须在内测站人工回归。
+- 沙箱执行页面里的内联脚本，`layout/html5.html` 那句会把 `<html class="nojs">` 换成 `hasjs`，
+  所以截图反映的是"有 JS"的可见性规则。两个后果要知道：
+  `题库侧栏的 Enter/Leave Edit Mode` 会出现在图上（上游只按 `PRIV_USER_PROFILE` 判断，
+  登录用户都有，且这两个词条上游没翻成中文）；
+  题面页的递交面板带 `non-scratchpad--hide`，在沙箱里恒为隐藏，
+  **不能**据此说"递交入口没了"。
 - 数据是 `lib/data.js` 造的仿真校园数据，不含假统计数字。
 - `lib/hydro.js` 是上游模板运行时的复刻（filters / globals / PERM / PRIV / url()），
   文件头标注了每处依据的上游源码位置；上游升级后需重新比对。
+
+### 计划里靠 CSS 落不了地的条目（C 级）
+
+C 级不许覆盖模板，所以下面这些计划原文（§10 §13）设想过、但**只改 CSS 做不到**的事，
+本轮明确不做，而不是用伪元素 `content` 或假数据凑出一个看起来像的版本：
+
+| 计划条目 | 做不到的原因 |
+| --- | --- |
+| 题库页顶部的"题目列表 / 搜索"标题区与副标题块 | 上游模板里没有这个 DOM，CSS 无中生有只能靠伪元素文案，§8.2 已禁止这种 hack |
+| 每题"通过率 %"列 | 数据不在 `pdocs` 里（只有 `nSubmit/nAccept`），要算就是新业务逻辑，越过后端边界 |
+| 难度分级文字标签（入门/提高/…） | 同上，模板只输出数字 `difficulty` |
+| 状态/时间/语言筛选下拉 | 上游记录页的筛选是表单控件，缺的控件没法用 CSS 变出来 |
+| "只看我的提交"开关 | 需要新查询参数与 handler 分支 |
+| CE 橙红 / TLE 橙 / MLE 橙的逐状态配色 | 模板只输出 `model.builtin.STATUS_CODES` 的五档类名（pass/fail/progress/pending/ignored），没有状态码也没有可读的 `data-*`，CSS 读不到单元格文字。已在 `tokens.css` 按五档取色 |
+
+要补这些，得走"新增 addon 模板覆盖 + 更新 `ALLOWED_OVERRIDES` 白名单 + 重新签核 §49 分级"
+这条路，属于 P1 的决策，不该在一次 CSS 改造里顺手做掉。

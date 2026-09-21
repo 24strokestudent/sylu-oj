@@ -45,56 +45,219 @@ if (!REF || !fs.existsSync(TEMPLATES_UPSTREAM)) {
 }
 
 // ---------------------------------------------------------------- 权限常量
-// packages/common/permission.ts
-const PRIV = {
-    PRIV_EDIT_SYSTEM: 1 << 0,
-    PRIV_MOD_BADGE: 1 << 25,
-    PRIV_USER_PROFILE: 1 << 2,
-    PRIV_REGISTER_USER: 1 << 3,
-    PRIV_CREATE_FILE: 1 << 16,
-    PRIV_VIEW_SYSTEM_NOTIFICATION: 1 << 23,
-};
+// packages/common/permission.ts 的逐字移植（位定义 + 组合值）。
+// 为什么整表照抄而不是"用到哪条补哪条"：模板里每个 {% if hasPerm(...) %} 都在选分支，
+// 少一条或位错一位不会报错，只会静默渲染成另一条分支——那等于给验收结论造假。
 const PERM = {
+    PERM_NONE: 0n,
+
+    // Domain Settings
+    PERM_VIEW: 1n << 0n,
     PERM_EDIT_DOMAIN: 1n << 1n,
-    PERM_VIEW_PROBLEM: 1n << 7n,
+    PERM_VIEW_DISPLAYNAME: 1n << 67n,
     PERM_VIEW_USER_PRIVATE_INFO: 1n << 67n,
     PERM_MOD_BADGE: 1n << 2n,
+
+    // Problem
+    PERM_CREATE_PROBLEM: 1n << 4n,
+    PERM_EDIT_PROBLEM: 1n << 5n,
+    PERM_EDIT_PROBLEM_SELF: 1n << 6n,
+    PERM_VIEW_PROBLEM: 1n << 7n,
+    PERM_VIEW_PROBLEM_HIDDEN: 1n << 8n,
+    PERM_SUBMIT_PROBLEM: 1n << 9n,
+    PERM_READ_PROBLEM_DATA: 1n << 10n,
+
+    // Record
+    PERM_VIEW_RECORD: 1n << 70n,
+    PERM_READ_RECORD_CODE: 1n << 12n,
+    PERM_READ_RECORD_CODE_ACCEPT: 1n << 66n,
+    PERM_REJUDGE_PROBLEM: 1n << 13n,
+    PERM_REJUDGE: 1n << 14n,
+
+    // Problem Solution
+    PERM_VIEW_PROBLEM_SOLUTION: 1n << 15n,
+    PERM_VIEW_PROBLEM_SOLUTION_ACCEPT: 1n << 65n,
+    PERM_CREATE_PROBLEM_SOLUTION: 1n << 16n,
+    PERM_VOTE_PROBLEM_SOLUTION: 1n << 17n,
+    PERM_EDIT_PROBLEM_SOLUTION: 1n << 18n,
+    PERM_EDIT_PROBLEM_SOLUTION_SELF: 1n << 19n,
+    PERM_DELETE_PROBLEM_SOLUTION: 1n << 20n,
+    PERM_DELETE_PROBLEM_SOLUTION_SELF: 1n << 21n,
+    PERM_REPLY_PROBLEM_SOLUTION: 1n << 22n,
+    PERM_EDIT_PROBLEM_SOLUTION_REPLY_SELF: 1n << 24n,
+    PERM_DELETE_PROBLEM_SOLUTION_REPLY: 1n << 25n,
+    PERM_DELETE_PROBLEM_SOLUTION_REPLY_SELF: 1n << 26n,
+
+    // Discussion
     PERM_VIEW_DISCUSSION: 1n << 27n,
+    PERM_CREATE_DISCUSSION: 1n << 28n,
+    PERM_HIGHLIGHT_DISCUSSION: 1n << 29n,
+    PERM_PIN_DISCUSSION: 1n << 61n,
+    PERM_EDIT_DISCUSSION: 1n << 30n,
+    PERM_EDIT_DISCUSSION_SELF: 1n << 31n,
+    PERM_DELETE_DISCUSSION: 1n << 32n,
+    PERM_DELETE_DISCUSSION_SELF: 1n << 33n,
+    PERM_REPLY_DISCUSSION: 1n << 34n,
+    PERM_ADD_REACTION: 1n << 62n,
+    PERM_EDIT_DISCUSSION_REPLY_SELF: 1n << 36n,
+    PERM_DELETE_DISCUSSION_REPLY: 1n << 38n,
+    PERM_DELETE_DISCUSSION_REPLY_SELF: 1n << 39n,
+    PERM_DELETE_DISCUSSION_REPLY_SELF_DISCUSSION: 1n << 40n,
+    PERM_LOCK_DISCUSSION: 1n << 64n,
+
+    // Contest
     PERM_VIEW_CONTEST: 1n << 41n,
-    PERM_VIEW_TRAINING: 1n << 46n,
+    PERM_VIEW_CONTEST_SCOREBOARD: 1n << 42n,
+    PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD: 1n << 43n,
+    PERM_CREATE_CONTEST: 1n << 44n,
+    PERM_ATTEND_CONTEST: 1n << 45n,
+    PERM_EDIT_CONTEST: 1n << 50n,
+    PERM_EDIT_CONTEST_SELF: 1n << 51n,
+    PERM_VIEW_HIDDEN_CONTEST: 1n << 68n,
+
+    // Homework
     PERM_VIEW_HOMEWORK: 1n << 52n,
+    PERM_VIEW_HOMEWORK_SCOREBOARD: 1n << 53n,
+    PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD: 1n << 54n,
+    PERM_CREATE_HOMEWORK: 1n << 55n,
+    PERM_ATTEND_HOMEWORK: 1n << 56n,
+    PERM_EDIT_HOMEWORK: 1n << 57n,
+    PERM_EDIT_HOMEWORK_SELF: 1n << 58n,
+    PERM_VIEW_HIDDEN_HOMEWORK: 1n << 69n,
+
+    // Training
+    PERM_VIEW_TRAINING: 1n << 46n,
+    PERM_CREATE_TRAINING: 1n << 47n,
+    PERM_EDIT_TRAINING: 1n << 48n,
+    PERM_PIN_TRAINING: 1n << 63n,
+    PERM_EDIT_TRAINING_SELF: 1n << 49n,
+
+    // Ranking
     PERM_VIEW_RANKING: 1n << 59n,
+
+    // Placeholder
+    PERM_ALL: -1n,
+    PERM_BASIC: 0n,
+    PERM_DEFAULT: 0n,
+    PERM_ADMIN: -1n,
+
+    PERM_NEVER: 1n << 60n,
 };
-// packages/common/status.ts
+PERM.PERM_BASIC = PERM.PERM_VIEW | PERM.PERM_VIEW_PROBLEM | PERM.PERM_VIEW_PROBLEM_SOLUTION
+    | PERM.PERM_VIEW_PROBLEM_SOLUTION_ACCEPT | PERM.PERM_VIEW_DISCUSSION | PERM.PERM_VIEW_CONTEST
+    | PERM.PERM_VIEW_CONTEST_SCOREBOARD | PERM.PERM_VIEW_HOMEWORK | PERM.PERM_VIEW_HOMEWORK_SCOREBOARD
+    | PERM.PERM_VIEW_TRAINING | PERM.PERM_VIEW_RANKING;
+// 普通用户在新建域名时的默认权限集（上游逐条照搬，含上游本身重复的那几条）。
+// harness 的 student 角色直接用它，而不是自己挑几条——这样"页面上出现哪些按钮"
+// 与线上一台没动过权限配置的域是一致的。
+PERM.PERM_DEFAULT = PERM.PERM_VIEW | PERM.PERM_VIEW_USER_PRIVATE_INFO | PERM.PERM_VIEW_PROBLEM
+    | PERM.PERM_EDIT_PROBLEM_SELF | PERM.PERM_SUBMIT_PROBLEM | PERM.PERM_VIEW_PROBLEM_SOLUTION
+    | PERM.PERM_VIEW_PROBLEM_SOLUTION_ACCEPT | PERM.PERM_CREATE_PROBLEM_SOLUTION | PERM.PERM_VOTE_PROBLEM_SOLUTION
+    | PERM.PERM_EDIT_PROBLEM_SOLUTION_SELF | PERM.PERM_DELETE_PROBLEM_SOLUTION_SELF | PERM.PERM_REPLY_PROBLEM_SOLUTION
+    | PERM.PERM_EDIT_PROBLEM_SOLUTION_REPLY_SELF | PERM.PERM_DELETE_PROBLEM_SOLUTION_REPLY_SELF | PERM.PERM_VIEW_DISCUSSION
+    | PERM.PERM_CREATE_DISCUSSION | PERM.PERM_EDIT_DISCUSSION_SELF | PERM.PERM_REPLY_DISCUSSION | PERM.PERM_ADD_REACTION
+    | PERM.PERM_EDIT_DISCUSSION_REPLY_SELF | PERM.PERM_DELETE_DISCUSSION_REPLY_SELF
+    | PERM.PERM_DELETE_DISCUSSION_REPLY_SELF_DISCUSSION | PERM.PERM_VIEW_CONTEST | PERM.PERM_VIEW_CONTEST_SCOREBOARD
+    | PERM.PERM_ATTEND_CONTEST | PERM.PERM_EDIT_CONTEST_SELF | PERM.PERM_VIEW_HOMEWORK
+    | PERM.PERM_VIEW_HOMEWORK_SCOREBOARD | PERM.PERM_ATTEND_HOMEWORK | PERM.PERM_EDIT_HOMEWORK_SELF
+    | PERM.PERM_VIEW_TRAINING | PERM.PERM_CREATE_TRAINING | PERM.PERM_EDIT_TRAINING_SELF
+    | PERM.PERM_SUBMIT_PROBLEM | PERM.PERM_CREATE_PROBLEM_SOLUTION | PERM.PERM_VOTE_PROBLEM_SOLUTION
+    | PERM.PERM_REPLY_PROBLEM_SOLUTION | PERM.PERM_CREATE_DISCUSSION | PERM.PERM_REPLY_DISCUSSION
+    | PERM.PERM_ATTEND_CONTEST | PERM.PERM_CREATE_TRAINING | PERM.PERM_ATTEND_HOMEWORK
+    | PERM.PERM_VIEW_RANKING | PERM.PERM_VIEW_RECORD;
+PERM.PERM_ADMIN = PERM.PERM_ALL;
+const PRIV = {
+    PRIV_NONE: 0,
+    PRIV_EDIT_SYSTEM: 1 << 0,
+    PRIV_SET_PRIV: 1 << 1,
+    PRIV_USER_PROFILE: 1 << 2,
+    PRIV_REGISTER_USER: 1 << 3,
+    PRIV_READ_PROBLEM_DATA: 1 << 4,
+    PRIV_READ_RECORD_CODE: 1 << 7,
+    PRIV_VIEW_HIDDEN_RECORD: 1 << 8,
+    PRIV_JUDGE: 1 << 9,
+    PRIV_CREATE_DOMAIN: 1 << 10,
+    PRIV_VIEW_ALL_DOMAIN: 1 << 11,
+    PRIV_MANAGE_ALL_DOMAIN: 1 << 12,
+    PRIV_REJUDGE: 1 << 13,
+    PRIV_VIEW_USER_SECRET: 1 << 14,
+    PRIV_VIEW_JUDGE_STATISTICS: 1 << 15,
+    PRIV_CREATE_FILE: 1 << 16,
+    PRIV_UNLIMITED_QUOTA: 1 << 17,
+    PRIV_DELETE_FILE: 1 << 18,
+    PRIV_UNLIMITED_ACCESS: 1 << 22,
+    PRIV_VIEW_SYSTEM_NOTIFICATION: 1 << 23,
+    PRIV_SEND_MESSAGE: 1 << 24,
+    PRIV_MOD_BADGE: 1 << 25,
+    PRIV_ALL: -1,
+    PRIV_DEFAULT: 0,
+    PRIV_NEVER: 1 << 20,
+};
+PRIV.PRIV_DEFAULT = PRIV.PRIV_USER_PROFILE | PRIV.PRIV_CREATE_FILE | PRIV.PRIV_SEND_MESSAGE;
+// packages/common/status.ts —— 键名与上游逐字一致。
+// 模板里到处是 STATUS.STATUS_TIME_LIMIT_EXCEEDED 这种长名（record_main / record_detail），
+// 只定义 TLE/MLE 这些短名的话比较结果恒为 false，页面会静默走错分支。
 const STATUS = {
-    STATUS_WAITING: 0, STATUS_ACCEPTED: 1, STATUS_WRONG_ANSWER: 2, STATUS_TLE: 3,
-    STATUS_MLE: 4, STATUS_OLE: 5, STATUS_RE: 6, STATUS_CE: 7, STATUS_SE: 8,
-    STATUS_CANCELED: 9, STATUS_ETC: 10, STATUS_HACKED: 11, STATUS_JUDGING: 20,
-    STATUS_COMPILING: 21, STATUS_FETCHED: 22, STATUS_IGNORED: 30,
+    STATUS_WAITING: 0,
+    STATUS_ACCEPTED: 1,
+    STATUS_WRONG_ANSWER: 2,
+    STATUS_TIME_LIMIT_EXCEEDED: 3,
+    STATUS_MEMORY_LIMIT_EXCEEDED: 4,
+    STATUS_OUTPUT_LIMIT_EXCEEDED: 5,
+    STATUS_RUNTIME_ERROR: 6,
+    STATUS_COMPILE_ERROR: 7,
+    STATUS_SYSTEM_ERROR: 8,
+    STATUS_CANCELED: 9,
+    STATUS_ETC: 10,
+    STATUS_HACKED: 11,
+    STATUS_JUDGING: 20,
+    STATUS_COMPILING: 21,
+    STATUS_FETCHED: 22,
+    STATUS_IGNORED: 30,
+    STATUS_FORMAT_ERROR: 31,
+    STATUS_HACK_SUCCESSFUL: 32,
+    STATUS_HACK_UNSUCCESSFUL: 33,
 };
-const STATUS_TEXTS = ['', 'Accepted', 'Wrong Answer', 'Time Exceeded', 'Memory Exceeded', 'Output Exceeded',
-    'Runtime Error', 'Compile Error', 'System Error', 'Cancelled', 'Unknown Error', 'Hacked', 'Running',
-    'Compiling', 'Fetched', 'Ignored', 'Format Error'];
-const STATUS_SHORT_TEXTS = ['', 'AC', 'WA', 'TLE', 'MLE', 'OLE', 'RE', 'CE', 'SE', 'CANCELED', 'ETC', 'Hacked',
-    'RUN', 'Compile', 'Ignored', 'Ignored', 'FE'];
-const STATUS_CODES = [];
-STATUS_CODES[0] = 'pending';
-STATUS_CODES[1] = 'pass';
-for (let i = 2; i <= 8; i++) STATUS_CODES[i] = 'fail';
-STATUS_CODES[9] = 'ignored';
-STATUS_CODES[10] = 'ignored';
-STATUS_CODES[11] = 'fail';
-for (let i = 20; i <= 22; i++) STATUS_CODES[i] = 'progress';
-STATUS_CODES[30] = 'ignored';
-STATUS_CODES[31] = 'ignored';
+// 短名只是本仓库 fixtures 的书写便利，值必须与长名相同
+Object.assign(STATUS, {
+    STATUS_TLE: 3, STATUS_MLE: 4, STATUS_OLE: 5, STATUS_RE: 6, STATUS_CE: 7, STATUS_SE: 8,
+});
+// 上游是 Record<STATUS, string>，所以这里也用对象：
+// record_main.html:58 的 `{% for k, v in utils.status.STATUS_TEXTS %}` 要靠键值对遍历，
+// 换成数组会得到 0,1,2… 这种没有意义的 option。
+const STATUS_TEXTS = {
+    0: 'Waiting', 1: 'Accepted', 2: 'Wrong Answer', 3: 'Time Exceeded', 4: 'Memory Exceeded',
+    5: 'Output Exceeded', 6: 'Runtime Error', 7: 'Compile Error', 8: 'System Error',
+    9: 'Cancelled', 10: 'Unknown Error', 11: 'Hacked', 20: 'Running', 21: 'Compiling',
+    22: 'Fetched', 30: 'Ignored', 31: 'Format Error', 32: 'Hack Successful', 33: 'Hack Unsuccessful',
+};
+const STATUS_SHORT_TEXTS = {
+    1: 'AC', 2: 'WA', 3: 'TLE', 4: 'MLE', 5: 'OLE', 6: 'RE', 7: 'CE', 8: 'SE',
+    9: 'IGN', 11: 'HK', 30: 'IGN', 31: 'FE',
+};
+// STATUS_CODES[STATUS_ETC] 是 fail（不是 ignored），32/33 分别 pass/fail：
+// 这两个决定状态格子的底色，抄错就等于给自己造了一个"看起来正常"的假结论。
+const STATUS_CODES = {
+    0: 'pending', 1: 'pass', 2: 'fail', 3: 'fail', 4: 'fail', 5: 'fail', 6: 'fail', 7: 'fail',
+    8: 'fail', 9: 'ignored', 10: 'fail', 11: 'fail', 20: 'progress', 21: 'progress',
+    22: 'progress', 30: 'ignored', 31: 'ignored', 32: 'pass', 33: 'fail',
+};
 
 // ---------------------------------------------------------------- 路由表
-// 每条都是上游 ctx.Route(name, path) 的登记结果（见 test/ui/README.md 的引用）
+// 每条都是上游 ctx.Route(name, path) 的登记结果（题库/记录两组取自
+// hydrooj/src/handler/problem.ts:1070-1084 与 record.ts:492-493，其余见 test/ui/README.md 的引用）
 const ROUTES = {
     homepage: '/',
     problem_main: '/p',
+    problem_random: '/problem/random',
     problem_detail: '/p/:pid',
     problem_submit: '/p/:pid/submit',
+    problem_hack: '/p/:pid/hack/:rid',
+    problem_edit: '/p/:pid/edit',
+    problem_config: '/p/:pid/config',
+    problem_files: '/p/:pid/files',
+    problem_solution: '/p/:pid/solution',
+    problem_statistics: '/p/:pid/stat',
     record_main: '/record',
     record_detail: '/record/:rid',
     contest_main: '/contest',
@@ -294,11 +457,66 @@ function avatarUrl(src, size_ = 64) {
 function platformIcon(p) { return (p || 'unknown').toLowerCase() === 'mac os' ? 'mac' : (p || 'unknown').toLowerCase(); }
 function isIE(ua) { return false; } // eslint-disable-line no-unused-vars
 
+// ---------------------------------------------------------------- 难度算法
+// hydrooj/src/lib/difficulty.ts 逐字移植。题库列表与题详的"难度"格都由它算，
+// 用近似值会让难度分布失真，而这套 CSS 的 §10 目标之一就是让难度可辨识。
+const DIFF_CACHE = { s: 0.0, y: 0, values: [0.0] };
+
+function _LOGP(x) {
+    const sqrtPi = 2.506628274631; // Sqrt[Pi]
+    return (2 * Math.exp(-2.0 * (Math.log(x) ** 2))) / x / sqrtPi;
+}
+
+function _intergrateEnsureCache(y) {
+    let lastY = DIFF_CACHE.y;
+    if (y <= lastY) return DIFF_CACHE;
+    let { s } = DIFF_CACHE;
+    const dx = 0.1;
+    const dT = 2;
+    let x0 = (lastY / dT) * dx;
+    while (y > lastY) {
+        x0 += dx;
+        s += _LOGP(x0) * dx;
+        for (let i = 1; i <= dT; i++) DIFF_CACHE.values.push(s);
+        lastY += dT;
+    }
+    DIFF_CACHE.y = lastY;
+    DIFF_CACHE.s = s;
+    return DIFF_CACHE;
+}
+
+_intergrateEnsureCache(10000);
+
+function difficulty(nSubmit, nAccept) {
+    if (!nSubmit) return null;
+    const s = DIFF_CACHE.values[nSubmit];
+    const acRate = nAccept / nSubmit;
+    const ans = Math.round(10 - 13 * s * acRate);
+    return Math.max(ans, 1);
+}
+
 // ---------------------------------------------------------------- model stubs
 const DAY = 86400 * 1000;
+// hydrooj/setting.yaml 的 langs 默认表，按 parseLang 的合并规则展开后的结果：
+// `[foo].[bar]` 继承 `[foo]` 的 highlight/monaco，display 各自覆盖。
+// 记录列表与提交详情都要读 model.setting.langs[lang].display / .highlight。
+const LANGS = {
+    cc: { display: 'C++', highlight: 'cpp', monaco: 'cpp' },
+    'cc.cc11': { display: 'C++11', highlight: 'cpp', monaco: 'cpp' },
+    'cc.cc14': { display: 'C++14', highlight: 'cpp', monaco: 'cpp' },
+    'cc.cc17': { display: 'C++17', highlight: 'cpp', monaco: 'cpp' },
+    'cc.cc17o2': { display: 'C++17(O2)', highlight: 'cpp', monaco: 'cpp' },
+    'cc.cc20': { display: 'C++20', highlight: 'cpp', monaco: 'cpp' },
+    java: { display: 'Java', highlight: 'java astyle-java', monaco: 'java' },
+    kt: { display: 'Kotlin', highlight: 'kotlin', monaco: 'kotlin' },
+    py: { display: 'Python', highlight: 'python', monaco: 'python' },
+    'py.py3': { display: 'Python 3', highlight: 'python', monaco: 'python' },
+    pas: { display: 'Pascal', highlight: 'pascal', monaco: 'pascal' },
+};
 const model = {
     system: { get: (k) => SYSTEM_DEFAULTS[k] },
     setting: {
+        langs: LANGS,
         SETTINGS_BY_KEY: {
             viewLang: { type: 'select', range: { zh: '简体中文', en: 'English' } },
         },
@@ -346,7 +564,17 @@ const SYSTEM_DEFAULTS = {
     'server.pro': false,
     'ui-default.footer_extra_html': '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>',
     'ui-default.domainNavigation': true,
+    'ui-default.enableScratchpad': true,
     'avatar.gravatar_url': '//cn.gravatar.com/avatar/',
+    // partials/category.html 读的是域设置 problem.categories（YAML 文本，
+    // 结构见 model/builtin.ts:120 的 CATEGORIES：{ 大类: [子类…] }）。
+    // 这里是仿真数据，只保证形状对，不代表线上实际配了哪些分类。
+    'problem.categories': yaml.dump({
+        动态规划: ['LCS', 'LIS', '背包', '单调性DP'],
+        搜索: ['枚举', '搜索与剪枝', '记忆化搜索'],
+        图论: ['最短路', '生成树', '网络流'],
+        数据结构: ['并查集', '树状数组', '线段树'],
+    }),
 };
 
 // ---------------------------------------------------------------- UI 节点
@@ -459,14 +687,17 @@ function createEnv({ addonTemplateDirs = [], settings = {} } = {}) {
     env.addGlobal('paginate', paginate);
     env.addGlobal('size', size);
     env.addGlobal('utils', {
-        status: { getScoreColor: (s) => Math.min(10, Math.floor((s || 0) / 10)) },
+        status: {
+            getScoreColor: (s) => Math.min(10, Math.floor((s || 0) / 10)),
+            STATUS_TEXTS,
+        },
         getAlphabeticId: (i) => String.fromCharCode(65 + (i < 0 ? 0 : i)),
         buildQueryString,
     });
     env.addGlobal('avatarUrl', avatarUrl);
     env.addGlobal('formatSeconds', formatSeconds);
     env.addGlobal('model', model);
-    env.addGlobal('lib', { difficulty: { display: (d) => (d <= 3 ? '入门' : d <= 6 ? '基础' : d <= 8 ? '进阶' : '困难') } });
+    env.addGlobal('lib', { difficulty });
     env.addGlobal('isIE', isIE);
     env.addGlobal('platformIcon', platformIcon);
     env.addGlobal('set', (obj, key, val) => {
@@ -475,6 +706,10 @@ function createEnv({ addonTemplateDirs = [], settings = {} } = {}) {
     });
     env.addGlobal('templateExists', (name) => !!registry[name]);
     env.addGlobal('findSubModule', (prefix) => Object.keys(registry).filter((n) => n.startsWith(prefix)));
+    // backendlib/template.ts:124 确实把 eval 注册成了模板全局，
+    // record_main.html:12 的 `rdocs.map(eval("rdoc=>rdoc._id.toString()"))` 就靠它。
+    // 不照做的话记录列表页整页渲染失败，而失败原因看起来像"我们的沙箱不行"。
+    env.addGlobal('eval', (expr) => eval(expr)); // eslint-disable-line no-eval
     env.addGlobal('perm', PERM);
     env.addGlobal('PRIV', PRIV);
     env.addGlobal('STATUS', STATUS);

@@ -81,7 +81,16 @@ function main() {
     const widths = wi >= 0 ? argv[wi + 1].split(',').map(Number) : [1440];
     const maxOver = fi >= 0 ? Number(argv[fi + 1]) : 0.1;
     const ref = positional[0] || 'HEAD';
-    const scenarios = oi >= 0 ? SCENARIOS.filter((s) => s.includes(argv[oi + 1])) : SCENARIOS;
+    const only = oi >= 0 ? argv[oi + 1] : null;
+    let scenarios = only ? SCENARIOS.filter((s) => s.includes(only)) : SCENARIOS.slice();
+    // baseline-* 默认不比：这些页面靠 fixtures/ 里的冻结样式复刻"改造前"，
+    // 而孪生页会按定义把冻结样式换成 ref 的当前样式，比出来的是"快照 vs 现版 skin"，
+    // 实测稳定在 25% 上下，跟本轮改动量无关（去掉整个 oj.css 只挪动 0.01%）。
+    // 要看它们用 --only baseline 显式指定。
+    if (!only && scenarios.some((s) => s.startsWith('baseline-'))) {
+        scenarios = scenarios.filter((s) => !s.startsWith('baseline-'));
+        console.log('跳过 baseline-*：孪生页会用 ref 样式覆盖 fixtures 冻结快照，比出的不是本轮改动量（--only baseline 可强跑）');
+    }
     if (!scenarios.length) { console.error(`没有匹配的场景，可用：${SCENARIOS.join(', ')}`); process.exit(2); }
 
     console.log(`比对基准：${ref}`);

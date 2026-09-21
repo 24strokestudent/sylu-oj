@@ -19,8 +19,12 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const ADDON = path.join(ROOT, 'addons', 'sylu-brand');
 const OUT = path.join(ROOT, 'test', 'ui', 'out');
 
-/** 设计系统分片顺序即层叠顺序，与 addon README 保持一致（计划 §6） */
-const CSS_FILES = ['tokens.css', 'base.css', 'shell.css', 'home.css', 'about.css', 'oj.css', 'manage.css', 'responsive.css'];
+/**
+ * 设计系统分片顺序即层叠顺序，与 addon README / configure.sh 的 CSS_ORDER 保持一致。
+ * 没有 manage.css：后台（§34 及以后）不在本轮 P0 范围内，与其留一个空文件占位，
+ * 不如等真做后台时再加进这三处清单（render.js / configure.sh / check.js 会互相核对）。
+ */
+const CSS_FILES = ['tokens.css', 'base.css', 'shell.css', 'home.css', 'about.css', 'oj.css', 'responsive.css'];
 /** out/*.html 相对 addon public/ 的路径 */
 const PUB_REL = path.relative(OUT, path.join(ADDON, 'public')).replace(/\\/g, '/') || '.';
 
@@ -36,27 +40,26 @@ function loadSyluConfig() {
 }
 
 const ROLES = {
-    // 游客：有浏览类 PERM（公开题目/比赛/讨论可见），但没有 PRIV_USER_PROFILE，因此不能提交
-    guest: () => D.user(0, 'Guest', {
-        perm: H.PERM.PERM_VIEW_PROBLEM | H.PERM.PERM_VIEW_TRAINING | H.PERM.PERM_VIEW_CONTEST
-            | H.PERM.PERM_VIEW_HOMEWORK | H.PERM.PERM_VIEW_DISCUSSION | H.PERM.PERM_VIEW_RANKING,
-        priv: 0,
-    }),
+    // 角色权限不自己挑：guest 用上游 PERM_BASIC、student 用上游 PERM_DEFAULT，
+    // 这两个常量就是线上一台没改过权限配置的域里，游客和普通学生实际拿到的位集
+    // （packages/common/permission.ts:98-155）。手挑几条会让"页面上有哪些入口"
+    // 变成我对权限的猜测，而不是线上真实结果。
+    // 游客没有 PRIV_USER_PROFILE，因此不能提交、题详侧栏显示"登录以提交"；
+    // PRIV_REGISTER_USER 是匿名用户唯一确实持有的权限（hydrooj 里注册入口靠它）。
+    guest: () => D.user(0, 'Guest', { perm: H.PERM.PERM_BASIC, priv: H.PRIV.PRIV_REGISTER_USER }),
     student: () => D.user(1001, 'zhangsan', {
-        perm: H.PERM.PERM_VIEW_PROBLEM | H.PERM.PERM_VIEW_TRAINING | H.PERM.PERM_VIEW_CONTEST
-            | H.PERM.PERM_VIEW_HOMEWORK | H.PERM.PERM_VIEW_DISCUSSION | H.PERM.PERM_VIEW_RANKING,
-        priv: H.PRIV.PRIV_USER_PROFILE | H.PRIV.PRIV_REGISTER_USER | H.PRIV.PRIV_CREATE_FILE,
+        perm: H.PERM.PERM_DEFAULT,
+        priv: H.PRIV.PRIV_DEFAULT | H.PRIV.PRIV_REGISTER_USER,
     }),
     teacher: () => D.user(1002, 'li-laoshi', {
-        perm: H.PERM.PERM_VIEW_PROBLEM | H.PERM.PERM_VIEW_TRAINING | H.PERM.PERM_VIEW_CONTEST
-            | H.PERM.PERM_VIEW_HOMEWORK | H.PERM.PERM_VIEW_DISCUSSION | H.PERM.PERM_VIEW_RANKING
-            | H.PERM.PERM_EDIT_DOMAIN,
-        priv: H.PRIV.PRIV_USER_PROFILE | H.PRIV.PRIV_REGISTER_USER | H.PRIV.PRIV_CREATE_FILE,
+        // 学生 + 域管理与出题：对应校内"任课教师"在本店的实际配置
+        perm: H.PERM.PERM_DEFAULT | H.PERM.PERM_EDIT_DOMAIN | H.PERM.PERM_CREATE_PROBLEM | H.PERM.PERM_EDIT_PROBLEM,
+        priv: H.PRIV.PRIV_DEFAULT | H.PRIV.PRIV_REGISTER_USER,
     }),
     admin: () => D.user(1000, 'system-admin', {
-        perm: -1n,
-        priv: H.PRIV.PRIV_USER_PROFILE | H.PRIV.PRIV_REGISTER_USER | H.PRIV.PRIV_CREATE_FILE
-            | H.PRIV.PRIV_EDIT_SYSTEM | H.PRIV.PRIV_MOD_BADGE | H.PRIV.PRIV_VIEW_SYSTEM_NOTIFICATION,
+        perm: H.PERM.PERM_ALL,
+        priv: H.PRIV.PRIV_DEFAULT | H.PRIV.PRIV_REGISTER_USER | H.PRIV.PRIV_EDIT_SYSTEM
+            | H.PRIV.PRIV_MOD_BADGE | H.PRIV.PRIV_VIEW_SYSTEM_NOTIFICATION | H.PRIV.PRIV_VIEW_JUDGE_STATISTICS,
     }),
 };
 
@@ -85,7 +88,8 @@ function makeHandler(user, opts) {
             },
         },
         session: {},
-        request: { path: '/', headers: { 'user-agent': 'SyluUiHarness/1.0' } },
+        // query 在真实 handler 上一定存在（Koa 的 ctx.query），模板里会读 handler.request.query.xxx
+        request: { path: '/', query: {}, headers: { 'user-agent': 'SyluUiHarness/1.0' } },
         context: { request: { url: 'http://127.0.0.1:8888/' } },
         args: { __start: Date.now() - 137, __prepareDone: Date.now(), __prepare: Date.now(), domainId: 'system' },
         UiContext: { cdn_prefix: '/', cdn_dynamic: false, url_prefix: '/', ws_prefix: '/', constantVersion: 'a1b2c3d4' },
@@ -128,13 +132,30 @@ function renderPage({
     }());
     const _ = translateFn(zh);
     const handler = state.handler;
+    // handler.ctx 是真实 Handler 上挂的 Context（hydrooj/src/interface.ts 的 Context），
+    // 模板里 ctx.setting.get(...) / ctx.i18n.get(...) 全靠它。上游把它作为
+    // `ctx: state.handler?.ctx` 注入渲染上下文（template.ts:234），这里同构。
+    handler.ctx = {
+        setting: { get: settingGet },
+        // i18n.get(key) 与模板里的 _(key) 同源；带上 .format 语义以匹配调用方写法
+        i18n: { get: (key, ...args) => (args.length ? _.format ? _(key).format(...args) : _(key) : _(key)) },
+        request: handler.context.request,
+    };
     const ctx = {
+        // template.ts:227 —— page_name 先注入、state 后展开，模板自己的 {% set page_name %} 仍能覆盖。
+        // html5.html:9 用它拼 class="page--{{ page_name }}"，导航靠它判断高亮；
+        // 不注入的话上游页面（problem_main / record_main …）拿不到页型，样式和 active 态都会错。
+        page_name: template.split('.')[0],
         _,
         url: handler.url,
         handler,
-        ctx: { setting: { get: settingGet }, request: handler.context.request },
+        ctx: handler.ctx,
         ...state,
     };
+    // template.ts:229-232 —— 评测文本数组渲染成多行字符串，record_detail 用它输出 compile/judge 信息
+    ctx.formatJudgeTexts = (texts) => (texts || []).map((t) => (
+        typeof t === 'string' ? t : String(_(t.message).format(...(t.params || [])))
+    )).join('\n');
     ctx.UserContext = state.UserContext || {
         viewLang: 'zh', fontFamily: 'system-ui', codeFontFamily: 'monospace', codeFontLigatures: false,
     };
@@ -215,6 +236,31 @@ function aboutState(role) {
 }
 
 /**
+ * tier C 页面（题库 / 题面 / 提交记录）的 body 构造器。
+ * 键名就是模板名：一个 handler 对应一个模板，这样新增页面只需要在这里加一行。
+ * 参数统一收 (role)，用不到的可以先忽略。
+ */
+const PAGE_BODIES = {
+    'problem_main.html': (role, udoc) => D.problemList({ role, udoc }),
+    'problem_detail.html': (role) => D.problemDetailBody({ role }),
+    'record_main.html': () => D.recordListBody(),
+    'record_detail.html': () => D.recordDetailBody(),
+};
+
+function stateFor(sc, config) {
+    if (sc.page === 'sylu/about.html') return aboutState(sc.role);
+    if (!sc.page || sc.page === 'main.html') {
+        return homepageState(sc.role, config, sc.bulletin === 'hero' ? HERO : PLAIN);
+    }
+    const build = PAGE_BODIES[sc.page];
+    if (!build) throw new Error(`没有 ${sc.page} 的 body 构造器：新增 tier C 场景要在 PAGE_BODIES 登记`);
+    const udoc = ROLES[sc.role]();
+    // udoc 同时传给 handler 和 body 构造器：列表的查询条件（隐藏题、题解可见性）
+    // 在真实后端就是按 handler.user 过滤的，夹具若另拿一份身份，权限分支就测不准。
+    return { handler: makeHandler(udoc, { bulletin: D.BULLETIN }), ...build(sc.role, udoc) };
+}
+
+/**
  * 场景表。baseline-* 必须复刻线上现状：公告里塞着整块 Hero HTML、只加载上游模板
  * （不启用 addon）、并挂上 fixtures 里的冻结样式；home-* 是改造后形态，
  * 公告只留纯文本，首屏改由 addon 的 main.html 承载。
@@ -223,8 +269,10 @@ const LEGACY_CSS = ['fixtures/legacy-shell-nav.css', 'fixtures/legacy-home.css',
 // 冻结快照本身就是 home.css / responsive.css 在改造前的全文，所以这两个文件在
 // 基线场景里换成快照、不再挂当前版；legacy-shell-nav.css 只是 shell.css 的导航段
 // （品牌伪元素 + 28px 净空 + 42px logo），所以 shell.css 照常加载，由它在后面覆盖回旧值。
-// 顺序保持"tokens→base→shell→home→responsive"。
-const LEGACY_SKIP = ['home.css', 'responsive.css'];
+// oj.css 是 C 级页面样式，冻结那天这个文件根本不存在，挂进基线只会让"改造前"凭空多出
+// 一份没发生过的改动（实测会把 baseline-guest 拉偏 2.6%）。
+// 顺序保持"tokens→base→shell→home→about→oj→responsive"。
+const LEGACY_SKIP = ['home.css', 'responsive.css', 'oj.css'];
 const SCENARIOS = {
     'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS, skipCss: LEGACY_SKIP },
     'baseline-student': { role: 'student', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS, skipCss: LEGACY_SKIP },
@@ -234,6 +282,19 @@ const SCENARIOS = {
     'home-admin': { role: 'admin', addon: true, bulletin: 'plain' },
     // 关于页不是首页：它走自己的模板与数据，用来验证 §25 的"JS 只给数据不拼 HTML"。
     'about-student': { role: 'student', addon: true, page: 'sylu/about.html' },
+    // tier C：这三个页面组不覆盖模板，只挂 CSS，所以沙箱渲染的是上游原文模板。
+    // 游客与学生分开跑，是为了看清权限分支真的分叉了（未登录不该出现提交入口）。
+    'problems-guest': { role: 'guest', addon: true, page: 'problem_main.html' },
+    'problems-student': { role: 'student', addon: true, page: 'problem_main.html' },
+    // 隐藏题可见性：老师有改题权限但没有看隐藏题的权限，管理员两者都有。
+    // 只出"学生看不到"这一页证明不了过滤器没写反，所以两边各出一页。
+    'problems-teacher': { role: 'teacher', addon: true, page: 'problem_main.html' },
+    'problems-admin': { role: 'admin', addon: true, page: 'problem_main.html' },
+    'problem-guest': { role: 'guest', addon: true, page: 'problem_detail.html' },
+    'problem-student': { role: 'student', addon: true, page: 'problem_detail.html' },
+    'problem-admin': { role: 'admin', addon: true, page: 'problem_detail.html' },
+    'records-student': { role: 'student', addon: true, page: 'record_main.html' },
+    'record-student': { role: 'student', addon: true, page: 'record_detail.html' },
 };
 const HERO = { bulletin: D.HERO_BULLETIN };
 const PLAIN = { bulletin: D.BULLETIN };
@@ -259,7 +320,7 @@ function main() {
         try {
             const n = renderPage({
                 template: sc.page || 'main.html',
-                state: sc.page ? aboutState(sc.role) : homepageState(sc.role, config, sc.bulletin === 'hero' ? HERO : PLAIN),
+                state: stateFor(sc, config),
                 env,
                 settingGet,
                 out: `${t}.html`,

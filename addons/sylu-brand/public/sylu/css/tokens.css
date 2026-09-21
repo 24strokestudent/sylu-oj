@@ -31,8 +31,30 @@
   --sylu-shadow-raised: 0 12px 36px rgba(38, 50, 31, .10);
   --sylu-shadow-code: 0 14px 30px rgba(38, 50, 31, .16);
 
+  /* 主行动按钮悬停光晕。上游把 .button.primary 的 hover 阴影写死成蓝色 #35a2ff4d，
+     换成品牌红后必须连光晕一起换，否则红按钮会带一圈蓝光。 */
+  --sylu-glow-primary: 0 4px 15px rgba(177, 45, 40, .3);
+
   --sylu-font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   --sylu-font-code: "SFMono-Regular", Consolas, monospace;
+
+  /* 判题状态色。theme.css 把 .record-status--text.pass 这类规则写成了 !important，
+     所以 oj.css 覆盖它们时必须同样带 !important（见 oj.css 的状态段）。
+     档位只有五档（pass/fail/progress/pending/ignored），来自 model.builtin.STATUS_CODES：
+     模板只输出档位类名、不输出状态码，也没有可读的 data-* 属性，
+     所以"CE 橙红、TLE 橙色、MLE 橙色"这种逐状态配色在只改 CSS 的前提下做不到，
+     这里按档位取色：progress 是"进行中"（Judging/Compiling/Fetched），用蓝而不是上游的橙，
+     橙色留给告警语义；pending 用灰蓝表示排队。 */
+  --sylu-status-pass: #2f7d46;
+  --sylu-status-pass-soft: #eef5ef;
+  --sylu-status-fail: #c0392b;
+  --sylu-status-fail-soft: #fceceb;
+  --sylu-status-progress: var(--sylu-link);
+  --sylu-status-progress-soft: #eaf1f7;
+  --sylu-status-pending: #7c8794;
+  --sylu-status-pending-soft: #f0f2f4;
+  --sylu-status-ignored: #9aa39a;
+  --sylu-status-ignored-soft: #f3f4f2;
 
   /* 兼容旧引用 */
   --sylu-red: var(--sylu-primary);

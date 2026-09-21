@@ -9,7 +9,7 @@
  * 数据内容用"看起来像校内 OJ"的真实语义填充，但不含任何写死的统计数字（ACCEPTANCE §29 §65）。
  */
 
-const { PERM, PRIV } = require('./hydro');
+const { PERM, PRIV, STATUS } = require('./hydro');
 
 const HEX = '0123456789abcdef';
 let seq = 0;
@@ -46,10 +46,24 @@ function user(uid, uname, extra = {}) {
         theme: 'default',
         timeZone: 'Asia/Shanghai',
         domains: [],
+        // 编辑器偏好：problem_detail.html:6 把它们塞进 UiContext 供 scratchpad 用
+        viewLang: extra.viewLang || 'zh',
+        codeLang: extra.codeLang || 'cc',
+        codeTemplate: extra.codeTemplate || { cc: '#include <iostream>\nusing namespace std;\n' },
+        // _dudoc：domain user doc，problem_sidebar_normal.html 用 .join 判断"加入域名才能提交"
+        _dudoc: extra._dudoc || { join: true, role: 'default' },
         _perm: extra.perm === undefined ? PERM.PERM_VIEW_PROBLEM : extra.perm,
         _priv: extra.priv === undefined ? PRIV.PRIV_USER_PROFILE : extra.priv,
         hasPerm(...perms) { return perms.some((p) => (this._perm & p) === p); },
         hasPriv(...privs) { return privs.some((p) => (this._priv & p) === p); },
+        // model/user.ts:125-130 逐字移植。题库侧栏用它区分"自己的题"与"有编辑权限"，
+        // 缺这个方法的话 problem_sidebar_normal.html:97 直接抛错，整页渲染不出来。
+        own(doc, arg1 = false) {
+            if (typeof arg1 === 'bigint' && !this.hasPerm(arg1)) return false;
+            return (typeof arg1 === 'boolean' && arg1)
+                ? doc.owner === this._id
+                : doc.owner === this._id || (doc.maintainer || []).includes(this._id);
+        },
     };
     return u;
 }
@@ -268,7 +282,241 @@ function homepageContents({ role = 'student', config }) {
     }));
 }
 
+/**
+ * 题库 / 题面 / 提交记录夹具（计划 §10 §11 §12）
+ *
+ * 这份夹具只服务沙箱渲染，不会出现在任何生产页面上。分两层看：
+ *   - 形状（字段名、嵌套、类型）不是设计出来的，逐个对齐上游 handler 交给模板的
+ *     response.body：problem.ts:183-193（题库列表）、problem.ts:355-368（题面）、
+ *     record.ts:119-133（记录列表）、record.ts:218-220（记录详情）。
+ *     形状错了 → 模板走 `{% else %}` 分支 → 我截到的是"缺数据的页面"，
+ *     在它上面写出来的 CSS 也就是错的。
+ *   - 取值是"像校内 OJ"的语义，不是统计口径。线上题目数、通过率、判题结果都来自
+ *     数据库；这里没有写死任何"全站共有 N 道题 / 通过率 x%"的汇总数（ACCEPTANCE §29）。
+ */
+
+/** ProblemDoc（PROJECTION_LIST ∪ config）。pid 与 docId 同号，和站内现有编号习惯一致。 */
+function problemDoc(pid, title, extra = {}) {
+    const days = extra.days === undefined ? 30 : extra.days;
+    return {
+        docId: pid,
+        _id: oid(days),
+        domainId: 'system',
+        pid: String(pid),
+        title,
+        owner: extra.owner === undefined ? 1002 : extra.owner,
+        maintainer: [],
+        tag: extra.tag || [],
+        difficulty: extra.difficulty === undefined ? 3 : extra.difficulty,
+        nSubmit: extra.nSubmit || 0,
+        nAccept: extra.nAccept || 0,
+        hidden: !!extra.hidden,
+        isHidden: !!extra.hidden,
+        updateAt: d(-days),
+        // 单一语言题面：content 是非 JSON 字符串，content 过滤器因此走 markdown 渲染分支
+        content: extra.content || [
+            '### 题目描述', '', extra.desc || '输入两个整数 A 和 B，你的程序需要输出它们的和。', '',
+            '### 输入', '', '一行两个整数 A 和 B，以空格分隔。', '',
+            '### 输出', '', '一行一个整数，表示 A+B 的结果。', '',
+            '### 样例输入', '', '```', '1 2', '```', '',
+            '### 样例输出', '', '```', '3', '```',
+        ].join('\n'),
+        html: false,
+        data: extra.data === undefined ? [{ filename: '1.in', size: 8 }, { filename: '1.out', size: 4 }] : extra.data,
+        config: Object.assign({
+            type: 'default',
+            subType: '',
+            timeMin: 1000,
+            timeMax: 1000,
+            memoryMin: 256,
+            memoryMax: 256,
+            langs: ['cc', 'cc.cc14', 'java', 'py', 'py.py3'],
+            hackable: false,
+        }, extra.config),
+    };
+}
+
+const PROBLEMS = [
+    problemDoc(1001, 'A + B Problem', { tag: ['入门', '模拟'], difficulty: 1, nSubmit: 412, nAccept: 328, days: 120, desc: '输入两个整数 A 和 B，你的程序需要输出它们的和。' }),
+    problemDoc(1002, '两个数的差', { tag: ['入门'], difficulty: 1, nSubmit: 208, nAccept: 176, days: 118, desc: '输入两个整数 A 和 B，输出 A-B。' }),
+    problemDoc(1003, '最大子段和', { tag: ['动态规划', '线性结构'], difficulty: 5, nSubmit: 96, nAccept: 41, days: 64, desc: '给定长度为 n 的整数序列，求连续子段和的最大值。' }),
+    problemDoc(1004, '周期串', { tag: ['字符串'], difficulty: 4, nSubmit: 73, nAccept: 22, days: 52, desc: '一个字符串可以由某个子串重复若干次构成，求最短的这样一个子串。' }),
+    problemDoc(1005, '最短路径', { tag: ['图论', 'dijkstra'], difficulty: 7, nSubmit: 58, nAccept: 12, days: 41, desc: '给出一张带权无向图，求起点到终点的最短距离。' }),
+    problemDoc(1006, '高精度加法', { tag: ['字符串', '模拟'], difficulty: 3, nSubmit: 141, nAccept: 87, days: 33, desc: '两个不超过 200 位的非负整数相加，输出结果。' }),
+    problemDoc(1007, '0-1 背包', { tag: ['动态规划', '背包'], difficulty: 6, nSubmit: 88, nAccept: 30, days: 21, desc: 'n 件物品放入承重为 W 的背包，求可选物品的最大价值。' }),
+    problemDoc(1008, '区间合并', { tag: ['排序', '贪心'], difficulty: 4, nSubmit: 64, nAccept: 35, days: 12, desc: '给定若干个闭区间，输出合并后的不相交区间。' }),
+    // 未发布的题：题库列表与题面都要能表现出"隐藏"状态（plan §10 的可见性不提前泄露）
+    problemDoc(1009, '校赛选拔 · 待发布', { tag: ['模拟'], difficulty: 5, nSubmit: 0, nAccept: 0, days: 2, hidden: true }),
+    // owner 是当前学生：用来验证 problem_sidebar_normal.html:97 的 own(pdoc, PERM_EDIT_PROBLEM_SELF)
+    problemDoc(1010, '我自己出的练习题', { owner: 1001, tag: ['模拟'], difficulty: 2, nSubmit: 15, nAccept: 9, days: 5 }),
+];
+
+/** 提交记录。_id 是 ObjectId 十六进制串（datetimeSpan 与 record_detail 的链接都靠它）。 */
+function recordDoc(pid, uid, status, extra = {}) {
+    return {
+        _id: extra.oid || oid(extra.days === undefined ? 0 : extra.days),
+        domainId: 'system',
+        pid,
+        uid,
+        lang: extra.lang || 'cc',
+        status,
+        score: extra.score === undefined ? 0 : extra.score,
+        time: extra.time || 0,
+        memory: extra.memory || 0,
+        contest: extra.contest || null,
+        files: extra.files || {},
+        code: extra.code || '',
+        compilerTexts: extra.compilerTexts || [],
+        judgeTexts: extra.judgeTexts || [],
+        testCases: extra.testCases || [],
+        subtasks: extra.subtasks || {},
+        judgeAt: extra.judgeAt || null,
+        hackTarget: extra.hackTarget || null,
+        progress: extra.progress,
+    };
+}
+
+const CODE_CPP = [
+    '#include <iostream>',
+    'using namespace std;',
+    'int main() {',
+    '    int a, b;',
+    '    cin >> a >> b;',
+    '    cout << a + b << endl;',
+    '    return 0;',
+    '}',
+].join('\n');
+
+/** 一条判得比较完整的记录：有编译警告、分组测试点、逐点信息，用来压测 record_detail 的表格 */
+const RICH_RECORD = recordDoc(1003, 1001, 2, {
+    score: 60,
+    time: 15,
+    memory: 3584,
+    lang: 'cc',
+    code: CODE_CPP,
+    days: 1,
+    judgeAt: d(-1, 13),
+    compilerTexts: ['main.cpp: In function ‘int main()’:\nmain.cpp:5:9: warning: unused variable ‘c’ [-Wunused-variable]'],
+    judgeTexts: [
+        { message: 'Wrong Answer on test 7', params: [] },
+        'Runtime Error (signal 11) on test 8',
+    ],
+    subtasks: {
+        1: { status: 1, score: 30, type: 'min' },
+        2: { status: 2, score: 30, type: 'min' },
+    },
+    testCases: [
+        { id: 1, subtaskId: 1, status: 1, time: 4, memory: 3200, score: 15 },
+        { id: 2, subtaskId: 1, status: 1, time: 6, memory: 3328, score: 15 },
+        { id: 3, subtaskId: 2, status: 1, time: 11, memory: 3456, score: 15 },
+        { id: 4, subtaskId: 2, status: 2, time: 15, memory: 3584, score: 0, message: { message: 'Expected 42, got 41', params: [] } },
+    ],
+});
+
+/** 题库列表页 body（problem.ts:183-193） */
+function problemList({ role = 'student', udoc = null } = {}) {
+    // 隐藏题的可见性照抄上游查询条件（handler/problem.ts:46-48）：
+    // 没有 PERM_VIEW_PROBLEM_HIDDEN 的人，查询里就被加上 {hidden:false}。
+    // 夹具如果无条件过滤掉隐藏题，"越权看到隐藏题"这类回归就测不出来，
+    // 所以这里按权限过滤，并且给 admin 留一条能看到的路。
+    const canViewHidden = !!udoc && udoc.hasPerm(PERM.PERM_VIEW_PROBLEM_HIDDEN);
+    const pdocs = PROBLEMS.filter((p) => !p.hidden || canViewHidden);
+    const psdict = {};
+    // problem.getListStatus 只返回"这个用户提交过"的条目，其余 pid 缺键；
+    // problem_list.html 用 psdoc.rid 判断要不要画状态格子，所以缺键本身就是要测的分支。
+    if (role !== 'guest') {
+        const mine = {
+            1001: { status: 1, score: 100, time: 6, memory: 3200 },
+            1003: { status: 2, score: 60, time: 15, memory: 3584 },
+            1006: { status: 3, score: 20, time: 1000, memory: 4096 },
+        };
+        Object.keys(mine).forEach((pid) => {
+            psdict[pid] = Object.assign({ docId: +pid, domainId: 'system', rid: RICH_RECORD._id, star: +pid === 1003 }, mine[pid]);
+        });
+    }
+    return {
+        page: 1,
+        pcount: pdocs.length,
+        ppcount: 1,
+        pcountRelation: 'eq',
+        pdocs,
+        psdict,
+        qs: '',
+        sort: 'default',
+    };
+}
+
+/** 题面页 body（problem.ts:355-368） */
+function problemDetailBody({ pid = 1003, role = 'student' } = {}) {
+    const pdoc = PROBLEMS.find((p) => p.docId === pid);
+    const status = { 1: { status: 1, score: 100 }, 2: { status: 2, score: 60 } }[pid] || null;
+    return {
+        pdoc,
+        udoc: Udict[pdoc.owner] || user(pdoc.owner, `user${pdoc.owner}`),
+        psdoc: role === 'guest' || !status ? { star: false, status: 0 } : Object.assign({ star: false, domainId: 'system' }, status),
+        title: pdoc.title,
+        solutionCount: 2,
+        discussionCount: 3,
+        tdoc: null,
+        owner_udoc: null,
+        mode: 'normal',
+        // 题面侧栏的「相关」区块读这三个（由 problem/get 扩展注入），没有关联时是空数组
+        tdocs: [],
+        ctdocs: [],
+        htdocs: [],
+    };
+}
+
+/** 提交记录列表 body（record.ts:119-133） */
+function recordListBody() {
+    const rdocs = [
+        recordDoc(1001, 1001, STATUS.STATUS_ACCEPTED, { score: 100, time: 6, memory: 3200, days: 0 }),
+        recordDoc(1003, 1003, STATUS.STATUS_WRONG_ANSWER, { score: 60, time: 15, memory: 3584, days: 0, lang: 'py.py3' }),
+        recordDoc(1005, 1004, STATUS.STATUS_TIME_LIMIT_EXCEEDED, { score: 40, time: 1002, memory: 5120, days: 0, code: CODE_CPP, judgeAt: d(0, 13) }),
+        recordDoc(1006, 1002, STATUS.STATUS_COMPILE_ERROR, { days: 1, code: CODE_CPP, compilerTexts: ['main.cpp:3:1: error: expected ‘;’ before ‘}’ token'] }),
+        recordDoc(1008, 1001, STATUS.STATUS_JUDGING, { days: 1, progress: 45 }),
+        recordDoc(1007, 1003, STATUS.STATUS_RUNTIME_ERROR, { score: 0, time: 3, memory: 8192, days: 1, lang: 'java' }),
+    ];
+    const pdict = {};
+    const udict = {};
+    rdocs.forEach((r) => {
+        pdict[r.pid] = PROBLEMS.find((p) => p.docId === r.pid);
+        udict[r.uid] = Udict[r.uid];
+    });
+    return {
+        page: 1,
+        rdocs,
+        tdoc: null,
+        pdict,
+        udict,
+        all: false,
+        allDomain: false,
+        filterPid: null,
+        filterTid: null,
+        filterUidOrName: null,
+        filterLang: null,
+        filterStatus: null,
+        notification: [],
+    };
+}
+
+/** 提交记录详情 body（record.ts:218-220） */
+function recordDetailBody() {
+    return {
+        rdoc: RICH_RECORD,
+        udoc: Udict[RICH_RECORD.uid],
+        pdoc: PROBLEMS.find((p) => p.docId === RICH_RECORD.pid),
+        tdoc: null,
+        rev: null,
+        allRevs: {},
+        judge_udoc: user(1000, 'judge-node-01', { perm: 0n, priv: 0 }),
+    };
+}
+
 module.exports = {
     oid, user, homepageContents, BULLETIN, HERO_BULLETIN, Udict,
     STUDENT, TEACHER, recentProblems, contests, homeworks, trainings, discussions, ranking,
+    PROBLEMS, RICH_RECORD,
+    problemList, problemDetailBody, recordListBody, recordDetailBody,
 };
+

@@ -125,8 +125,15 @@ async function shootPuppeteer(puppeteer, executablePath, jobs) {
             // eslint-disable-next-line no-await-in-loop
             await page.screenshot({ path: to, fullPage: true });
             // eslint-disable-next-line no-await-in-loop
-            const h = await page.evaluate(() => document.documentElement.scrollHeight);
-            done.push([to, h]);
+            // 顺带量一次横向溢出：截图只看得到"被切掉的那部分长什么样"，看不出"有没有被切"，
+            // 移动端表格溢出这种问题在图上往往表现为"右边内容突然没了"，很容易被当成排版风格。
+            // 只比文档级 scrollWidth/clientWidth，不逐元素扫描——.slideout-menu 这类
+            // 故意停在视口外的抽屉会被逐元素扫描误报。
+            const m = await page.evaluate(() => {
+                const de = document.documentElement;
+                return { h: de.scrollHeight, over: de.scrollWidth - de.clientWidth };
+            });
+            done.push([to, m.h, m.over]);
         }
     } finally {
         await browser.close();
@@ -167,13 +174,16 @@ async function main() {
 
     const puppeteer = loadPuppeteer();
     let ok = 0;
+    let overflow = 0;
     let cliJobs = jobs;
     if (puppeteer) {
         try {
             const done = await shootPuppeteer(puppeteer, browser, jobs);
-            for (const [to, h] of done) {
+            for (const [to, h, over] of done) {
                 ok++;
-                console.log(`✓ ${path.basename(to)}  ${path.basename(to).match(/@(\d+)/)[1]}x${h}  ${Math.round(fs.statSync(to).size / 1024)} KB`);
+                const w = path.basename(to).match(/@(\d+)/)[1];
+                if (over > 0) overflow++;
+                console.log(`✓ ${path.basename(to)}  ${w}x${h}  ${Math.round(fs.statSync(to).size / 1024)} KB${over > 0 ? `  ✗ 横向溢出 ${over}px` : ''}`);
             }
             cliJobs = [];
         } catch (e) {
@@ -196,7 +206,9 @@ async function main() {
         }
     }
     console.log(`\n共 ${ok} 张，目录：${path.relative(path.resolve(__dirname, '..', '..'), SHOTS)}/`);
-    if (!ok) process.exit(1);
+    // 溢出即失败：一张"看着还行"的窄屏截图可能整列都被切掉了，靠眼睛看不出来。
+    if (overflow) console.error(`✗ ${overflow} 张图存在横向溢出，窄屏下会出现横向滚动条或内容被切`);
+    if (!ok || overflow) process.exit(1);
 }
 
 main().catch((e) => { console.error(`出图失败：${e.message}`); process.exit(1); });

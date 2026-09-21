@@ -5,7 +5,8 @@
    所以每个页面都得自己让出导航高度——上游就是靠 `.main{padding:3.4375rem 0}`
    （≥1000px 时 4rem）做到这一点的。这里曾写死 28px，比 45px 的导航还矮，
    结果是所有非首页页面（关于页、题库、提交记录…）的第一行被压在导航条下面。
-   首页由 .page--homepage .main{padding-top:0} 另行处理（home.css）。 */
+   首页也走这一条：home.css 里曾另写 .page--homepage .main{padding-top:0}，
+   结果是首屏卡片的上边框和圆角被 fixed 的半透明导航切掉，现已删除。 */
 .main {
   padding-top: calc(var(--sylu-nav-h) + 10px);
   padding-bottom: 40px;
