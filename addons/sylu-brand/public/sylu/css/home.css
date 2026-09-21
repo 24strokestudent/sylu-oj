@@ -2,8 +2,9 @@
    .sylu-* 类名；动态模块只按 .section / .side 这类语义类排版，不再按 DOM 位置猜测。 */
 
 /* ---------- 版面 ---------- */
+/* 让出导航高度这件事统一由 shell.css 的 .main 负责，首页不再单独归零：
+   顶栏是 fixed 的半透明白条，归零的结果是首屏卡片的上边框和圆角被它切掉。 */
 .page--homepage .main {
-  padding-top: 0;
   background: var(--sylu-surface);
 }
 
@@ -108,7 +109,7 @@
   gap: 56px;
   align-items: center;
   min-height: 460px;
-  margin-top: 24px;
+  margin-top: 0;
   padding: 48px 44px;
   border: 1px solid var(--sylu-border);
   border-radius: var(--sylu-radius-card);

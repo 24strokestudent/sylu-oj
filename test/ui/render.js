@@ -20,7 +20,7 @@ const ADDON = path.join(ROOT, 'addons', 'sylu-brand');
 const OUT = path.join(ROOT, 'test', 'ui', 'out');
 
 /** 设计系统分片顺序即层叠顺序，与 addon README 保持一致（计划 §6） */
-const CSS_FILES = ['tokens.css', 'base.css', 'shell.css', 'home.css', 'oj.css', 'manage.css', 'responsive.css'];
+const CSS_FILES = ['tokens.css', 'base.css', 'shell.css', 'home.css', 'about.css', 'oj.css', 'manage.css', 'responsive.css'];
 /** out/*.html 相对 addon public/ 的路径 */
 const PUB_REL = path.relative(OUT, path.join(ADDON, 'public')).replace(/\\/g, '/') || '.';
 
@@ -198,15 +198,32 @@ function homepageState(role, config, bulletin) {
     };
 }
 
+/** 关于页的数据源就是插件自己 require 的 brand.js，沙箱读同一份文件，不另抄一遍。
+ *  等价于 index.js 的 SyluAboutHandler：response.body 会被并进模板上下文。 */
+function aboutState(role) {
+    const b = require(path.join(ADDON, 'brand.js'));
+    const handler = makeHandler(ROLES[role](), { bulletin: D.BULLETIN });
+    return {
+        handler,
+        siteName: b.siteName,
+        siteSubtitle: b.siteSubtitle,
+        disclaimer: b.disclaimer,
+        notices: b.notices || [],
+        contact: b.contact || '',
+        icp: b.icp || '',
+    };
+}
+
 /**
  * 场景表。baseline-* 必须复刻线上现状：公告里塞着整块 Hero HTML、只加载上游模板
  * （不启用 addon）、并挂上 fixtures 里的冻结样式；home-* 是改造后形态，
  * 公告只留纯文本，首屏改由 addon 的 main.html 承载。
  */
-const LEGACY_CSS = ['fixtures/legacy-nav-brand.css', 'fixtures/legacy-home.css', 'fixtures/legacy-responsive.css'];
+const LEGACY_CSS = ['fixtures/legacy-shell-nav.css', 'fixtures/legacy-home.css', 'fixtures/legacy-responsive.css'];
 // 冻结快照本身就是 home.css / responsive.css 在改造前的全文，所以这两个文件在
-// 基线场景里换成快照、不再挂当前版；legacy-nav-brand.css 只是当前 shell.css
-// 里被删掉的那一段，因此 shell.css 照常加载。顺序保持"tokens→base→shell→home→responsive"。
+// 基线场景里换成快照、不再挂当前版；legacy-shell-nav.css 只是 shell.css 的导航段
+// （品牌伪元素 + 28px 净空 + 42px logo），所以 shell.css 照常加载，由它在后面覆盖回旧值。
+// 顺序保持"tokens→base→shell→home→responsive"。
 const LEGACY_SKIP = ['home.css', 'responsive.css'];
 const SCENARIOS = {
     'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS, skipCss: LEGACY_SKIP },
@@ -215,6 +232,8 @@ const SCENARIOS = {
     'home-student': { role: 'student', addon: true, bulletin: 'plain' },
     'home-teacher': { role: 'teacher', addon: true, bulletin: 'plain' },
     'home-admin': { role: 'admin', addon: true, bulletin: 'plain' },
+    // 关于页不是首页：它走自己的模板与数据，用来验证 §25 的"JS 只给数据不拼 HTML"。
+    'about-student': { role: 'student', addon: true, page: 'sylu/about.html' },
 };
 const HERO = { bulletin: D.HERO_BULLETIN };
 const PLAIN = { bulletin: D.BULLETIN };
@@ -239,8 +258,8 @@ function main() {
         const { env, overridden, settingGet } = buildEnv({ addon: sc.addon });
         try {
             const n = renderPage({
-                template: 'main.html',
-                state: homepageState(sc.role, config, sc.bulletin === 'hero' ? HERO : PLAIN),
+                template: sc.page || 'main.html',
+                state: sc.page ? aboutState(sc.role) : homepageState(sc.role, config, sc.bulletin === 'hero' ? HERO : PLAIN),
                 env,
                 settingGet,
                 out: `${t}.html`,

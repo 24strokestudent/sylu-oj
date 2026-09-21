@@ -1,5 +1,5 @@
 /* 断点集中在一个文件里，移动端改造（P0 第 10 项）只看这里。
-   顺序固定为 800 → 640，窄屏覆盖宽屏，不再像旧文件那样交错穿插。 */
+   顺序固定为 1024 → 800 → 640 → 600，窄屏覆盖宽屏，不再像旧文件那样交错穿插。 */
 
 @media (max-width: 1024px) {
   .sylu-home__modules { grid-template-columns: minmax(0, 1fr); }
@@ -18,9 +18,9 @@
 }
 
 @media (max-width: 640px) {
-  .main { padding-top: 16px; }
-
   .sylu-home { padding: 0 14px 28px; }
+
+  .sylu-about { padding: 0 14px; }
 
   .sylu-hero { padding: 30px 20px; }
 
@@ -38,4 +38,13 @@
   .sylu-brand__name { font-size: 14px; }
 
   .sylu-brand__tagline { font-size: 11px; }
+}
+
+/* 600px 不是随手挑的：theme.css 正是在这个宽度把顶栏收进抽屉
+   （`@media(max-width:600px){.nav.slideout-menu{display:none}.header--mobile{display:block}}`），
+   改由处在文档流里的 .header--mobile 占位，所以从这里开始 .main 不必再让出导航高度。
+   之前这条写在 640 的块里，留下 601–640px 的空档：那段宽度上导航仍然是 fixed 的，
+   却没有对应的净空，首行照样被盖住。 */
+@media (max-width: 600px) {
+  .main { padding-top: 16px; }
 }

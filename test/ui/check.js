@@ -236,6 +236,31 @@ function checkAssetLinks() {
     if (!bad) pass(`${files.length} 个页面的本地资源引用全部可解析`);
 }
 
+function checkAboutPage() {
+    // 计划 §25：/sylu/about 的结构归模板，JS 只准备数据。
+    // 这条查的是源码本身——只要 index.js 里再出现整段 HTML 字符串，就说明退回去了。
+    const f = path.join(ADDON, 'index.js');
+    const src = fs.readFileSync(f, 'utf8');
+    let bad = 0;
+    const tests = [
+        [!/<\/?html|<!DOCTYPE/i.test(src), 'index.js 里又出现了 HTML 字符串，§25 要求结构放模板'],
+        [/this\.response\.template = 'sylu\/about\.html'/.test(src), 'index.js 不再通过 response.template 渲染 sylu/about.html'],
+        // 结构在模板里，样式就必须也在样式文件里：内联 <style> 拿不到设计令牌，
+        // 换深色模式或改主题时会变成第二份配色来源。
+        [!/<style/i.test(src), 'index.js 里又内联了 <style>，关于页的样式应放 public/sylu/css/about.css'],
+    ];
+    for (const [ok, msg] of tests) if (!ok) { fail(msg); bad++; }
+    const out = path.join(OUT, 'about-student.html');
+    if (!fs.existsSync(out)) { fail('缺少 about-student.html，先跑 render.js --all'); return; }
+    const s = fs.readFileSync(out, 'utf8');
+    const notices = (s.match(/class="section__title"/g) || []).length;
+    if (notices < 4) { fail(`about-student.html 只有 ${notices} 条须知，§25 要求覆盖使用须知/判题环境/反馈方式/隐私说明`); bad++; }
+    if (!/class="sylu-about"/.test(s)) { fail('about-student.html 没有 .sylu-about 容器，模板没渲染出来'); bad++; }
+    if (!/关于本站<\/h1>/.test(s)) { fail('about-student.html 的标题不是模板产出的 h1'); bad++; }
+    if (!/Powered by/.test(s)) { fail('about-student.html 丢了 Hydro 归属'); bad++; }
+    if (!bad) pass(`关于页由模板渲染，须知 ${notices} 条`);
+}
+
 function checkShotPath() {
     // Windows 上 Chrome 的 --window-size 宽度最小约 504px（实测 320/390/500 都得 504）。
     // 真窄屏只能靠 puppeteer-core 的 CDP setViewport；它一旦从依赖里掉出去，
@@ -249,6 +274,88 @@ function checkShotPath() {
     pass(`出图依赖就位：puppeteer-core ${deps['puppeteer-core']}（窄屏走 CDP 视口）`);
 }
 
+/** 拆出 @media 块。只处理一层嵌套（本站样式里没有嵌套 @media），够用就好。 */
+function splitMedia(css) {
+    const src = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const blocks = [{ cond: '', body: '' }];
+    let i = 0;
+    while (i < src.length) {
+        const at = src.indexOf('@media', i);
+        if (at < 0) { blocks[0].body += src.slice(i); break; }
+        blocks[0].body += src.slice(i, at);
+        const open = src.indexOf('{', at);
+        const cond = src.slice(at + 6, open).trim();
+        let d = 1;
+        let j = open + 1;
+        while (j < src.length && d) {
+            if (src[j] === '{') d++;
+            else if (src[j] === '}') d--;
+            j++;
+        }
+        blocks.push({ cond, body: src.slice(open + 1, j - 1) });
+        i = j;
+    }
+    return blocks;
+}
+
+function checkNavClearance() {
+    // Hydro 的顶栏是 position:fixed，并用 margin-bottom:-2.8125rem 抵消了自己的占位，
+    // 也就是说它不占文档流：每个页面必须主动让出导航高度，否则首行被压在导航条下面。
+    // 上游靠 `.main{padding:3.4375rem 0}` 表达这件事，本站一度写成死数 28px（< 45px），
+    // 关于页/题库/记录页的首行就全被盖住了。这里把"让位"这件事钉在令牌上。
+    const files = cssFiles();
+    if (!files.length) { fail('没有本站 CSS'); return; }
+    const read = (n) => {
+        const p = path.join(ADDON, 'public', 'sylu', 'css', n);
+        return fs.existsSync(p) ? fs.readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') : '';
+    };
+    let bad = 0;
+
+    const tokens = read('tokens.css');
+    const navH = (tokens.match(/--sylu-nav-h:\s*([\d.]+)(rem|px)/) || []).slice(1);
+    if (navH.length !== 2) {
+        fail('tokens.css 缺少 --sylu-nav-h，导航净空没有唯一出处');
+        return;
+    }
+    const navPx = navH[1] === 'rem' ? Number(navH[0]) * 16 : Number(navH[0]);
+    pass(`导航高度令牌 --sylu-nav-h = ${navH.join('')}（≈${Math.round(navPx)}px）`);
+
+    const shell = read('shell.css');
+    if (!/\.main\s*\{[^}]*padding-top:\s*calc\(var\(--sylu-nav-h\)\s*\+\s*\d+px\)/.test(shell)) {
+        fail('shell.css 的 .main padding-top 没有引用 --sylu-nav-h，导航是 fixed 的，写死像素就会盖住首行');
+        bad++;
+    }
+
+    // 上游把顶栏收进抽屉、改由处在文档流里的 .header--mobile 占位的开关就在 600px；
+    // 净空释放只许发生在该宽度以下，写在 640 会留下 601–640px 谁都没管到的空档。
+    for (const f of files) {
+        const name = path.basename(f);
+        for (const b of splitMedia(fs.readFileSync(f, 'utf8'))) {
+            if (!b.cond) continue;
+            const max = /max-width:\s*(\d+(?:\.\d+)?)px/.exec(b.cond);
+            if (!max || Number(max[1]) <= 600) continue;
+            if (/\.main\s*\{[^}]*padding-top/.test(b.body)) {
+                fail(`${name} 在 @media ${b.cond} 里改了 .main 的 padding-top：这个宽度顶栏仍是 fixed，让位不能撤`);
+                bad++;
+            }
+        }
+    }
+
+    // 品牌区是"logo + 两行文字"，实测会把链接盒子顶到 55px 并压住导航下边框，
+    // 所以行高必须锁在令牌上，logo 也必须比导航矮。
+    if (!/\.sylu-brand__link\s*\{[^}]*height:\s*var\(--sylu-nav-h\)/.test(shell)) {
+        fail('shell.css 的 .sylu-brand__link 没有把高度锁到 --sylu-nav-h，品牌区会撑破导航条');
+        bad++;
+    }
+    const logo = /\.nav__logo\s*\{[^}]*height:\s*([\d.]+)px/.exec(shell);
+    if (!logo) fail('shell.css 找不到 .nav__logo 的高度，品牌图标尺寸失去约束');
+    else if (Number(logo[1]) >= navPx) {
+        fail(`.nav__logo 高 ${logo[1]}px ≥ 导航 ${Math.round(navPx)}px，副标题会被下边框切掉`);
+        bad++;
+    }
+    if (!bad) pass('导航净空：.main 让位、品牌行高、图标尺寸都绑在 --sylu-nav-h 上');
+}
+
 function main() {
     console.log('== UI 回归闸门 ==');
     checkLeaks();
@@ -260,6 +367,8 @@ function main() {
     checkHomepageSections();
     checkHomepageTemplate();
     checkNavBrand();
+    checkNavClearance();
+    checkAboutPage();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);

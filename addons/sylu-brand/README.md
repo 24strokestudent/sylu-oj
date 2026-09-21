@@ -65,7 +65,9 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 
 原生设置做不到「加一个自定义导航入口」和「一页聚合的平台须知」，所以本插件只做这几件事：
 
-- 路由 `GET /sylu/about` —— 非官方声明 + 平台使用须知（使用须知 / 判题环境 / 反馈方式 / 隐私说明，§40）
+- 路由 `GET /sylu/about` —— 非官方声明 + 平台使用须知（使用须知 / 判题环境 / 反馈方式 / 隐私说明，§40）。
+  页面结构在 `templates/sylu/about.html`，`index.js` 只给数据并指定模板（§25），
+  样式在 `public/sylu/css/about.css`，与其他页面共用同一套设计令牌
 - 顶栏导航注入一个「关于本站」入口（指向上面这个路由）
 - 覆盖首页模板 `templates/main.html`，把首屏 Hero、绿色收束条和四个快捷入口变成**代码里的结构**，
   不再靠往公告里塞 HTML + 深层 CSS 选择器实现
@@ -76,8 +78,10 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 - `homepage.yaml` 是首页模块编排的内容，部署时原样写入 `hydrooj.homepage`
 - 通过 `public/sylu/css/*.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
 
-它**不碰**用户系统、题库、Judge。模板只覆盖上列三份，且都是 addon 覆盖而非改 Hydro 源码
-（§49 A/B 级）；题库、记录、比赛、作业、讨论、排名与后台仍然完全使用上游模板。
+它**不碰**用户系统、题库、Judge。模板只覆盖上列四份（`main.html`、
+`partials/homepage/discussion_nodes.html`、`partials/nav.html`、`sylu/about.html`），
+且都是 addon 覆盖而非改 Hydro 源码（§49 A/B 级）；题库、记录、比赛、作业、讨论、
+排名与后台仍然完全使用上游模板。
 
 ## 样式是怎么加载的
 
@@ -95,7 +99,13 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 | `base.css` | 全站底色与字体 |
 | `shell.css` | 导航、页脚、主内容区 |
 | `home.css` | 首页版面、公告排版、首屏 |
+| `about.css` | 关于本站页（`templates/sylu/about.html` 的专用样式） |
 | `responsive.css` | 全部断点，移动端改造只看这里 |
+
+导航是 `position:fixed` 且不占文档流（上游用 `margin-bottom:-2.8125rem` 抵消了自己的占位），
+所以让出导航高度这件事只有一个出处：`tokens.css` 的 `--sylu-nav-h`。
+`test/ui/check.js` 会盯住 `.main` 的 `padding-top`、品牌链接行高与 logo 尺寸，
+写死像素或把让位撤在 600px 以上的断点里都会 fail。
 
 直链而非 `@import`：`@import` 会串行阻塞渲染，且绕过版本号导致改样式后客户端拿旧缓存。
 
@@ -127,6 +137,10 @@ curl -sI http://127.0.0.1:8888/sylu/about | head -1        # 期望 200
       不是伪元素 content；读屏软件也能念出来（§8.2）
 - [ ] `git status` 中 Hydro Core 目录无任何改动（§72）
 - [ ] 手机宽度下该页面排版正常（§65）
+- [ ] 任意非首页页面（`/sylu/about`、题库、提交记录）的首行不被顶栏遮住：
+      DevTools 里 `.main` 的 `padding-top` 计算值应 ≥ 顶栏高度（45px）
+- [ ] `/sylu/about` 与首页共用同一份 `layout/basic.html`：顶栏、页脚、
+      `Powered by Hydro` 都在，说明页不是另起的一张 HTML
 
 ## 加载失败的排查
 

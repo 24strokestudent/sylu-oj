@@ -1,0 +1,40 @@
+{% set page_name = "sylu_about" %}
+{% extends "layout/basic.html" %}
+{% block content %}
+<div class="sylu-about">
+  <div class="sylu-about__head">
+    <h1 class="sylu-about__title">关于本站</h1>
+    <p class="sylu-about__sub">{{ siteName }} · {{ siteSubtitle }}</p>
+  </div>
+
+  <div class="sylu-about__note">
+    <p class="sylu-about__note-title">非官方声明</p>
+    <p>{{ disclaimer }}</p>
+  </div>
+
+  {% for n in notices %}
+  <div class="section">
+    <div class="section__header">
+      <h2 class="section__title">{{ n.title }}</h2>
+    </div>
+    <div class="section__body typo">
+      <p>{{ n.body }}</p>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if contact or icp %}
+  <div class="sylu-about__extra">
+    {% if contact %}<p>反馈方式：{{ contact }}</p>{% endif %}
+    {% if icp %}<p>{{ icp }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <p class="sylu-about__credit">
+    本站评测引擎基于开源项目
+    <a href="https://github.com/hydro-dev/Hydro" target="_blank" rel="noopener">Hydro</a>（AGPL-3.0）。
+  </p>
+
+  <a class="sylu-about__back" href="{{ url('homepage') }}">返回首页</a>
+</div>
+{% endblock %}

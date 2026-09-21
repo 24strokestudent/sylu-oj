@@ -67,68 +67,6 @@ function loadHydro() {
 
 const brand = require('./brand');
 
-const htmlEscape = (s) => String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-/** 站点配色（实施计划 §33：红=主要操作，棕=文本/导航，绿=状态/辅助） */
-const BRAND_CSS = `
-:root { --sylu-red:#b12d28; --sylu-ink:#231815; --sylu-green:#485742; }
-.sylu-page { max-width:820px; margin:0 auto; padding:32px 20px 64px; color:var(--sylu-ink); line-height:1.75; }
-.sylu-page h1 { font-size:26px; margin:0 0 6px; letter-spacing:.2px; }
-.sylu-page .sylu-sub { color:#6b6462; margin:0 0 28px; font-size:14px; }
-.sylu-page h2 { font-size:17px; margin:30px 0 8px; padding-left:10px; border-left:3px solid var(--sylu-red); }
-.sylu-page p { margin:8px 0; }
-.sylu-note { margin:26px 0; padding:14px 16px; border:1px solid rgba(35,24,21,.12); border-radius:14px; background:rgba(72,87,66,.06); }
-.sylu-note strong { color:var(--sylu-green); }
-.sylu-back { display:inline-block; margin-top:30px; padding:9px 18px; border-radius:10px; background:var(--sylu-red); color:#fff; text-decoration:none; font-size:14px; }
-.sylu-back:hover { opacity:.9; }
-`;
-
-function renderAboutPage() {
-    const notices = (brand.notices || []).map((n) => `
-    <h2>${htmlEscape(n.title)}</h2>
-    <p>${htmlEscape(n.body)}</p>`).join('');
-
-    const contact = brand.contact
-        ? `<p>反馈方式：${htmlEscape(brand.contact)}</p>` : '';
-    const icp = brand.icp ? `<p>${htmlEscape(brand.icp)}</p>` : '';
-
-    return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>关于本站 - ${htmlEscape(brand.siteName)}</title>
-<style>${BRAND_CSS}</style>
-</head>
-<body>
-<div class="sylu-page">
-  <h1>关于本站</h1>
-  <p class="sylu-sub">${htmlEscape(brand.siteName)} · ${htmlEscape(brand.siteSubtitle)}</p>
-
-  <div class="sylu-note">
-    <p><strong>非官方声明</strong>：${htmlEscape(brand.disclaimer)}</p>
-  </div>
-
-  ${notices}
-  ${contact}
-  ${icp}
-
-  <p style="margin-top:26px;color:#6b6462;font-size:13px;">
-    本站评测引擎基于开源项目
-    <a href="https://github.com/hydro-dev/Hydro" target="_blank" rel="noopener">Hydro</a>（AGPL-3.0）。
-  </p>
-
-  <a class="sylu-back" href="/">返回首页</a>
-</div>
-</body>
-</html>`;
-}
-
 async function apply(ctx) {
     const hydro = loadHydro();
 
@@ -144,10 +82,22 @@ async function apply(ctx) {
     const { Handler } = hydro;
 
     class SyluAboutHandler extends Handler {
+        // 与上游 WikiAboutHandler 同样处理（ui-default/index.ts:21）：
+        // 这是张对外的说明页，不该要求域内 VIEW 权限。
+        noCheckPermView = true;
+
         async get() {
-            // 不设置 response.template：Hydro 会直接返回 body，避免依赖模板解析
-            this.response.type = 'text/html; charset=utf-8';
-            this.response.body = renderAboutPage();
+            // 计划 §25：JS 只准备数据并指定模板，页面结构在 templates/sylu/about.html，
+            // 样式在 public/sylu/css/about.css。这里不再拼 HTML 字符串。
+            this.response.template = 'sylu/about.html';
+            this.response.body = {
+                siteName: brand.siteName,
+                siteSubtitle: brand.siteSubtitle,
+                disclaimer: brand.disclaimer,
+                notices: brand.notices || [],
+                contact: brand.contact || '',
+                icp: brand.icp || '',
+            };
         }
     }
 

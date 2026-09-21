@@ -1,0 +1,34 @@
+/* 冻结快照：改造前 shell.css 的导航段——站名用伪元素 content 塞进第一个 li，
+   主内容区用死数 28px 让位。
+   addons/sylu-brand 已改由 templates/partials/nav.html 给出真实品牌 DOM，
+   净空也改成按 --sylu-nav-h 计算，这两段规则随之从 shell.css 消失；
+   但 baseline-* 要复刻的正是消失之前的线上形态，缺了它们基线页就变成
+   "改造前模板 + 改造后外壳"的混合体，拿它当参照得出的结论全部不可信。
+   只服务 test/ui，不随 addon 发布，也不计入 RATCHET 统计。
+   取回方式：git show 9c4d01f:addons/sylu-brand/public/sylu/css/shell.css */
+.nav__list--main > .nav__list-item:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 14px;
+}
+
+.nav__list--main > .nav__list-item:first-child::after {
+  content: "SYLU OJ\A 在线程序设计与评测平台";
+  white-space: pre;
+  color: var(--sylu-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+}
+
+/* Hydro 的顶栏是 position:fixed 且用 margin-bottom:-2.8125rem 抵消了自己的占位，
+   也就是说它不占文档流；改造前只让出 28px（< 导航的 45px），
+   所以非首页的首行确实会被导航压住——那是现状，基线页必须照抄而不是顺手修好。 */
+.main { padding-top: 28px; }
+
+.nav__logo {
+  width: 42px;
+  height: 42px;
+}

@@ -1,0 +1,64 @@
+/* 关于本站。类名绑定 addons/sylu-brand/templates/sylu/about.html；
+   四条须知沿用 Hydro 的 .section 卡片，不另造一套卡片结构。 */
+.sylu-about {
+  max-width: 820px;
+  margin: 0 auto;
+  /* .main 只有上下留白，横向留白归页面自己管，否则窄屏正文会贴到屏幕边缘。 */
+  padding: 0 20px;
+}
+
+.sylu-about__title {
+  margin: 0;
+  color: var(--sylu-ink);
+  font-size: 26px;
+}
+
+.sylu-about__sub {
+  margin: 6px 0 0;
+  color: var(--sylu-muted);
+  font-size: 14px;
+}
+
+.sylu-about__note {
+  margin: 22px 0 26px;
+  padding: 14px 16px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-card);
+  background: var(--sylu-success-soft);
+}
+
+.sylu-about__note-title {
+  margin: 0 0 6px;
+  color: var(--sylu-success);
+  font-weight: 700;
+}
+
+.sylu-about__note p:last-child { margin: 0; }
+
+.sylu-about .section { margin-bottom: 18px; }
+
+.sylu-about__extra { color: var(--sylu-muted); font-size: 14px; }
+
+.sylu-about__credit {
+  margin-top: 26px;
+  color: var(--sylu-muted);
+  font-size: 13px;
+}
+
+.sylu-about__credit a { color: var(--sylu-link); }
+
+.sylu-about__back {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 9px 18px;
+  border-radius: var(--sylu-radius-button);
+  background: var(--sylu-primary);
+  color: var(--sylu-surface);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sylu-about__back:hover {
+  background: var(--sylu-primary-hover);
+  color: var(--sylu-surface);
+}

@@ -14,6 +14,12 @@
   --sylu-border-strong: #d4dbd1;
   --sylu-link: #2f6f9f;
 
+  /* 导航实际占据的可视高度。Hydro 的 .nav 是 position:fixed 且带
+     margin-bottom:-2.8125rem（theme.css 顶层规则），不占文档流，
+     所以需要让出导航高度的地方一律引用这个变量，不要各写各的像素数。
+     值必须与 theme.css 的 `.nav{height:2.8125rem}` 保持一致。 */
+  --sylu-nav-h: 2.8125rem;
+
   --sylu-radius-container: 12px;
   --sylu-radius-card: 14px;
   --sylu-radius-button: 10px;

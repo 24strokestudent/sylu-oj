@@ -74,6 +74,13 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
   产物里每一条相对 `link/script/img` 引用也会解析一遍，文件不存在就 fail。
 - **出图能力**：`package.json` 必须留着 `puppeteer-core`，否则窄屏出图会静默退化成
   504px 裁切（见上一节），这种"看起来通过了"的假结论要拦住。
+- **导航净空**：Hydro 的顶栏是 `position:fixed` 且用 `margin-bottom:-2.8125rem`
+  抵消了自己的占位，不占文档流，所以每个页面必须让出 `--sylu-nav-h`。
+  关于页出图时量到的"标题被导航压住"就是这条被写成了死数 28px（< 导航 45px），
+  是本站样式带进线上的真 bug，不是沙箱失真。断言三处：`.main` 的 `padding-top`
+  引用令牌、撤让位的 `@media` 只许出现在 600px 及以下（上游正是在 600px 把顶栏
+  收进抽屉、改由处在文档流里的 `.header--mobile` 占位）、品牌链接锁一行高且
+  logo 不比导航高。
 
 上游模板来自 `.ref/Hydro`（gitignore 的只读参考）。找不到时设 `SYLU_HYDRO_REF` 指向
 `Hydro/packages/ui-default/templates` 的父目录。
@@ -88,12 +95,13 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 | 文件 | 冻结自 | 取回方式 |
 | --- | --- | --- |
 | `legacy-home.css` | home.css @ fabcca8（全文） | `git show fabcca8:addons/sylu-brand/public/sylu/css/home.css` |
-| `legacy-nav-brand.css` | shell.css 的导航品牌 hack @ 9c4d01f（仅那一段） | `git show 9c4d01f:addons/sylu-brand/public/sylu/css/shell.css` |
+| `legacy-shell-nav.css` | shell.css 的导航段（品牌伪元素 hack + 28px 净空 + 42px logo）@ 9c4d01f | `git show 9c4d01f:addons/sylu-brand/public/sylu/css/shell.css` |
 | `legacy-responsive.css` | responsive.css @ fabcca8（全文） | `git show fabcca8:addons/sylu-brand/public/sylu/css/responsive.css` |
 
 全文冻结的两份在基线场景里是**替换**而不是追加（场景表的 `skipCss` 会把当前版
-home.css / responsive.css 摘掉）；`legacy-nav-brand.css` 只是一段，所以 shell.css
-照常加载。挂载后的层叠顺序仍是 tokens → base → shell(+品牌 hack) → home → responsive，
+home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 shell.css
+照常加载，由它在后面把导航 hack 与 28px 净空覆盖回改造前的值。
+挂载后的层叠顺序仍是 tokens → base → shell(+导航段冻结) → home → responsive，
 与改造前一致。
 
 这样拆分的依据是 CSS 拆分那轮实测的 0.000% 像素差：新令牌/新分片 + 冻结的位置规则
