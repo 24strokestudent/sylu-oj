@@ -583,7 +583,9 @@ Using mongodb external event bus
 | `addons/sylu-brand` 插件 | ⚠️ 未安装未验证 | 品牌目前全部用原生设置实现，插件尚未 `hydrooj addon add` |
 | 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
 
-**结论：目前状态是「能跑通第一道 Gate」，不是「可以上线」。**
+**IP 内测状态（2026-09-21）**：`http://101.42.27.44/` 已可用。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已导入并实测 C++ Accepted、Wrong Answer、TLE、Python Accepted；备份已重新生成并完成临时 MongoDB 恢复核对。当前仍属于 IP 内测，不宣称公网生产上线。
+
+IP 内测仍保留以下上线前工作：配置域名与 HTTPS、异地备份副本、完整人工恢复启动演练、教师作业与比赛链路验收，以及逐项执行沙箱网络测试。
 上线判定请看 `docs/ACCEPTANCE.md`（§72）。
 
 如与文档不符，以**脚本的实际输出**为准，并回来更新本文档。
