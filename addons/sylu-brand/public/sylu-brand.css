@@ -115,6 +115,11 @@ body {
   box-shadow: 0 6px 22px rgba(38, 50, 31, .07);
 }
 
+/* 外部一言接口不可用时不展示错误文案，避免首页出现 Cannot get hitokoto。 */
+.page--homepage .large-3 .section.side:has(.section__body[name="hitokoto"]) {
+  display: none;
+}
+
 .page--homepage .large-3 .section__header {
   border-bottom: 1px solid var(--sylu-border);
   background: #fff;
