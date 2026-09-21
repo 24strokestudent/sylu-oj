@@ -184,11 +184,17 @@ ABOUT
 
     # 首页公告属于 system 域资料，使用官方 DomainModel.edit 写入，避免直接操作 MongoDB。
     SYLU_BULLETIN="$(cat <<'BULLETIN'
-## SYLU OJ
-
-面向程序设计学习与算法训练的在线评测平台。
-
-> 这是学生维护的非官方平台，不代表学校官方立场。请勿上传隐私数据或提交恶意代码。
+<div class="sylu-hero">
+  <div>
+    <p class="sylu-hero-kicker">WELCOME TO SYLU OJ</p>
+    <h1>欢迎来到<em>沈阳理工</em> OJ</h1>
+    <p class="sylu-hero-desc">一个面向程序设计学习与算法训练的在线评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>
+    <div class="sylu-hero-actions"><a href="/p">开始刷题</a><a href="/training">浏览训练</a></div>
+  </div>
+  <div class="sylu-code-window"><div class="sylu-code-bar">main.cpp</div><pre><code>#include &lt;iostream&gt;
+using namespace std;
+int main() { int a, b; cin &gt;&gt; a &gt;&gt; b; cout &lt;&lt; a + b; }</code></pre><div class="sylu-code-result">● Accepted · 在线评测</div></div>
+</div>
 
 ### 从这里开始
 

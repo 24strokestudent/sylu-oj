@@ -88,6 +88,165 @@ body {
   padding: 34px 38px 40px;
 }
 
+/* GitHub frontend 的首屏结构适配到 Hydro 公告容器，入口仍然指向真实 Hydro 路由。 */
+.sylu-hero {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 34px;
+  align-items: center;
+  margin: -34px -38px 34px;
+  padding: 42px 38px;
+  background: radial-gradient(640px 240px at 90% 0%, rgba(35, 24, 21, .11), transparent 65%), linear-gradient(160deg, #f2f6ef, #fff 65%);
+  border-bottom: 1px solid var(--sylu-border);
+}
+
+.sylu-hero-kicker {
+  margin: 0 0 12px;
+  color: var(--sylu-brown);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.sylu-hero h1 {
+  margin: 0 0 14px;
+  color: var(--sylu-brown);
+  font-size: 34px;
+  line-height: 1.2;
+}
+
+.sylu-hero h1 em {
+  color: var(--sylu-red);
+  font-style: normal;
+}
+
+.sylu-hero-desc {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: #596058;
+}
+
+.sylu-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sylu-hero-actions a {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--sylu-red);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.sylu-hero-actions a:first-child {
+  color: #fff;
+  background: var(--sylu-red);
+}
+
+.sylu-hero-actions a:last-child {
+  color: var(--sylu-red);
+  background: transparent;
+}
+
+.sylu-code-window {
+  overflow: hidden;
+  border: 1px solid rgba(35, 24, 21, .12);
+  border-radius: 14px;
+  background: #231815;
+  box-shadow: 0 14px 30px rgba(38, 50, 31, .16);
+}
+
+.sylu-code-bar {
+  padding: 10px 14px;
+  color: #d9cfc9;
+  background: #332622;
+  font-size: 12px;
+}
+
+.sylu-code-window pre {
+  margin: 0;
+  padding: 18px;
+  color: #f5eee8;
+  font: 13px/1.65 "SFMono-Regular", Consolas, monospace;
+}
+
+.sylu-code-result {
+  padding: 9px 14px;
+  color: #d5e5ce;
+  background: #33412f;
+  font-size: 12px;
+}
+
+/* Hydro 的 Markdown 安全过滤会移除公告 HTML 的 class 属性，结构选择器保证适配仍然生效。 */
+.page--homepage .richmedia > div:first-child {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 34px;
+  align-items: center;
+  margin: -34px -38px 34px;
+  padding: 42px 38px;
+  background: radial-gradient(640px 240px at 90% 0%, rgba(35, 24, 21, .11), transparent 65%), linear-gradient(160deg, #f2f6ef, #fff 65%);
+  border-bottom: 1px solid var(--sylu-border);
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child p:first-child {
+  margin: 0 0 12px;
+  color: var(--sylu-brown);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.page--homepage .richmedia > div:first-child h1 {
+  margin: 0 0 14px;
+  color: var(--sylu-brown);
+  font-size: 34px;
+  line-height: 1.2;
+}
+
+.page--homepage .richmedia > div:first-child h1 em { color: var(--sylu-red); font-style: normal; }
+
+.page--homepage .richmedia > div:first-child > div:first-child p:nth-of-type(2) {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: #596058;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--sylu-red);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a:first-child {
+  color: #fff;
+  background: var(--sylu-red);
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a:last-child { color: var(--sylu-red); }
+
+.page--homepage .richmedia > div:first-child > div:last-child {
+  overflow: hidden;
+  border: 1px solid rgba(35, 24, 21, .12);
+  border-radius: 14px;
+  background: #231815;
+  box-shadow: 0 14px 30px rgba(38, 50, 31, .16);
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child > div { padding: 10px 14px; color: #d9cfc9; background: #332622; font-size: 12px; }
+.page--homepage .richmedia > div:first-child > div:last-child pre { margin: 0; padding: 18px; color: #f5eee8; background: #231815; font: 13px/1.65 "SFMono-Regular", Consolas, monospace; }
+.page--homepage .richmedia > div:first-child > div:last-child > div:last-child { color: #d5e5ce; background: #33412f; }
+
 .page--homepage .richmedia h1,
 .page--homepage .richmedia h2,
 .page--homepage .richmedia h3 {
@@ -216,6 +375,10 @@ body {
 @media (max-width: 640px) {
   .main { padding-top: 16px; }
   .page--homepage .large-9 > .section:first-child .section__body { padding: 24px 20px 28px; }
+  .sylu-hero { grid-template-columns: 1fr; margin: -24px -20px 28px; padding: 30px 20px; }
+  .sylu-hero h1 { font-size: 28px; }
+  .page--homepage .richmedia > div:first-child { grid-template-columns: 1fr; margin: -24px -20px 28px; padding: 30px 20px; }
+  .page--homepage .richmedia > div:first-child h1 { font-size: 28px; }
   .page--homepage .richmedia h1 { font-size: 25px; }
   .nav__list--main > .nav__list-item:first-child::after { font-size: 13px; }
   .page--homepage .richmedia h3 + ul { grid-template-columns: 1fr; }
