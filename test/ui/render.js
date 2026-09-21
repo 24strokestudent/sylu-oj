@@ -161,6 +161,10 @@ function renderPage({
     };
     // template.ts:238 —— UiContext 由渲染管线注入，html5.html 会对它做 Object.create，缺失即报错
     ctx.UiContext = state.UiContext || handler.UiContext || {};
+    // 上游模板里的 model.contest.canShow* 依赖 this.user 判权限，
+    // 而 nunjucks 会把模板中 .call(handler, ...) 的 thisArg 吞掉，
+    // 所以每个场景按当前 handler 重绑一份 model（原因见 lib/hydro.js 的 modelFor 注释）。
+    env.addGlobal('model', H.modelFor(handler));
     let html = env.render(template, ctx);
     // 样式层叠顺序 = 线上层叠顺序：上游 theme.css 在前，本站样式在后
     const vendor = path.join(OUT, 'vendor', 'theme.css');
@@ -236,15 +240,23 @@ function aboutState(role) {
 }
 
 /**
- * tier C 页面（题库 / 题面 / 提交记录）的 body 构造器。
+ * tier C 页面的 body 构造器。
  * 键名就是模板名：一个 handler 对应一个模板，这样新增页面只需要在这里加一行。
- * 参数统一收 (role)，用不到的可以先忽略。
+ * 参数统一收 (role, udoc, sc)，用不到的可以先忽略；sc.arg 给"同一模板、不同夹具"
+ * 用（比赛详情的四种时间状态就是这种情况）。
  */
 const PAGE_BODIES = {
     'problem_main.html': (role, udoc) => D.problemList({ role, udoc }),
     'problem_detail.html': (role) => D.problemDetailBody({ role }),
     'record_main.html': () => D.recordListBody(),
     'record_detail.html': () => D.recordDetailBody(),
+    'contest_main.html': (role, udoc) => D.contestListBody({ udoc }),
+    'contest_detail.html': (role, udoc, sc) => D.contestDetailBody(sc.arg, { udoc }),
+    'homework_main.html': () => D.homeworkListBody(),
+    'training_main.html': (role) => D.trainingListBody({ role }),
+    'discussion_main_or_node.html': () => D.discussionListBody(),
+    'ranking.html': () => D.rankingBody(),
+    'user_login.html': () => D.loginBody(),
 };
 
 function stateFor(sc, config) {
@@ -255,9 +267,9 @@ function stateFor(sc, config) {
     const build = PAGE_BODIES[sc.page];
     if (!build) throw new Error(`没有 ${sc.page} 的 body 构造器：新增 tier C 场景要在 PAGE_BODIES 登记`);
     const udoc = ROLES[sc.role]();
-    // udoc 同时传给 handler 和 body 构造器：列表的查询条件（隐藏题、题解可见性）
+    // udoc 同时传给 handler 和 body 构造器：列表的查询条件（隐藏题、比赛分组）
     // 在真实后端就是按 handler.user 过滤的，夹具若另拿一份身份，权限分支就测不准。
-    return { handler: makeHandler(udoc, { bulletin: D.BULLETIN }), ...build(sc.role, udoc) };
+    return { handler: makeHandler(udoc, { bulletin: D.BULLETIN }), ...build(sc.role, udoc, sc) };
 }
 
 /**
@@ -295,6 +307,26 @@ const SCENARIOS = {
     'problem-admin': { role: 'admin', addon: true, page: 'problem_detail.html' },
     'records-student': { role: 'student', addon: true, page: 'record_main.html' },
     'record-student': { role: 'student', addon: true, page: 'record_detail.html' },
+    // 比赛与作业：同属 C 级，且带"数据不能提前出现"的硬约束，所以按时间状态各出一页。
+    // 四份比赛夹具的时间是 checkContestGates 的断言依据，改时间等于改断言。
+    'contests-student': { role: 'student', addon: true, page: 'contest_main.html' },
+    // 管理员有 PERM_VIEW_HIDDEN_CONTEST，列表里会多出那条指定分组的比赛。
+    'contests-admin': { role: 'admin', addon: true, page: 'contest_main.html' },
+    'contest-live-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'live' },
+    'contest-upcoming-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'upcoming' },
+    'contest-ended-hidden-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'endedHidden' },
+    // 同一份夹具换身份：管理员看到的榜单入口是"隐藏"变体，而不是提前公开。
+    'contest-ended-hidden-admin': { role: 'admin', addon: true, page: 'contest_detail.html', arg: 'endedHidden' },
+    'contest-ended-open-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'endedOpen' },
+    'homework-student': { role: 'student', addon: true, page: 'homework_main.html' },
+    'training-student': { role: 'student', addon: true, page: 'training_main.html' },
+    'training-guest': { role: 'guest', addon: true, page: 'training_main.html' },
+    'discuss-student': { role: 'student', addon: true, page: 'discussion_main_or_node.html' },
+    'discuss-guest': { role: 'guest', addon: true, page: 'discussion_main_or_node.html' },
+    'ranking-student': { role: 'student', addon: true, page: 'ranking.html' },
+    'ranking-guest': { role: 'guest', addon: true, page: 'ranking.html' },
+    // 登录页走的是 layout/immersive.html（另一套无导航版式），单独验证品牌层没漏挂。
+    'login-guest': { role: 'guest', addon: true, page: 'user_login.html' },
 };
 const HERO = { bulletin: D.HERO_BULLETIN };
 const PLAIN = { bulletin: D.BULLETIN };

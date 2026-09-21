@@ -389,6 +389,24 @@ const TIER_C_MARKERS = {
     'problem-admin': ['class="problem-content"'],
     'records-student': ['class="data-table record_main__table"'],
     'record-student': ['class="data-table record_detail__table"', 'class="subtask"'],
+    // 这一组是本轮补上的：训练 / 比赛 / 作业 / 讨论 / 排名 / 登录。
+    // 标记串一律取上游模板自己写出的 class，不是我们 CSS 里的选择器，
+    // 这样"夹具脱节 → 空表格 → 照着空页面写 CSS"这条链会被断在这里。
+    'contests-student': ['class="section__list contest__list"'],
+    'contests-admin': ['class="section__list contest__list"'],
+    'contest-live-student': ['class="problem__tag-item"'],
+    'contest-upcoming-student': ['class="problem__tag-item"'],
+    'contest-ended-hidden-student': ['class="problem__tag-item"'],
+    'contest-ended-hidden-admin': ['class="problem__tag-item"'],
+    'contest-ended-open-student': ['class="problem__tag-item"'],
+    'homework-student': ['class="section__list homework__list"'],
+    'training-student': ['class="section__list all primary training__list"'],
+    'training-guest': ['class="section__list all primary training__list"'],
+    'discuss-student': ['class="section__list discussion__list"'],
+    'discuss-guest': ['class="section__list discussion__list"'],
+    'ranking-student': ['class="data-table"', 'class="col--rp"'],
+    'ranking-guest': ['class="data-table"', 'class="col--rp"'],
+    'login-guest': ['class="immersive--content immersive--center"', 'name="password"'],
 };
 
 function checkTierC() {
@@ -445,7 +463,83 @@ function checkTierC() {
         const restored = (css.match(/record-status--text\s*>\s*span\s*\{[^}]*font-size:\s*1[0-9]px/g) || []).length;
         if (zeroed > restored) { fail(`${f} 有 ${zeroed} 处 font-size:0 压缩状态文字，但只有 ${restored} 处 > span 还原，手机上分数会消失`); bad++; }
     }
-    if (!bad) pass(`C 级 9 页渲染正常，隐藏题按权限分叉，状态文字未被颜色化`);
+    if (!bad) pass(`C 级 ${Object.keys(TIER_C_MARKERS).length} 页渲染正常，隐藏题按权限分叉，状态文字未被颜色化`);
+}
+
+/**
+ * 比赛与作业的"数据不得提前出现"闸门（计划 §49 附加红线）。
+ *
+ * 上游把这三件事交给 model.contest 的可见性函数（model/contest.ts:1051-1073），
+ * 侧栏据此决定输不输出链接（partials/contest_sidebar.html:130-149）。
+ * C 级不覆盖模板，所以我们改不了这个判断——但"改坏了也没人知道"这件事可以消除：
+ * 夹具里备好四种时间状态，逐条断言链接该有 / 不该有。
+ * 断言一律按 URL 而不是文案：文案走 i18n，翻译一改假失败就来了。
+ */
+const CONTEST_GATE_EXPECT = [
+    // [场景, 比赛链接片段, 期望出现?]
+    ['contest-live-student', '/problems', true],
+    ['contest-live-student', '/scoreboard', true],
+    // 未开始：既没有题目列表，也没有榜单，只有一个参赛表单
+    ['contest-upcoming-student', '/problems', false],
+    ['contest-upcoming-student', '/scoreboard', false],
+    // OI 结束但教师勾了隐藏榜单：普通学生仍然看不到
+    ['contest-ended-hidden-student', '/scoreboard', false],
+    // 同一份夹具换管理员：出现的是"榜单（隐藏）"入口，而不是提前公开榜单
+    ['contest-ended-hidden-admin', '/scoreboard', true],
+    ['contest-ended-open-student', '/scoreboard', true],
+];
+
+function checkContestGates() {
+    let bad = 0;
+    const read = (name) => {
+        const p = path.join(OUT, `${name}.html`);
+        return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
+    };
+    for (const [scene, frag, want] of CONTEST_GATE_EXPECT) {
+        const s = read(scene);
+        if (s === null) { fail(`缺少 ${scene}.html，先跑 node test/ui/render.js --all`); bad++; continue; }
+        const re = new RegExp(`href="/contest/[a-z0-9]+${frag.replace('/', '\\/')}"`, 'i');
+        const got = re.test(s);
+        if (got !== want) {
+            fail(`${scene}.html ${want ? '应当' : '不得'}出现 ${frag} 入口（got=${got}）：比赛可见性判断被改动`);
+            bad++;
+        }
+    }
+    // 未开始的那一页必须仍然给得出"参赛"这条路径，否则上面两条 false 是页面整个没渲染导致的假通过
+    const upcoming = read('contest-upcoming-student') || '';
+    if (!/data-contest-attend/.test(upcoming)) {
+        fail('contest-upcoming-student.html 没有参赛表单：侧栏整块没渲染，前面几条 false 不可信');
+        bad++;
+    }
+    // 指定分组的比赛（夹具 CONTEST_DOCS.grouped）只该出现在有 PERM_VIEW_HIDDEN_CONTEST 的页面
+    const listStudent = read('contests-student') || '';
+    const listAdmin = read('contests-admin') || '';
+    if (listStudent.includes('图论专题训练赛')) {
+        fail('contests-student.html 出现了指定分组的比赛：越权可见'); bad++;
+    }
+    if (!listAdmin.includes('图论专题训练赛')) {
+        fail('contests-admin.html 看不到指定分组的比赛：夹具的权限分支写反了'); bad++;
+    }
+    if (!bad) pass(`比赛四态可见性闸门通过（未开始无题目列表/榜单，OI 隐藏榜单仅管理员可见入口）`);
+}
+
+/**
+ * 路由完整性：沙箱的 url() 遇到没登记的 route 会回落到 '#'（lib/hydro.js 的 ROUTES），
+ * 页面照样出图、链接却是死的。游客页有一处是上游自己的"忘记密码"触发器（由 JS 接管），
+ * 所以只允许它一处，且只允许出现在游客页。
+ */
+function checkDeadLinks() {
+    const files = htmlFiles();
+    let bad = 0;
+    for (const f of files) {
+        const s = fs.readFileSync(path.join(OUT, f), 'utf8');
+        const n = (s.match(/href="#"/g) || []).length;
+        if (!n) continue;
+        if (/-guest\.html$/.test(f) && n === 1 && /data-lostpass/.test(s)) continue;
+        fail(`${f} 有 ${n} 处 href="#"：多半是 ROUTES 少登记了路由，线上会是死链接`);
+        bad++;
+    }
+    if (!bad) pass(`${files.length} 个页面无未登记路由产生的死链接（游客页的"忘记密码"触发器除外）`);
 }
 
 function main() {
@@ -462,6 +556,8 @@ function main() {
     checkNavClearance();
     checkAboutPage();
     checkTierC();
+    checkContestGates();
+    checkDeadLinks();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);

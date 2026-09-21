@@ -262,18 +262,32 @@ const ROUTES = {
     record_detail: '/record/:rid',
     contest_main: '/contest',
     contest_detail: '/contest/:tid',
+    contest_problemlist: '/contest/:tid/problems',
+    contest_scoreboard: '/contest/:tid/scoreboard',
+    contest_print: '/contest/:tid/print',
+    contest_team: '/contest/team',
+    contest_edit: '/contest/:tid/edit',
+    contest_manage: '/contest/:tid/management',
+    contest_code: '/contest/:tid/code',
+    contest_create: '/contest/create',
     homework_main: '/homework',
     homework_detail: '/homework/:tid',
+    homework_scoreboard: '/homework/:tid/scoreboard',
+    homework_create: '/homework/create',
     training_main: '/training',
     training_detail: '/training/:tid',
+    training_create: '/training/create',
     discussion_main: '/discuss',
     discussion_detail: '/discuss/:did',
     discussion_node: '/discuss/:type/:name',
     discussion_create: '/discuss/:type/:name/create',
+    discussion_edit: '/discuss/:did/edit',
     ranking: '/ranking',
     user_login: '/login',
     user_register: '/register',
     user_logout: '/logout',
+    user_lostpass: '/lostpass',
+    user_oauth: '/oauth/:type/login',
     user_detail: '/user/:uid',
     home_settings: '/home/settings/:category',
     home_security: '/home/security',
@@ -497,6 +511,26 @@ function difficulty(nSubmit, nAccept) {
 
 // ---------------------------------------------------------------- model stubs
 const DAY = 86400 * 1000;
+/**
+ * nunjucks 的 runtime.memberLookup 会把"成员函数"包一层 `obj[name].apply(obj, args)`，
+ * 于是模板里写 `model.contest.canShowScoreboard.call(handler, tdoc, False)` 时，
+ * 那个 handler 只被当作 thisArg 传给了 Function.prototype.call，
+ * 真正被调用的函数拿到的 this 仍是 model.contest（实测于 nunjucks 3.2.4，见 test/ui/README）。
+ * 上游这几个函数的签名写的是 this: { user: User }（model/contest.ts:1051-1073），
+ * 所以沙箱按签名把 this 绑成本次渲染的 handler：不绑的话比赛侧栏整页抛错，
+ * 而抛错原因是模板写法与 nunjucks 的相互作用，不是我们的夹具错了。
+ */
+function modelFor(handler) {
+    const contest = Object.assign({}, model.contest);
+    for (const name of ['canViewHiddenScoreboard', 'canShowRecord', 'canShowSelfRecord', 'canShowScoreboard']) {
+        const fn = contest[name];
+        contest[name] = function bound(...args) {
+            return fn.call(handler, ...args);
+        };
+    }
+    return Object.assign({}, model, { contest });
+}
+
 // hydrooj/setting.yaml 的 langs 默认表，按 parseLang 的合并规则展开后的结果：
 // `[foo].[bar]` 继承 `[foo]` 的 highlight/monaco，display 各自覆盖。
 // 记录列表与提交详情都要读 model.setting.langs[lang].display / .highlight。
@@ -530,27 +564,118 @@ const model = {
         TYPE_DISCUSSION: 21, TYPE_CONTEST: 30, TYPE_TRAINING: 40,
     },
     discussion: { typeDisplay: { 10: 'problem', 20: 'node', 30: 'contest', 40: 'training' } },
-    contest: {
-        RULES: {
-            acm: { TEXT: 'XCPC' }, oi: { TEXT: 'OI' }, ioi: { TEXT: 'IOI' },
-            strictioi: { TEXT: 'IOI(Strict)' }, ledo: { TEXT: 'Ledo' },
-            homework: { TEXT: 'Assignment', hidden: true },
-        },
-        isUpcoming: (tdoc, days = 7) => Date.now() > tdoc.beginAt - days * DAY && Date.now() < tdoc.beginAt,
-        isOngoing: (tdoc, tsdoc) => {
+    contest: (() => {
+        /**
+         * 时间判定与可见性回调逐字移植自 model/contest.ts（行号见各处注释）。
+         * 沙箱为什么要复刻这一层：侧栏的「题目列表 / 榜单 / 我的提交」三个入口全部由
+         * canShow* 决定输不输出（partials/contest_sidebar.html），而"比赛数据不提前泄露"
+         * 是计划里的硬约束。只测 CSS 的话，将来模板换版或夹具改错时间字段导致榜单链接
+         * 提前出现，没有任何闸门会响。
+         */
+        const HOUR = 3600 * 1000;
+        // model/contest.ts:49-52
+        const isNew = (tdoc, days = 1) => Date.now() < tdoc.beginAt.getTime() - days * DAY;
+        // model/contest.ts:54-58
+        const isUpcoming = (tdoc, days = 7) => {
             const now = Date.now();
-            if (tsdoc && tsdoc.endAt && tsdoc.endAt <= new Date(now)) return false;
-            return tdoc.beginAt <= new Date(now) && new Date(now) < tdoc.endAt;
-        },
-        isExtended: (tdoc) => tdoc.penaltySince && tdoc.penaltySince <= new Date() && new Date() < tdoc.endAt,
-        isDone: (tdoc) => tdoc.endAt <= new Date(),
-        statusText: (tdoc) => {
-            if (model.contest.isUpcoming(tdoc, 99999) && Date.now() < tdoc.beginAt - DAY) return 'New';
-            if (Date.now() < tdoc.beginAt) return 'Ready (☆▽☆)';
-            if (model.contest.isOngoing(tdoc)) return 'Live...';
-            return 'Done';
-        },
-    },
+            const readyAt = tdoc.beginAt.getTime();
+            return now > readyAt - days * DAY && now < readyAt;
+        };
+        // model/contest.ts:60-62
+        const isNotStarted = (tdoc) => new Date() < tdoc.beginAt;
+        // model/contest.ts:64-69（duration 型比赛的 tsdoc 截止）
+        const isOngoing = (tdoc, tsdoc) => {
+            const now = new Date();
+            if (tsdoc && tsdoc.endAt && tsdoc.endAt <= now) return false;
+            if (tsdoc && tdoc.duration && tsdoc.startAt <= new Date(Date.now() - Math.floor(tdoc.duration * HOUR))) return false;
+            return tdoc.beginAt <= now && now < tdoc.endAt;
+        };
+        // model/contest.ts:71-76
+        const isDone = (tdoc, tsdoc) => {
+            if (tdoc.endAt <= new Date()) return true;
+            if (tsdoc && tsdoc.endAt && tsdoc.endAt <= new Date()) return true;
+            if (tsdoc && tdoc.duration && tsdoc.startAt <= new Date(Date.now() - Math.floor(tdoc.duration * HOUR))) return true;
+            return false;
+        };
+        // model/contest.ts:78-81
+        const isLocked = (tdoc, time = new Date()) => (!!tdoc.lockAt && tdoc.lockAt < time && !tdoc.unlocked);
+        // model/contest.ts:83-86
+        const isExtended = (tdoc) => !!tdoc.penaltySince && tdoc.penaltySince <= new Date() && new Date() < tdoc.endAt;
+        // 六条规则的 showScoreboard / showSelfRecord / showRecord：
+        // acm 125-127、oi 335-337、ioi 489-491、strictioi 500-502、ledo 580-582、homework 700-702
+        const RULES = {
+            acm: {
+                TEXT: 'XCPC',
+                showScoreboard: (tdoc, now) => now > tdoc.beginAt,
+                showSelfRecord: () => true,
+                showRecord: (tdoc, now) => now > tdoc.endAt && !isLocked(tdoc),
+            },
+            oi: {
+                TEXT: 'OI',
+                showScoreboard: (tdoc, now) => now > tdoc.endAt && !tdoc.keepScoreboardHidden,
+                showSelfRecord: (tdoc, now) => now > tdoc.endAt && !tdoc.keepScoreboardHidden,
+                showRecord: (tdoc, now) => now > tdoc.endAt && !tdoc.keepScoreboardHidden,
+            },
+            ioi: {
+                TEXT: 'IOI',
+                showRecord: (tdoc, now) => now > tdoc.endAt && !isLocked(tdoc),
+                showSelfRecord: () => true,
+                showScoreboard: (tdoc, now) => now > tdoc.beginAt,
+            },
+            strictioi: {
+                TEXT: 'IOI(Strict)',
+                showRecord: (tdoc, now) => now > tdoc.endAt && !tdoc.keepScoreboardHidden,
+                showSelfRecord: (tdoc) => !tdoc.keepScoreboardHidden || !isDone(tdoc),
+                showScoreboard: (tdoc, now) => now > tdoc.endAt && !tdoc.keepScoreboardHidden,
+            },
+            ledo: {
+                TEXT: 'Ledo',
+                showScoreboard: (tdoc, now) => now > tdoc.beginAt,
+                showSelfRecord: () => true,
+                showRecord: (tdoc, now) => now > tdoc.endAt,
+            },
+            homework: {
+                TEXT: 'Assignment', hidden: true, features: ['scoreboard', 'download'],
+                showScoreboard: () => true,
+                showSelfRecord: () => true,
+                showRecord: (tdoc, now) => now > tdoc.endAt,
+            },
+        };
+        // model/contest.ts:1051-1056
+        function canViewHiddenScoreboard(tdoc) {
+            if (this.user.own(tdoc)) return true;
+            if (tdoc.rule === 'homework') return this.user.hasPerm(PERM.PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD);
+            return this.user.hasPerm(PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD);
+        }
+        // model/contest.ts:1057-1073。模板用 .call(handler, tdoc, ...) 调用，
+        // 所以这三个必须是普通 function（拿 this.user），不能写成箭头函数。
+        function canShowRecord(tdoc, allowPermOverride = true) {
+            if (RULES[tdoc.rule].showRecord(tdoc, new Date())) return true;
+            if (allowPermOverride && canViewHiddenScoreboard.call(this, tdoc)) return true;
+            return false;
+        }
+        function canShowSelfRecord(tdoc, allowPermOverride = true) {
+            if (RULES[tdoc.rule].showSelfRecord(tdoc, new Date())) return true;
+            if (allowPermOverride && canViewHiddenScoreboard.call(this, tdoc)) return true;
+            return false;
+        }
+        function canShowScoreboard(tdoc, allowPermOverride = true) {
+            if (RULES[tdoc.rule].showScoreboard(tdoc, new Date())) return true;
+            if (allowPermOverride && canViewHiddenScoreboard.call(this, tdoc)) return true;
+            return false;
+        }
+        // model/contest.ts:1129-1136。返回的是英文 key，翻译由模板里的 _() 完成，
+        // 与上游一致（上游在 model 里就 _() 了，但那要求全局 i18n，沙箱没有；
+        // 两边最终都查 zh.yaml 的同一批 key，渲染结果相同）。
+        const statusText = (tdoc, tsdoc) => (
+            isNew(tdoc) ? 'New'
+                : isUpcoming(tdoc) ? 'Ready (☆▽☆)'
+                    : isOngoing(tdoc, tsdoc) ? 'Live...' : 'Done');
+        return {
+            RULES, isNew, isUpcoming, isNotStarted, isOngoing, isDone, isLocked, isExtended,
+            statusText, canViewHiddenScoreboard, canShowRecord, canShowSelfRecord, canShowScoreboard,
+        };
+    })(),
     training: {
         getPids: (dag) => Array.from(new Set((dag || []).reduce((a, n) => a.concat(n.pids || []), []))),
     },
@@ -566,6 +691,13 @@ const SYSTEM_DEFAULTS = {
     'ui-default.domainNavigation': true,
     'ui-default.enableScratchpad': true,
     'avatar.gravatar_url': '//cn.gravatar.com/avatar/',
+    // model/setting.ts:359-363 的默认值。ranking.html:60 用它算名次，
+    // 少了这一条首列会渲染成 NaN。
+    'pagination.problem': 100,
+    'pagination.contest': 20,
+    'pagination.discussion': 50,
+    'pagination.record': 100,
+    'pagination.ranking': 100,
     // partials/category.html 读的是域设置 problem.categories（YAML 文本，
     // 结构见 model/builtin.ts:120 的 CATEGORIES：{ 大类: [子类…] }）。
     // 这里是仿真数据，只保证形状对，不代表线上实际配了哪些分类。
@@ -727,7 +859,7 @@ function createEnv({ addonTemplateDirs = [], settings = {} } = {}) {
 }
 
 module.exports = {
-    createEnv, model, PERM, PRIV, STATUS, ROUTES, makeUrl, formatString,
+    createEnv, model, modelFor, PERM, PRIV, STATUS, ROUTES, makeUrl, formatString,
     datetimeSpan, size, formatSeconds, avatarUrl, loadLocale,
     TEMPLATES_UPSTREAM, REF, buildRegistry,
 };

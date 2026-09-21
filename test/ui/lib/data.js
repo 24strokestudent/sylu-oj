@@ -9,7 +9,7 @@
  * 数据内容用"看起来像校内 OJ"的真实语义填充，但不含任何写死的统计数字（ACCEPTANCE §29 §65）。
  */
 
-const { PERM, PRIV, STATUS } = require('./hydro');
+const { PERM, PRIV, STATUS, model } = require('./hydro');
 
 const HEX = '0123456789abcdef';
 let seq = 0;
@@ -513,10 +513,159 @@ function recordDetailBody() {
     };
 }
 
+/**
+ * ---------------------------------------------------------------- 比赛 / 作业 / 训练 / 讨论 / 排名
+ *
+ * 这一节对应台账里原先"未覆盖"的几行。同样只对齐形状不编统计：
+ *   - 比赛列表 contest.ts:66-77、比赛详情 contest.ts:166-184、作业列表 homework.ts:70-77、
+ *     训练列表 training.ts:92-97、讨论列表 discussion.ts:86-91、排名 domain.ts:35-39、
+ *     登录 user.ts:57-63。
+ *   - 每条比赛的时间都是刻意挑的：进行中 / 未开始 / 已结束但榜单隐藏 / 已结束且榜单公开。
+ *     check.js 的 checkContestGates 就是拿这四条时间线去问侧栏"该不该有那个链接"，
+ *     所以改这些偏移量等于改断言，要一起改。
+ */
+
+/** Tdoc 的最小可用形状：只放模板真的读到的字段，其余留空数组/null。 */
+function contestDoc(docId, title, rule, beginAt, endAt, extra = {}) {
+    return {
+        docId,
+        _id: oid(30),
+        domainId: 'system',
+        title,
+        content: extra.content || '本次比赛面向全校本科生，采用线上形式。请提前检查编译环境。',
+        owner: extra.owner === undefined ? 1002 : extra.owner,
+        maintainer: [],
+        assign: extra.assign || [],
+        rule,
+        beginAt,
+        endAt,
+        penaltySince: extra.penaltySince || null,
+        pids: extra.pids || [1001, 1003, 1005],
+        duration: extra.duration,
+        attend: extra.attend === undefined ? 24 : extra.attend,
+        rated: !!extra.rated,
+        keepScoreboardHidden: !!extra.keepScoreboardHidden,
+        allowPrint: false,
+        allowTeam: false,
+        _code: extra._code || null,
+        privateFiles: [],
+    };
+}
+
+const CONTEST_DOCS = {
+    // acm：进行中且本人已参加。showScoreboard = now > beginAt，所以此刻榜单入口应当出现。
+    live: contestDoc('c00000000000000000000001', '2026 新生程序设计练习赛', 'acm', d(-1, 18), d(0, 21), { attend: 42, rated: true }),
+    // oi：还有六天开始。未开始的比赛既不该有题目列表入口，也不该有榜单入口。
+    upcoming: contestDoc('c00000000000000000000002', '数据结构专题月赛', 'oi', d(6, 9), d(6, 14), { attend: 17, keepScoreboardHidden: true }),
+    // oi：已结束但教师勾了"隐藏榜单"。榜单入口仍不该对学生出现（管理员看到的是"(隐藏)"变体）。
+    endedHidden: contestDoc('c00000000000000000000003', '校赛第一轮（榜单未公布）', 'oi', d(-12, 9), d(-10, 12), { keepScoreboardHidden: true }),
+    // oi：已结束且榜单公开。
+    endedOpen: contestDoc('c00000000000000000000004', '程序设计基础结课赛', 'oi', d(-30, 9), d(-28, 12), { attend: 63 }),
+};
+
+/** tsdocAsPublic() 的产物（contest.ts:107-115）：只挑列出的那几个字段。 */
+function contestStatus(tdoc, attend) {
+    return attend ? { attend: true, subscribe: false, startAt: tdoc.beginAt } : null;
+}
+
+/** 比赛列表 body（contest.ts:66-77） */
+function contestListBody({ udoc = null } = {}) {
+    // 分组可见性照抄 contest.ts:47-53 的查询条件：
+    // 没有 PERM_VIEW_HIDDEN_CONTEST 的人只看得到"未设分组（assign 为空）或与自己有关"的比赛。
+    // 这里复刻的是 assign 那一支，用来证明"指定分组的比赛不会出现在别人列表里"。
+    const canViewHidden = !!udoc && udoc.hasPerm(PERM.PERM_VIEW_HIDDEN_CONTEST);
+    const tdocs = Object.values(CONTEST_DOCS).filter((t) => canViewHidden || !t.assign.length);
+    const tsdict = {};
+    if (udoc) tsdict[CONTEST_DOCS.live.docId] = { attend: true };
+    return { page: 1, tpcount: 1, qs: '', rule: '', tdocs, tsdict, groups: [], group: '', q: '' };
+}
+
+/** 指定分组的那条只在 admin 场景出现，用来跑上面那个过滤器的正反两面。 */
+CONTEST_DOCS.grouped = contestDoc(
+    'c00000000000000000000005', '图论专题训练赛（仅 2024 级）', 'acm',
+    d(2, 18), d(2, 21), { assign: ['2024 级'], attend: 3 },
+);
+
+/** 比赛详情 body（contest.ts:166-184）。state 取 CONTEST_DOCS 的键名。 */
+function contestDetailBody(state, { udoc = null } = {}) {
+    const tdoc = CONTEST_DOCS[state];
+    if (!tdoc) throw new Error(`没有 ${state} 号比赛夹具，可用：${Object.keys(CONTEST_DOCS).join(', ')}`);
+    const attended = state === 'live';
+    return {
+        tdoc,
+        tsdoc: contestStatus(tdoc, attended),
+        udict: { [tdoc.owner]: Udict[tdoc.owner] || user(tdoc.owner, `user${tdoc.owner}`) },
+        team_vdocs: [],
+        // tsdoc.attend 且有私有附件时才有内容；夹具给空数组，页面因此不渲染 Files 区块
+        files: [],
+        urlForFile: () => '#',
+    };
+}
+
+/** 作业列表 body（homework.ts:58-77）。calendar 的构造规则同 :61-67。 */
+function homeworkListBody() {
+    const htdocs = [
+        contestDoc('h00000000000000000000001', 'C 语言程序设计 · 第三次作业', 'homework', d(-4, 8), d(7, 23), {
+            penaltySince: d(5, 23), attend: 51, content: '本轮作业覆盖循环与数组，超出 penaltySince 后仍有分档扣分。',
+        }),
+        contestDoc('h00000000000000000000002', 'C 语言程序设计 · 第二次作业', 'homework', d(-21, 8), d(-14, 23), {
+            penaltySince: d(-16, 23), attend: 58, content: '分支结构。',
+        }),
+    ];
+    const calendar = htdocs.map((tdoc) => {
+        const cal = Object.assign({}, tdoc, { url: `/homework/${tdoc.docId}` });
+        if (model.contest.isExtended(tdoc) || model.contest.isDone(tdoc)) {
+            cal.endAt = tdoc.endAt;
+            cal.penaltySince = tdoc.penaltySince;
+        } else {
+            cal.endAt = tdoc.penaltySince;
+        }
+        return cal;
+    });
+    return { tdocs: htdocs, calendar, tpcount: 1, page: 1, qs: '', groups: [], group: '', q: '' };
+}
+
+/** 训练列表 body（training.ts:92-97）。tdict 需要能按 docId 反查，故补上 docId 字段。 */
+function trainingListBody({ role = 'student' } = {}) {
+    const [tdocs, tsdict] = trainings();
+    const tdict = {};
+    for (const tdoc of tdocs) tdict[tdoc.docId] = tdoc;
+    Object.keys(tsdict).forEach((key) => { tsdict[key].docId = key; });
+    return {
+        tdocs, page: 1, tpcount: 1, q: '',
+        tsdict: role === 'guest' ? {} : tsdict,
+        tdict: role === 'guest' ? {} : tdict,
+    };
+}
+
+/** 讨论列表 body（discussion.ts:86-91）。vnode 给空对象 → 侧栏走"节点列表"分支。 */
+function discussionListBody() {
+    const [ddocs, vndict] = discussions();
+    const udict = {};
+    ddocs.forEach((ddoc) => { udict[ddoc.owner] = Udict[ddoc.owner] || user(ddoc.owner, `user${ddoc.owner}`); });
+    return {
+        ddocs, dpcount: 1, udict, page: 1, page_name: 'discussion_main',
+        vndict, vnode: {}, vnodes: discussionNodes(),
+    };
+}
+
+/** 排名 body（domain.ts:35-39）：udocs 已按 rp 降序，页面上没有任何写死的汇总数。 */
+function rankingBody() {
+    const udocs = Object.values(Udict).sort((a, b) => b.rp - a.rp);
+    return { udocs, upcount: 1, ucount: udocs.length, page: 1 };
+}
+
+/** 登录 body（user.ts:57-63）。loginMethods 为空 = 站点没接第三方登录。 */
+function loginBody() {
+    return { redirect: '', builtInLogin: true, loginMethods: [] };
+}
+
 module.exports = {
     oid, user, homepageContents, BULLETIN, HERO_BULLETIN, Udict,
     STUDENT, TEACHER, recentProblems, contests, homeworks, trainings, discussions, ranking,
-    PROBLEMS, RICH_RECORD,
+    PROBLEMS, RICH_RECORD, CONTEST_DOCS,
     problemList, problemDetailBody, recordListBody, recordDetailBody,
+    contestListBody, contestDetailBody, homeworkListBody, trainingListBody,
+    discussionListBody, rankingBody, loginBody,
 };
 

@@ -78,11 +78,18 @@ ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻�
   三项计数只许下降。改造前是 53 / 51，首页模板化后 8 / 4，导航品牌改成真实 DOM 后 8 / 1，
   题目详情接入后 10 / 3（新增两条挂在题面 markdown 的块首标题上，与公告同类）；
   字面色值当前 14（首页深色代码窗口 12 + 导航 2），oj.css 是 0，说明这个标准做得到。
-- **C 级页面**（`checkTierC`）：题库/题面/记录/提交详情九个场景必须渲染出正文——
-  夹具与上游模板脱节时 Nunjucks 不报错，只交出一张空表，据此出的截图全是假的。
+- **C 级页面**（`checkTierC`）：题库/题面/记录/提交详情/比赛/作业/训练/讨论/排名/登录
+  二十四个场景必须渲染出正文——夹具与上游模板脱节时 Nunjucks 不报错，只交出一张空表，
+  据此出的截图全是假的。标记串一律取上游模板自己写出的 class，不是本站起的名字。
   同一处还断言隐藏题 1009 只出现在 `problems-admin`（guest/student/teacher 三页都必须没有，
   管理员必须**有**：只查反例会养出一个"永远过滤掉"的假通过）；
   判题状态文字没被 `display:none` 抹掉；窄屏 `font-size:0` 压缩状态列必有 `> span` 还原配对。
+- **比赛数据不提前泄露**（`checkContestGates`）：见上一节，正反例都断言；
+  另外分组题（`tdoc.assign` 非空）只对有 `PERM_VIEW_HIDDEN_CONTEST` 的身份出现。
+- **死链接**（`checkDeadLinks`）：产物里每个 `href="#"` 都必须是登记过的例外
+  （目前只有游客页的"忘记密码"触发器，且该页必须带 `data-lostpass`）。
+  上游模板引用了未移植进 `lib/hydro.js` 的路由时，`url()` 会静默返回 `#`，
+  页面照样好看，点下去才知道是死的——所以做成闸门而不是靠点击。
 - **品牌区**：站名与副标题必须由 `partials/nav.html` 渲染成真实文本节点；
   CSS 里再出现 `content: "...SYLU..."` 直接 fail（§8.2 的伪元素 hack 不许复活）。
 - **装配一致性**：`public/sylu/css/` 目录、`configure.sh` 的 `CSS_ORDER`、
@@ -134,10 +141,48 @@ home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 
 | `problems-guest/student/teacher/admin` | 仅上游 `problem_main.html` | 四档权限 | — | 题库 + 隐藏题可见性 |
 | `problem-guest/student/admin` | 仅上游 `problem_detail.html` | 三档权限 | — | 题面与递交入口的权限分叉 |
 | `records-student` / `record-student` | 仅上游 `record_main/record_detail.html` | 学生 | — | 记录列表与判题详情 |
+| `contests-student` / `contests-admin` | 仅上游 `contest_main.html` | 学生 / 管理员 | — | 比赛列表 + 分组题的可见性 |
+| `contest-live-student` | 仅上游 `contest_detail.html` | 学生 | — | 进行中：题目列表与榜单都该在 |
+| `contest-upcoming-student` | 同上 | 学生 | — | 未开始：两个入口都不该出现 |
+| `contest-ended-hidden-student` / `-admin` | 同上 | 学生 / 管理员 | — | OI 榜未公布：只有管理员看得到入口 |
+| `contest-ended-open-student` | 同上 | 学生 | — | 已放榜：入口正常出现 |
+| `homework-student` | 仅上游 `homework_main.html` | 学生 | — | 作业列表与日历字段 |
+| `training-student` / `training-guest` | 仅上游 `training_main.html` | 学生 / 未登录 | — | 训练进度与未完成态 |
+| `discuss-student` / `discuss-guest` | 仅上游 `discussion_main.html` | 学生 / 未登录 | — | 帖子列表与讨论节点 |
+| `ranking-student` / `ranking-guest` | 仅上游 `ranking.html` | 学生 / 未登录 | — | RP 榜单表格 |
+| `login-guest` | 仅上游 `login.html` | 未登录 | — | `layout/immersive.html` 版式下的品牌层 |
 
 C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造出这些页面的 body
-（形状取自 `handler/problem.ts:183-193 / 355-368`、`handler/record.ts:119-133 / 218-220`，
-登记在 `PAGE_BODIES` 里；新增场景没登记会直接抛错，不会静默出一张空白页）。
+（形状取自 `handler/problem.ts:183-193 / 355-368`、`handler/record.ts:119-133 / 218-220`、
+`handler/contest.ts`、`handler/homework.ts:61-67`、`handler/training.ts`、
+`handler/discussion.ts`、`handler/ranking.ts`，登记在 `PAGE_BODIES` 里；
+新增场景没登记会直接抛错，不会静默出一张空白页）。
+
+### 比赛可见性：为什么要复刻 model.contest，以及 nunjucks 吞掉 thisArg 这件事
+
+侧栏的「题目列表 / 成绩表 / 我的提交」三个入口全部由 `model.contest.canShow*` 决定
+输不输出（`partials/contest_sidebar.html:117-159`），而这四个函数的上游签名是
+`this: { user: User }`（`model/contest.ts:1051-1073`）——它们靠 `this.user` 判权限。
+所以沙箱做了两件事：
+
+1. `lib/hydro.js` 逐字移植时间判定（`isNew/isUpcoming/isNotStarted/isOngoing/isDone/isLocked/isExtended`）、
+   六种赛制的可见性回调和 `statusText`。不复刻这一层，"榜单会不会提前出现"就取决于
+   我在夹具里手写的布尔值，而不是模板真正的判断；闸门测的就是一句自我确认。
+2. 每个场景渲染前 `env.addGlobal('model', H.modelFor(handler))` 重绑一次 model。
+   原因是 nunjucks 3.2.4 的 `memberLookup` 把成员函数调用编译成 `obj[val].apply(obj, args)`：
+   模板里写 `model.contest.canShowScoreboard.call(handler, tdoc, False)`，
+   真正执行的却是 `canShowScoreboard.apply(model.contest, [tdoc, False])`——
+   **模板显式给的 `handler` 这个 thisArg 被吞掉了**，`this.user` 因此是 undefined。
+   （这个写法由 `.ref/Hydro` 的 `78e898f core: contest team (#1183)` 引入，
+   线上有没有等价影响要看运行时 `model.contest` 上是否挂了 user，沙箱不替上游下结论，
+   只保证自己按声明的签名把 `handler` 递进去。）
+   顺带一句：`False` 在 JS 侧是未定义标识符，于是第三个参数走默认值
+   `allowPermOverride = true`——所以沙箱里"未开始的 OI 赛"看不到榜单，靠的是
+   `canViewHiddenScoreboard` 真的按权限返回 false，而不是那个 `False`。
+
+`checkContestGates` 把这条链路钉住：拿四条时间线（进行中 / 未开始 / 已结束且榜未公布 /
+已结束且已放榜）逐个问侧栏里有没有 `/contest/:tid/scoreboard` 与 `/problems` 链接，
+正反例都查。改 `lib/data.js` 里那几处 `d(-1, 18)` 之类的时间偏移量，等于改断言本身。
 
 `baseline-*` 用 `HERO_BULLETIN`（改造前 `configure.sh` 往公告里塞的那段 HTML 的冻结副本），
 因为线上现状就是"整块首屏塞进公告"；`home-*` 用纯文本公告，首屏改由模板承载。
