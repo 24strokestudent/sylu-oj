@@ -117,7 +117,7 @@ if [ "$APPLY" = 1 ]; then
     FOOTER_HTML="$(printf '%s\n' \
         '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>' \
         '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>' \
-        '<link rel="stylesheet" href="/sylu-brand.css?v=20260921">')"
+        '<link rel="stylesheet" href="/sylu-brand.css?v=20260921b">')"
 
     # §40 关于页正文：只写事实，不编造统计数字、不放假联系方式（§29 §65）
     ABOUT_MD="$(cat <<'ABOUT'
