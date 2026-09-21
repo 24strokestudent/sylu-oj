@@ -73,12 +73,12 @@ function translateFn(zh) {
     };
 }
 
-function makeHandler(user) {
+function makeHandler(user, opts) {
     const handler = {
         user,
         domain: {
             _id: 'system', name: 'SYLU OJ', avatar: '',
-            bulletin: D.BULLETIN,
+            bulletin: (opts && opts.bulletin) || D.BULLETIN,
             ui: {
                 name: 'SYLU OJ',
                 footer_extra_html: '<span>非学校官方信息系统 · 请勿上传隐私数据</span>',
@@ -147,13 +147,9 @@ function renderPage({
     if (fs.existsSync(vendor)) links.push('<link rel="stylesheet" href="vendor/theme.css">');
     else links.push('<link rel="stylesheet" href="http://101.42.27.44/theme-4.58.5.css">');
     const rel = `${PUB_REL}/`;
+    const cssDir = path.join(ADDON, 'public', 'sylu', 'css');
     for (const f of CSS_FILES) {
-        if (fs.existsSync(path.join(ADDON, 'public', 'css', f))) {
-            links.push(`<link rel="stylesheet" href="${rel}css/${f}">`);
-        }
-    }
-    if (!fs.existsSync(path.join(ADDON, 'public', 'css')) && fs.existsSync(path.join(ADDON, 'public', 'sylu-brand.css'))) {
-        links.push(`<link rel="stylesheet" href="${rel}sylu-brand.css">`);
+        if (fs.existsSync(path.join(cssDir, f))) links.push(`<link rel="stylesheet" href="${rel}sylu/css/${f}">`);
     }
     html = html.replace('</head>', `  ${links.join('\n  ')}\n</head>`);
     // 绝对路径的静态资源（/sylu-logo.svg 等）由 server.ts:114-120 从各 addon 的
@@ -180,9 +176,9 @@ function renderPage({
     return html.length;
 }
 
-function homepageState(role, config) {
+function homepageState(role, config, bulletin) {
     const user = ROLES[role]();
-    const handler = makeHandler(user);
+    const handler = makeHandler(user, bulletin);
     return {
         handler,
         contents: D.homepageContents({ role, config }),
@@ -191,40 +187,54 @@ function homepageState(role, config) {
     };
 }
 
+/**
+ * 场景表。baseline-* 必须复刻线上现状：公告里塞着整块 Hero HTML，
+ * 且只加载上游模板（不启用 addon）；home-* 是改造后形态，
+ * 公告只留纯文本，首屏改由模板承载。
+ */
+const SCENARIOS = {
+    'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero' },
+    'baseline-student': { role: 'student', addon: false, bulletin: 'hero' },
+    'home-guest': { role: 'guest', addon: true, bulletin: 'plain' },
+    'home-student': { role: 'student', addon: true, bulletin: 'plain' },
+    'home-teacher': { role: 'teacher', addon: true, bulletin: 'plain' },
+    'home-admin': { role: 'admin', addon: true, bulletin: 'plain' },
+};
+const HERO = { bulletin: D.HERO_BULLETIN };
+const PLAIN = { bulletin: D.BULLETIN };
+
 function main() {
     const argv = process.argv.slice(2);
     const all = argv.includes('--all');
     fs.mkdirSync(OUT, { recursive: true });
 
-    const targets = all
-        ? ['baseline-guest', 'baseline-student', 'home-guest', 'home-student', 'home-teacher', 'home-admin']
-        : argv.filter((a) => !a.startsWith('--'));
+    const targets = all ? Object.keys(SCENARIOS) : argv.filter((a) => !a.startsWith('--'));
     if (!targets.length) {
-        console.log('用法：node test/ui/render.js --all  或  node test/ui/render.js home-student ...');
+        console.log(`用法：node test/ui/render.js --all  或  node test/ui/render.js ${Object.keys(SCENARIOS)[0]} ...`);
         return;
     }
     const sylu = loadSyluConfig();
     if (!sylu) console.warn('! addons/sylu-brand/homepage.yaml 缺失，home-* 场景将退回上游默认配置');
 
     for (const t of targets) {
-        const [kind, role = 'student'] = t.split('-');
-        const baseline = kind === 'baseline';
-        const config = baseline ? CONFIG_DEFAULT : (sylu || CONFIG_DEFAULT);
-        const { env, overridden, settingGet } = buildEnv({ addon: !baseline });
+        const sc = SCENARIOS[t];
+        if (!sc) { console.error(`未知场景 ${t}；可用：${Object.keys(SCENARIOS).join(', ')}`); process.exit(1); }
+        const config = sc.addon ? (sylu || CONFIG_DEFAULT) : CONFIG_DEFAULT;
+        const { env, overridden, settingGet } = buildEnv({ addon: sc.addon });
         try {
             const n = renderPage({
                 template: 'main.html',
-                state: homepageState(role, config),
+                state: homepageState(sc.role, config, sc.bulletin === 'hero' ? HERO : PLAIN),
                 env,
                 settingGet,
                 out: `${t}.html`,
             });
-            console.log(`✓ ${t}.html  ${n} 字节${baseline ? '（改造前基线）' : ''}`);
+            console.log(`✓ ${t}.html  ${n} 字节${sc.addon ? '' : '（改造前基线）'}`);
         } catch (e) {
             console.error(`✗ ${t} 渲染失败：\n  ${describeError(e)}`);
             process.exitCode = 1;
         }
-        if (!baseline && overridden.length) {
+        if (sc.addon && overridden.length) {
             console.log(`  覆盖上游模板：${overridden.join(', ')}`);
         }
     }
@@ -232,4 +242,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { main, buildEnv, renderPage, homepageState, makeHandler, ROLES, CONFIG_DEFAULT, loadSyluConfig };
+module.exports = { main, buildEnv, renderPage, homepageState, makeHandler, ROLES, SCENARIOS, CONFIG_DEFAULT, loadSyluConfig, CSS_FILES };

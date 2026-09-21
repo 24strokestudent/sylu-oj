@@ -16,16 +16,46 @@ node check.js                      # 回归闸门，违反红线即 exit 1
 node diag.js home-student          # 布局量测（排查"渲染出来了但看不见"这类问题）
 ```
 
+## 怎么证明"这次改动没改外观"
+
+拆分 CSS、换模板这类改动，目视说"看起来一样"不算证据。两条命令：
+
+```bash
+node diff.js a.png b.png                      # 两张图逐像素差异率
+node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
+```
+
+`compare.js` 从目标 ref 还原当时的样式，为每个场景造一份"旧样式孪生页"，两边出图后比像素。
+本次 CSS 拆分（437 行单文件 → 5 个职责文件 + 令牌）实测 **差异 0.000%（0/4557600 像素）**。
+
+## 闸门查什么
+
+`check.js` 分两类：
+
+- **HARD**：渲染产物不得泄漏错误串；必须保留 `Powered by Hydro` 归属与"非官方"声明；
+  addon 覆盖上游模板必须在 §49 的 A/B 级白名单内（C 级业务模板只能用 CSS）。
+- **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器、`:has()` 隐藏业务模块
+  三项计数只许下降，基线取改造前实测值。
+- **装配一致性**：`public/sylu/css/` 目录、`configure.sh` 的 `CSS_ORDER`、
+  `render.js` 的 `CSS_FILES` 三处必须同步——新增样式文件忘了挂链接会直接 fail。
+
 上游模板来自 `.ref/Hydro`（gitignore 的只读参考）。找不到时设 `SYLU_HYDRO_REF` 指向
 `Hydro/packages/ui-default/templates` 的父目录。
 
 ## 场景
 
-| 名称 | 模板 | 身份 | 用途 |
-| --- | --- | --- | --- |
-| `baseline-guest` | 仅上游 | 未登录 | 改造前基线 |
-| `baseline-student` | 仅上游 | 学生 | 改造前基线 |
-| `home-guest/student/teacher/admin` | 上游 + addon | 四档权限 | 改造后效果 |
+| 名称 | 模板 | 身份 | 公告 | 用途 |
+| --- | --- | --- | --- | --- |
+| `baseline-guest` | 仅上游 | 未登录 | 含 Hero HTML | 复刻线上现状 |
+| `baseline-student` | 仅上游 | 学生 | 含 Hero HTML | 复刻线上现状 |
+| `home-guest/student/teacher/admin` | 上游 + addon | 四档权限 | 纯文本 | 改造后效果 |
+
+`baseline-*` 用 `HERO_BULLETIN`（`deploy/configure.sh` 里那段公告原文），
+因为线上现状就是"整块首屏塞进公告"；`home-*` 用纯文本公告，首屏改由模板承载。
+两者用的是同一份数据源，差异只在渲染管线，这样才能验证 LEGACY 段样式是否被完整保留。
+
+实测：`<div class="sylu-hero">` 经 `|content` 过滤后 `class` 全部消失（`sylu-hero` 出现 0 次），
+`<em>` 等内容保留 —— 这就是首页样式只能按 `.richmedia > div:first-child` 猜 DOM 的根因。
 
 四档身份的 PERM/PRIV 取自上游真实位定义，用来验证"改 UI 不会给学生发权限"：
 导航项在四档下应各不相同，且 `关于本站` 只在加载 addon 时出现。

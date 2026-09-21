@@ -190,6 +190,41 @@ const BULLETIN = [
     '题面或评测有问题，请在讨论区发帖并附提交记录编号。',
 ].join('\n');
 
+/** 改造前形态：整块 Hero 塞在公告 HTML 里（deploy/configure.sh 的 SYLU_BULLETIN 原文）。
+ *  只用于 baseline-* 场景复现线上现状，并驱动 home.css 的 LEGACY 段——
+ *  这些规则按 DOM 位置生效，因为 markdown 过滤器会把 class 剥掉。 */
+const HERO_BULLETIN = [
+    '<div class="sylu-hero">',
+    '  <div>',
+    '    <p class="sylu-hero-kicker">WELCOME TO SYLU OJ</p>',
+    '    <h1>欢迎来到<em>沈阳理工</em> OJ 网</h1>',
+    '    <p class="sylu-hero-desc">一个面向全校师生的在线编程评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>',
+    '    <div class="sylu-hero-actions"><a href="/p">开始刷题</a><a href="/training">浏览训练</a></div>',
+    '  </div>',
+    '  <div class="sylu-code-window"><div class="sylu-code-bar">main.cpp</div><pre><code>#include &lt;iostream&gt;',
+    'using namespace std;',
+    'int main() {',
+    '  int a, b;',
+    '  cin &gt;&gt; a &gt;&gt; b;',
+    '  cout &lt;&lt; a + b &lt;&lt; endl;',
+    '  return 0;',
+    '}</code></pre><div class="sylu-code-result">● Accepted · 在线评测</div></div>',
+    '</div>',
+    '',
+    '<p>判题 · 比赛 · 训练 · 交流，一站式编程学习平台。</p>',
+    '',
+    '### 核心功能',
+    '',
+    '- [浏览题库](/p)：按标签和难度查找题目，提交代码并查看评测结果。',
+    '- [训练](/training)：进入题单，按计划持续练习。',
+    '- [比赛](/contest)：参加站内比赛，实时查看排名。',
+    '- [讨论社区](/discuss)：交流解题思路，反馈题面与评测问题。',
+    '',
+    '### 评测环境',
+    '',
+    '提交会在隔离沙箱中运行。编译器、时间限制和内存限制以题目页面显示为准；遇到题面或评测异常，请在讨论区反馈提交记录编号。',
+].join('\n');
+
 const Udict = {
     1001: user(1001, 'zhangsan', { rp: 1532, bio: '计算机 24 级，喜欢图论', level: 3 }),
     1002: user(1002, 'li-laoshi', { rp: 1480, bio: '任课教师', level: 5, badge: '教师#b12d28#ffffff' }),
@@ -230,6 +265,6 @@ function homepageContents({ role = 'student', config }) {
 }
 
 module.exports = {
-    oid, user, homepageContents, BULLETIN, Udict,
+    oid, user, homepageContents, BULLETIN, HERO_BULLETIN, Udict,
     STUDENT, TEACHER, recentProblems, contests, homeworks, trainings, discussions, ranking,
 };
