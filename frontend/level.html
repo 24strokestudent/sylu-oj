@@ -1,0 +1,205 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>排行榜 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 排行榜——沈阳理工大学在线评测系统用户排名，按通过题数、提交次数与通过率查看全校刷题情况。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="排行榜 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <!-- 子页面没有首页那些锚点区块，所以指回 index.html 对应位置 -->
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="index.html#latest">题库</a>
+        <a href="index.html#features">比赛</a>
+        <a href="index.html#features">讨论</a>
+        <a href="level.html" class="active">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 页头 ==================== -->
+  <section class="page-head">
+    <div class="container">
+      <h1 class="section-title">排行榜</h1>
+      <p class="section-sub">按通过题数排名 · 题数相同时提交次数少者优先</p>
+      <p class="page-head-meta">数据来源 <code>GET /api/rank</code> · 当前为占位示例数据</p>
+    </div>
+  </section>
+
+  <!-- ==================== 数据统计 ==================== -->
+  <section class="stats" id="rankStats">
+    <div class="container stats-grid">
+      <!-- 数字为占位数据（来自现有系统统计），接入后端后改为接口返回 -->
+      <div class="stat-item">
+        <div class="stat-num"><span data-count="16">0</span></div>
+        <div class="stat-label">题库题目</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span data-count="63">0</span></div>
+        <div class="stat-label">注册用户</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span data-count="235">0</span></div>
+        <div class="stat-label">累计提交</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num"><span data-count="137">0</span></div>
+        <div class="stat-label">通过次数</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 排名主体 ==================== -->
+  <section class="rank" id="rank">
+    <div class="container">
+
+      <!-- 工具条：搜索 / 学院筛选 / 排序 -->
+      <div class="rank-toolbar">
+        <div class="field">
+          <label for="rankSearch">搜索用户</label>
+          <div class="input-wrap">
+            <input type="search" id="rankSearch" placeholder="输入昵称或用户名" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="rankCollege">学院</label>
+          <div class="input-wrap">
+            <!-- 选项为占位数据，接入后端后改为由接口返回 -->
+            <select id="rankCollege">
+              <option value="">全部学院</option>
+              <option value="国际工程学院">国际工程学院</option>
+              <option value="信息科学与工程学院">信息科学与工程学院</option>
+              <option value="计算机科学与工程学院">计算机科学与工程学院</option>
+              <option value="自动化与电气工程学院">自动化与电气工程学院</option>
+              <option value="机械工程学院">机械工程学院</option>
+              <option value="其他学院">其他学院</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="rankSort">排序方式</label>
+          <div class="input-wrap">
+            <select id="rankSort">
+              <option value="solved">通过题数（默认）</option>
+              <option value="submissions">提交次数</option>
+              <option value="rate">通过率</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 排名表格 -->
+      <div class="rank-card">
+        <div class="table-scroll">
+          <table class="rank-table" id="rankTable">
+            <caption class="visually-hidden">用户排名表，可按通过题数、提交次数与通过率排序</caption>
+            <thead>
+              <tr>
+                <th scope="col">排名</th>
+                <th scope="col">用户</th>
+                <th scope="col">学院</th>
+                <th scope="col" class="num">通过题数</th>
+                <th scope="col" class="num">提交次数</th>
+                <th scope="col">通过率</th>
+              </tr>
+            </thead>
+            <tbody id="rankBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <p class="rank-count" id="rankCount" aria-live="polite"></p>
+
+      <!-- 我的排名：登录状态接入后改为显示真实名次 -->
+      <div class="rank-me">
+        <p><strong>我的排名</strong>：<span id="myRank">登录后即可查看我的名次、通过题数与提交记录</span></p>
+        <a href="login.html" class="btn btn-outline">登录查看</a>
+      </div>
+
+      <p class="rank-note">
+        排名依据为通过题目数；题数相同时按提交次数由少到多，再按通过率由高到低排序。
+        当前为占位示例数据，接入后端后改为 <code>/api/rank</code> 返回。
+      </p>
+
+    </div>
+  </section>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/level.js"></script>
+
+</body>
+
+</html>

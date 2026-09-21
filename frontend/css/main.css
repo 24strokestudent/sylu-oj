@@ -1,5 +1,6 @@
 /* ============================================================
-   SYLU OJ · 沈阳理工大学在线评测系统 — 首页样式
+   SYLU OJ · 沈阳理工大学在线评测系统 — 全站样式
+   （首页 / 排行榜 level / 注册 register / 登录 login 共用）
    校色取自校徽：红 #b12d28 / 棕 #231815 / 绿 #485742
    ============================================================ */
 
@@ -712,6 +713,275 @@ img {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.55);
+}
+
+/* ============================================================
+   排名页（level）
+   复用校色变量与按钮、统计条样式
+   ============================================================ */
+
+/* 屏幕阅读器可见、视觉隐藏 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 列表页页头（与首页 hero 同一套浅色渐变） */
+.page-head {
+  padding: 64px 0 54px;
+  text-align: center;
+  background:
+    radial-gradient(900px 380px at 85% -10%, rgba(35, 24, 21, 0.10), transparent 60%),
+    linear-gradient(160deg, #f2f6ef 0%, #ffffff 55%);
+}
+
+.page-head .section-title {
+  margin-bottom: 8px;
+}
+
+.page-head .section-sub {
+  margin-bottom: 0;
+}
+
+.page-head-meta {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.page-head-meta code,
+.rank-note code {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--brown-light);
+  color: var(--brown);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+/* ---------- 工具条 ---------- */
+
+.rank {
+  padding: 40px 0 76px;
+  background: var(--bg);
+}
+
+.rank-toolbar {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+/* 工具条复用认证页的 .field / .input-wrap，去掉多余下边距 */
+.rank-toolbar .field {
+  margin-bottom: 0;
+}
+
+/* ---------- 排名表格 ---------- */
+
+.rank-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rank-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.rank-table th,
+.rank-table td {
+  padding: 13px 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rank-table thead th {
+  background: var(--green-light);
+  color: var(--green-deeper);
+  font-size: 13px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--border);
+}
+
+.rank-table tbody tr + tr {
+  border-top: 1px solid var(--border);
+}
+
+.rank-table tbody tr:hover {
+  background: #fafcf9;
+}
+
+.rank-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 名次徽标 */
+.rank-no {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brown-light);
+  color: var(--brown);
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-no.top1 { background: #f6dfa8; color: #8a6414; }
+.rank-no.top2 { background: #e3e6e0; color: #5c6357; }
+.rank-no.top3 { background: #f0d9c4; color: #8a5a2b; }
+
+/* 用户单元格 */
+.rank-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rank-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--green-light);
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rank-user strong {
+  font-weight: 600;
+}
+
+.rank-user small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 通过率（数值 + 进度条） */
+.rank-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.rank-bar {
+  width: 56px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.rank-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+/* 空结果 */
+.rank-empty {
+  padding: 46px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.rank-count {
+  margin: 14px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.rank-count.is-error {
+  color: var(--brand-red);
+}
+
+/* ---------- 我的排名 ---------- */
+
+.rank-me {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 18px 22px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.rank-me p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.rank-me strong {
+  color: var(--green-deeper);
+}
+
+.rank-note {
+  margin: 18px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+/* ---------- 排名页响应式 ---------- */
+
+@media (max-width: 980px) {
+  .rank-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .page-head {
+    padding: 44px 0 40px;
+  }
+
+  .rank {
+    padding: 28px 0 56px;
+  }
+
+  .rank-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .rank-me {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
 }
 
 /* ============================================================
