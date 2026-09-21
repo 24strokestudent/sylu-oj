@@ -47,6 +47,10 @@ npm run dev
 - GitHub Pages：Settings → Pages → Source 选择 `frontend` 目录（部署后访问 `https://<用户名>.github.io/sylu-oj/`）
 - 正式上线：部署到云服务器（阿里云等），前端由 nginx 托管，后端对接 `/api` 接口
 
+## 贡献
+
+欢迎参与！提 PR 前请先阅读 [贡献指南（CONTRIBUTING.md）](./CONTRIBUTING.md)，其中有目录约定、代码风格、后端接口契约与提交规范。
+
 ## License
 
 [MIT](./LICENSE)
