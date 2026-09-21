@@ -18,6 +18,7 @@ Hydro 原生系统设置已经覆盖了大部分品牌需求。**优先用原生
 | 导航栏 Logo | `ui-default.nav_logo_dark` | 填 `/sylu-logo.svg`，资源由本插件提供 |
 | 页脚附加内容 | `ui-default.footer_extra_html` | **多行 HTML**，每行渲染成页脚一条；本站用它逐条直链 `/sylu/css/*.css` |
 | 关于页正文 | `ui-default.about` | Markdown。对应 `/wiki/about` 页面 |
+| 首页模块编排 | `hydrooj.homepage` | YAML 数组，本站的值来自本插件 `homepage.yaml` |
 | 上传大小上限 | `server.upload` | 默认 `256m`，按需调整 |
 
 > `ui-default.footer_extra_html` 是这次品牌改造的关键：**免责声明和非官方声明用原生设置就能上，不用改模板**。
@@ -62,13 +63,18 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 
 ## 这个插件补的是什么
 
-原生设置做不到「加一个自定义导航入口」和「一页聚合的平台须知」，所以本插件只做这两件事：
+原生设置做不到「加一个自定义导航入口」和「一页聚合的平台须知」，所以本插件只做这几件事：
 
 - 路由 `GET /sylu/about` —— 非官方声明 + 平台使用须知（使用须知 / 判题环境 / 反馈方式 / 隐私说明，§40）
 - 顶栏导航注入一个「关于本站」入口（指向上面这个路由）
+- 覆盖首页模板 `templates/main.html`，把首屏 Hero、绿色收束条和四个快捷入口变成**代码里的结构**，
+  不再靠往公告里塞 HTML + 深层 CSS 选择器实现
+- 覆盖 `templates/partials/homepage/discussion_nodes.html`，只多加了一条"没有版块就不渲染"的判断
+- `homepage.yaml` 是首页模块编排的内容，部署时原样写入 `hydrooj.homepage`
 - 通过 `public/sylu/css/*.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
 
-它**不碰**用户系统、题库、Judge，也不改任何 Hydro 模板。
+它**不碰**用户系统、题库、Judge。模板只覆盖上列两份，且都是 addon 覆盖而非改 Hydro 源码（§49 A 级）；
+题库、记录、比赛、作业、讨论、排名与后台仍然完全使用上游模板。
 
 ## 样式是怎么加载的
 

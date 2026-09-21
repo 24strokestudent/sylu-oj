@@ -1,10 +1,17 @@
 'use strict';
 
 /**
- * 出图：把 out/*.html 用无头 Chrome/Edge 截成 PNG，供目视验收。
+ * 出图：把 out/*.html 截成 PNG，供目视验收。
  *
  * 为什么不用 MCP 浏览器：本机的内置浏览器视口是隐藏的，截图会被
  * NATIVE_BROWSER_VIEWPORT_UNAVAILABLE 挡掉；无头 Chrome 不依赖它。
+ *
+ * 两条出图路径：
+ *   puppeteer-core（装了就用）—— 走 CDP 的 setViewport，视口宽度就是请求的宽度，
+ *     fullPage 直接截整页。窄屏**必须**用它。
+ *   Chrome 命令行（没装也能跑）—— --window-size 在 Windows 上有约 504px 的最小值，
+ *     请求 390 实际得到 504，出图会按 390 裁掉右边一条；
+ *     所以它会为窄屏打印警告，避免把 504 的排版当成 390 的结论。
  *
  * 用法：
  *   node test/ui/shot.js                     # 全部页面 × 全部断点
@@ -37,9 +44,25 @@ const BREAKPOINTS = [
 ];
 const MIN_H = 900;
 const MAX_H = 12000;
+/** Windows 上 Chrome 的 --window-size 最小值，实测 390/500 都会得到 innerWidth 504 */
+const CLI_MIN_WIDTH = 504;
 
 // --screenshot 只截视口，不截整页；先量出真实高度再出图。
 const MEASURE = `<script>document.title='H'+document.documentElement.scrollHeight+'H';</script>`;
+
+function findBrowser() {
+    for (const p of CANDIDATES) if (fs.existsSync(p)) return p;
+    return null;
+}
+
+function loadPuppeteer() {
+    try {
+        // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+        return require('puppeteer-core');
+    } catch {
+        return null;
+    }
+}
 
 function measureHeight(browser, profile, file, width) {
     const tmp = `${file}.measure.html`;
@@ -60,12 +83,58 @@ function measureHeight(browser, profile, file, width) {
     }
 }
 
-function findBrowser() {
-    for (const p of CANDIDATES) if (fs.existsSync(p)) return p;
-    return null;
+function shootCli(browser, file, bp, to) {
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sylu-shot-'));
+    const h = measureHeight(browser, profile, file, bp.w);
+    try {
+        execFileSync(browser, [
+            '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
+            `--user-data-dir=${profile}`,
+            `--window-size=${bp.w},${h}`,
+            '--virtual-time-budget=6000',
+            `--screenshot=${to}`,
+            `file://${file.replace(/\\/g, '/')}`,
+        ], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 90000 });
+    } finally {
+        try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* 交给系统回收 */ }
+    }
+    return h;
 }
 
-function main() {
+async function shootPuppeteer(puppeteer, executablePath, jobs) {
+    const browser = await puppeteer.launch({
+        executablePath,
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'],
+    });
+    const done = [];
+    try {
+        const page = await browser.newPage();
+        for (const { file, bp, to } of jobs) {
+            // deviceScaleFactor 固定 1：像素数等于 CSS px，diff.js 的比对基准才不会漂
+            await page.setViewport({ width: bp.w, height: 900, deviceScaleFactor: 1 });
+            // eslint-disable-next-line no-await-in-loop
+            await page.goto(`file:///${file.replace(/\\/g, '/')}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            // 不等 load：页面里有 //cn.gravatar.com 这类协议相对引用，在 file:// 下解析成
+            // file://cn.gravatar.com/…，请求挂住就会把 load 事件拖到超时。
+            // DOMContentLoaded 已经保证本站样式表就位，这里再补等字体与揭示动画。
+            // eslint-disable-next-line no-await-in-loop
+            await page.evaluateHandle(() => document.fonts.ready);
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => { setTimeout(r, 500); });
+            // eslint-disable-next-line no-await-in-loop
+            await page.screenshot({ path: to, fullPage: true });
+            // eslint-disable-next-line no-await-in-loop
+            const h = await page.evaluate(() => document.documentElement.scrollHeight);
+            done.push([to, h]);
+        }
+    } finally {
+        await browser.close();
+    }
+    return done;
+}
+
+async function main() {
     const argv = process.argv.slice(2);
     const wi = argv.indexOf('--widths');
     const widths = wi >= 0 ? argv[wi + 1].split(',').map(Number) : null;
@@ -87,32 +156,44 @@ function main() {
     if (!files.length) { console.error('没有可截图的 HTML，先跑 node test/ui/render.js --all'); process.exit(1); }
 
     const bps = widths ? BREAKPOINTS.filter((b) => widths.includes(b.w)) : BREAKPOINTS;
-    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sylu-shot-'));
-    let ok = 0;
+    const jobs = [];
     for (const file of files) {
         const base = path.basename(file, '.html');
-        for (const bp of bps) {
-            if (widths && !widths.includes(bp.w)) continue;
-            const to = path.join(SHOTS, `${base}@${bp.w}.png`);
-            const h = measureHeight(browser, profile, file, bp.w);
+        for (const bp of bps) jobs.push({ file, bp, to: path.join(SHOTS, `${base}@${bp.w}.png`) });
+    }
+
+    const puppeteer = loadPuppeteer();
+    let ok = 0;
+    let cliJobs = jobs;
+    if (puppeteer) {
+        try {
+            const done = await shootPuppeteer(puppeteer, browser, jobs);
+            for (const [to, h] of done) {
+                ok++;
+                console.log(`✓ ${path.basename(to)}  ${path.basename(to).match(/@(\d+)/)[1]}x${h}  ${Math.round(fs.statSync(to).size / 1024)} KB`);
+            }
+            cliJobs = [];
+        } catch (e) {
+            console.error(`✗ puppeteer 出图失败：${String(e.message).split('\n')[0]}，改用命令行路径`);
+        }
+    }
+    if (cliJobs.length) {
+        const narrow = [...new Set(cliJobs.map((j) => j.bp.w).filter((w) => w < CLI_MIN_WIDTH))];
+        if (narrow.length) {
+            console.log(`! 未走 puppeteer：${narrow.join('/')}px 会被 Chrome 钳到 ${CLI_MIN_WIDTH}px，`
+                + '窄屏图只反映裁切后的左半部分。要真实窄屏请 cd test/ui && npm install。');
+        }
+        for (const { file, bp, to } of cliJobs) {
             try {
-                execFileSync(browser, [
-                    '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-                    `--user-data-dir=${profile}`,
-                    `--window-size=${bp.w},${h}`,
-                    '--virtual-time-budget=6000',
-                    `--screenshot=${to}`,
-                    `file://${file.replace(/\\/g, '/')}`,
-                ], { stdio: ['ignore', 'ignore', 'pipe'], timeout: 90000 });
+                const h = shootCli(browser, file, bp, to);
                 if (fs.existsSync(to)) { ok++; console.log(`✓ ${path.basename(to)}  ${bp.w}x${h}  ${Math.round(fs.statSync(to).size / 1024)} KB`); }
             } catch (e) {
-                console.error(`✗ ${base}@${bp.w}：${String(e.stderr || e.message).split('\n')[0]}`);
+                console.error(`✗ ${path.basename(file, '.html')}@${bp.w}：${String(e.stderr || e.message).split('\n')[0]}`);
             }
         }
     }
-    try { fs.rmSync(profile, { recursive: true, force: true }); } catch { /* 交给系统回收 */ }
     console.log(`\n共 ${ok} 张，目录：${path.relative(path.resolve(__dirname, '..', '..'), SHOTS)}/`);
     if (!ok) process.exit(1);
 }
 
-main();
+main().catch((e) => { console.error(`出图失败：${e.message}`); process.exit(1); });

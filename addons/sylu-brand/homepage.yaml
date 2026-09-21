@@ -1,0 +1,17 @@
+# 首页模块编排。这份内容会原样写入 hydrooj.homepage（type: yaml），
+# HomeHandler 对每个键找 get${驼峰名}：有 getter 的按值当 limit 取数，
+# 没有的（bulletin / discussion_nodes）把值本身当 payload（home.ts:151-163）。
+#
+# 刻意不含 hitokoto：那是上游写死的第三方句子接口，不属于校园 OJ 的真实动态。
+# 也不含 suggestion：内容是 LOJ/洛谷 等站外链接，跟"工具型校园 OJ"的定位无关。
+- width: 9
+  bulletin: true
+  contest: 5
+  homework: 10
+  training: 10
+  discussion: 15
+- width: 3
+  recent_problems: 10
+  starred_problems: 50
+  discussion_nodes: true
+  ranking: 10

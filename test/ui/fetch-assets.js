@@ -70,6 +70,27 @@ async function main() {
         changed++;
         console.log(`+ ${name}  ${Math.round(buf.length / 1024)} KB  <- ${urlPath}  [${why}]`);
     }
+    // 图标字体：theme.css 里 .icon-* 的 content 是私用区码点，没有 hydro-icons 字体
+    // 就只会渲染成豆腐块，"用 Hydro 已有 iconfont" 这个决定在沙箱里就无法目视验收。
+    const css = fs.readFileSync(path.join(OUT, 'theme.css'), 'utf8');
+    const face = (css.match(/@font-face\{font-family:hydro-icons;[^}]*\}/) || [''])[0];
+    const fonts = [...face.matchAll(/url\(([^)?]+)\?[^)]*\)/g)].map((m) => m[1]);
+    for (const f of fonts) {
+        const name = path.basename(f);
+        const to = path.join(OUT, name);
+        if (!FORCE && fs.existsSync(to) && fs.statSync(to).size > 1024) {
+            console.log(`= ${name} 已存在（${Math.round(fs.statSync(to).size / 1024)} KB），跳过`);
+            continue;
+        }
+        try {
+            const buf = await get(new URL(f, new URL(found.theme, BASE)).toString());
+            fs.writeFileSync(to, buf);
+            changed++;
+            console.log(`+ ${name}  ${Math.round(buf.length / 1024)} KB  <- ${f}  [iconfont]`);
+        } catch (e) {
+            console.log(`! ${name} 拉取失败：${e.message}（图标会以豆腐块渲染，不影响其余验收）`);
+        }
+    }
     console.log(changed ? `\n已更新 ${changed} 个文件。` : '\n全部命中缓存，无需更新（--force 可强制刷新）。');
 }
 

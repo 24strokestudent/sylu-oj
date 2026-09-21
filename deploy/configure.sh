@@ -204,35 +204,26 @@ ABOUT
     apply_setting ui-default.footer_extra_html "$FOOTER_HTML"
     apply_setting ui-default.about "$ABOUT_MD"
 
+    # 首页模块编排：homepage.yaml 是唯一出处，脚本不再抄一份。
+    # hydrooj.homepage 是 type: yaml 的系统设置，存的正是这份 YAML 文本本身。
+    HOMEPAGE_YAML="${SYLU_OJ_ROOT}/addons/sylu-brand/homepage.yaml"
+    if [ -f "$HOMEPAGE_YAML" ]; then
+        apply_setting hydrooj.homepage "$(cat "$HOMEPAGE_YAML")"
+    else
+        pk_warn "找不到 ${HOMEPAGE_YAML}，首页模块编排保持站点当前值"
+    fi
+
     # 首页公告属于 system 域资料，使用官方 DomainModel.edit 写入，避免直接操作 MongoDB。
+    # 这里**只放长期成立的使用说明**：首屏 Hero 已由 addons/sylu-brand/templates/main.html
+    # 承载，而公告会过 markdown-it-xss，class 属性会被整段剥掉（markdown-it-xss.ts:154），
+    # 塞结构化的 Hero HTML 本来就立不住（计划 §51：Hero 属于代码，不属于部署配置）。
+    # 也不写具体赛事/作业日期：那是当期信息，脚本每次跑都会把它盖回去，且属于未发生的假数据。
     SYLU_BULLETIN="$(cat <<'BULLETIN'
-<div class="sylu-hero">
-  <div>
-    <p class="sylu-hero-kicker">WELCOME TO SYLU OJ</p>
-    <h1>欢迎来到<em>沈阳理工</em> OJ 网</h1>
-    <p class="sylu-hero-desc">一个面向全校师生的在线编程评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>
-    <div class="sylu-hero-actions"><a href="/p">开始刷题</a><a href="/training">浏览训练</a></div>
-  </div>
-  <div class="sylu-code-window"><div class="sylu-code-bar">main.cpp</div><pre><code>#include &lt;iostream&gt;
-using namespace std;
-int main() {
-  int a, b;
-  cin &gt;&gt; a &gt;&gt; b;
-  cout &lt;&lt; a + b &lt;&lt; endl;
-  return 0;
-}</code></pre><div class="sylu-code-result">● Accepted · 在线评测</div></div>
-</div>
+## 开始使用
 
-<p>判题 · 比赛 · 训练 · 交流，一站式编程学习平台。</p>
+题库、训练题单、比赛与讨论区都在顶部导航；登录后即可提交代码，评测结果实时返回。
 
-### 核心功能
-
-- [浏览题库](/p)：按标签和难度查找题目，提交代码并查看评测结果。
-- [训练](/training)：进入题单，按计划持续练习。
-- [比赛](/contest)：参加站内比赛，实时查看排名。
-- [讨论社区](/discuss)：交流解题思路，反馈题面与评测问题。
-
-### 评测环境
+## 评测环境
 
 提交会在隔离沙箱中运行。编译器、时间限制和内存限制以题目页面显示为准；遇到题面或评测异常，请在讨论区反馈提交记录编号。
 BULLETIN

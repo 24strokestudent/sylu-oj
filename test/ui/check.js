@@ -30,11 +30,16 @@ const ALLOWED_OVERRIDES = [
 ];
 const HOMEPAGE_PREFIX = 'partials/homepage/';
 
-// RATCHET 基线：2026-09-21 实测（改造前）
+// RATCHET 基线：2026-09-21 首页模板化之后实测。改造前是 53 / 51 / 2，
+// 剩下的都是公告富文本不得不用的语义标签选择器，以及 #4 待办的导航品牌 hack。
 const DEBT_BASELINE = {
-    '本站 CSS 中的 richmedia 深层选择器': 53,
-    '本站 CSS 中的 first-child 位置选择器': 51,
-    '本站 CSS 中的 :has() 隐藏业务模块': 2,
+    '本站 CSS 中的 richmedia 深层选择器': 8,
+    '本站 CSS 中的 first-child 位置选择器': 4,
+};
+
+// HARD：清零一次就锁死，不许再长回来。
+const DEBT_FORBIDDEN = {
+    '本站 CSS 中的 :has() 选择器': /:has\(/g,
 };
 
 const LEAKS = ['DATETIME_SPAN_ERROR', 'Template render error', 'Cannot get template', 'undefined undefined'];
@@ -105,15 +110,54 @@ function checkDebtRatchet() {
     const now = {
         '本站 CSS 中的 richmedia 深层选择器': count(/richmedia/g),
         '本站 CSS 中的 first-child 位置选择器': count(/first-child/g),
-        '本站 CSS 中的 :has() 隐藏业务模块': count(/:has\(/g),
     };
     for (const k of Object.keys(DEBT_BASELINE)) {
         const cur = now[k] || 0;
         const base = DEBT_BASELINE[k];
         if (cur > base) fail(`${k}：${cur} > 基线 ${base}，深层结构选择器只许减少`);
-        else if (cur === base) console.log(`… ${k}：${cur}（仍为改造前水平）`);
+        else if (cur === base) console.log(`… ${k}：${cur}（持平）`);
         else console.log(`↓ ${k}：${base} → ${cur}`);
     }
+    for (const k of Object.keys(DEBT_FORBIDDEN)) {
+        const cur = count(DEBT_FORBIDDEN[k]);
+        if (cur) fail(`${k}：${cur} 处，已清零的能力不许退回去（改用模板或首页配置判断）`);
+    }
+    if (!Object.keys(DEBT_FORBIDDEN).some((k) => count(DEBT_FORBIDDEN[k]))) {
+        pass(`${Object.keys(DEBT_FORBIDDEN).length} 条已清零的选择器手法保持为零`);
+    }
+}
+
+function checkHomepageTemplate() {
+    // 计划 §50：首屏归模板，公告归数据。两边都要断言，否则会悄悄退回去。
+    const home = path.join(OUT, 'home-student.html');
+    const base = path.join(OUT, 'baseline-guest.html');
+    if (!fs.existsSync(home) || !fs.existsSync(base)) { fail('缺少 home-student/baseline-guest，先跑 render.js --all'); return; }
+    const h = fs.readFileSync(home, 'utf8');
+    const b = fs.readFileSync(base, 'utf8');
+    const count = (s, re) => (s.match(re) || []).length;
+    let bad = 0;
+    const expect = (name, got, want, why) => {
+        if (got === want) return;
+        fail(`${name} 有 ${got} 处，预期 ${want} 处 —— ${why}`);
+        bad++;
+    };
+
+    // 公告里的 class 会被 markdown-it-xss 剥掉（markdown-it-xss.ts:154），
+    // 所以基线页有首屏内容却没有首屏类名。这条一旦反过来，
+    // 说明上游过滤器放开了 class —— 那正是旧 hack 立不住的前提被推翻。
+    expect('home-student.html 的 class="sylu-hero"', count(h, /class="sylu-hero"/g), 1, '首屏只应由模板出一份');
+    expect('baseline-guest.html 的 class="sylu-hero"', count(b, /class="sylu-hero"/g), 0, '公告里的 class 应当被过滤器剥掉');
+    const tests = [
+        [/欢迎来到<em>沈阳理工/.test(b), 'baseline-guest.html 不含公告里的首屏文案，基线已不等同于改造前的线上页面'],
+        [count(h, /class="sylu-code-window"/g) === 1, 'home-student.html 的代码窗口不是恰好一份'],
+        [/fixtures\/legacy-home\.css/.test(b), 'baseline-guest.html 没挂冻结样式，基线外观会与线上不符'],
+        [!/fixtures\/legacy/.test(h), 'home-student.html 挂了冻结样式，改造后页面不该依赖它'],
+        [/class="sylu-band"/.test(h), 'home-student.html 缺少 §9.4 的绿色条'],
+        [count(h, /class="sylu-entry"/g) === 4, 'home-student.html 的快捷入口不是 4 个（§9.2）'],
+        [/WELCOME TO SYLU OJ/.test(h), 'home-student.html 首屏缺少 WELCOME TO SYLU OJ'],
+    ];
+    for (const [ok, msg] of tests) if (!ok) { fail(msg); bad++; }
+    if (!bad) pass('首屏归属正确：模板出一份 Hero，公告只出纯文本');
 }
 
 function checkCssWiring() {
@@ -147,6 +191,36 @@ function checkHomepageSections() {
     if (!bad) pass(`${files.length} 个首页场景 section 数量正常`);
 }
 
+function checkAssetLinks() {
+    // 相对路径的 <link> 写错时页面照样渲染，只是样式静默丢失 —— 基线页尤其吃这一口。
+    const files = htmlFiles();
+    let bad = 0;
+    for (const f of files) {
+        const s = fs.readFileSync(path.join(OUT, f), 'utf8');
+        for (const m of s.matchAll(/<(?:link|script)[^>]*?(?:href|src)="([^"]+)"|<img[^>]*src="([^"]+)"/g)) {
+            const ref = m[1] || m[2];
+            // 根绝对路径是留给线上用的（/js/entry.js、/p、/record 等），沙箱里本来就不解析
+            if (!ref || /^(\/|[a-z]+:|\/\/|#)/i.test(ref)) continue;
+            const rel = ref.split('?')[0].split('#')[0];
+            if (!fs.existsSync(path.resolve(OUT, rel))) { fail(`${f} 引用了不存在的本地资源：${ref}`); bad++; }
+        }
+    }
+    if (!bad) pass(`${files.length} 个页面的本地资源引用全部可解析`);
+}
+
+function checkShotPath() {
+    // Windows 上 Chrome 的 --window-size 宽度最小约 504px（实测 320/390/500 都得 504）。
+    // 真窄屏只能靠 puppeteer-core 的 CDP setViewport；它一旦从依赖里掉出去，
+    // 390px 的图会静默变成 504px 排版的裁切图，据此得出的移动端结论是假的。
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (!deps['puppeteer-core']) {
+        fail('package.json 缺少 puppeteer-core：窄屏出图会退化成 504px 裁切，不能用来验收移动端');
+        return;
+    }
+    pass(`出图依赖就位：puppeteer-core ${deps['puppeteer-core']}（窄屏走 CDP 视口）`);
+}
+
 function main() {
     console.log('== UI 回归闸门 ==');
     checkLeaks();
@@ -154,7 +228,10 @@ function main() {
     checkOverrideWhitelist();
     checkDebtRatchet();
     checkCssWiring();
+    checkAssetLinks();
     checkHomepageSections();
+    checkHomepageTemplate();
+    checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);
 }

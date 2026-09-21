@@ -3,6 +3,7 @@
 /**
  * 诊断：把量测脚本注入页面，用 headless Chrome --dump-dom 取回真实布局数据。
  * 用法： node test/ui/diag.js baseline-guest
+ *        node test/ui/diag.js home-student --width 390    # 查横向溢出
  */
 
 const fs = require('fs');
@@ -52,6 +53,26 @@ const PROBE = `
     }
     out.push('BODY_SCROLLH=' + document.body.scrollHeight + ' DOC_SCROLLH=' + document.documentElement.scrollHeight);
     out.push('INNER_H=' + window.innerHeight);
+    // 横向溢出：整页被撑宽时截图只会右边缘消失，看不出是谁撑的，所以按"自己越界、父级不越界"找元凶。
+    var vw = window.innerWidth;
+    out.push('INNER_W=' + vw + ' DOC_SCROLLW=' + document.documentElement.scrollWidth);
+    if (document.documentElement.scrollWidth > vw + 1) {
+      var bad = [];
+      var all = document.querySelectorAll('body *');
+      for (var k = 0; k < all.length; k++) {
+        var el = all[k];
+        var r = el.getBoundingClientRect();
+        if (r.width === 0 || r.right <= vw + 1) continue;
+        var pr = el.parentElement ? el.parentElement.getBoundingClientRect() : null;
+        if (pr && pr.right > vw + 1) continue;
+        var cls = (typeof el.className === 'string' && el.className.trim())
+          ? '.' + el.className.trim().split(/\\s+/).slice(0, 3).join('.') : '';
+        bad.push(el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + cls
+          + ' right=' + Math.round(r.right) + ' w=' + Math.round(r.width));
+        if (bad.length >= 8) break;
+      }
+      out.push('OVERFLOW_X=' + (bad.length ? '\\n  ' + bad.join('\\n  ') : '（找不到越界元素，可能是 body/html 自身）'));
+    }
   }
   document.title = 'DIAGBEGIN' + out.join('\\n') + 'DIAGEND';
 }());
@@ -59,7 +80,10 @@ const PROBE = `
 `;
 
 function main() {
-    const page = process.argv[2] || 'baseline-guest';
+    const argv = process.argv.slice(2);
+    const wi = argv.indexOf('--width');
+    const width = wi >= 0 ? Number(argv[wi + 1]) : 1440;
+    const page = argv.filter((a, i) => !a.startsWith('--') && !(wi >= 0 && i === wi + 1))[0] || 'baseline-guest';
     const src = path.join(OUT, `${page}.html`);
     const html = fs.readFileSync(src, 'utf8');
     const browser = CANDIDATES.find((p) => fs.existsSync(p));
@@ -69,7 +93,7 @@ function main() {
     fs.writeFileSync(tmp, html.replace(/<\/body>/i, `${PROBE}</body>`), 'utf8');
     const dom = execFileSync(browser, [
         '--headless=new', '--disable-gpu', '--no-sandbox', `--user-data-dir=${profile}`,
-        '--window-size=1440,2600', '--virtual-time-budget=6000',
+        `--window-size=${width},2600`, '--virtual-time-budget=6000',
         `--dump-dom`, `file://${tmp.replace(/\\/g, '/')}`,
     ], { maxBuffer: 1024 * 1024 * 64, timeout: 90000 }).toString();
     fs.rmSync(tmp, { force: true });

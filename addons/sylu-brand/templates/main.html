@@ -1,0 +1,76 @@
+{% set page_name = "homepage" %}
+{% extends "layout/basic.html" %}
+{% import "components/contest.html" as contest with context %}
+{% import "components/problem.html" as problem with context %}
+{% import "components/user.html" as user with context %}
+{% block content %}
+<div class="sylu-home">
+
+  <section class="sylu-hero">
+    <div class="sylu-hero__text">
+      <p class="sylu-hero-kicker">WELCOME TO SYLU OJ</p>
+      <h1 class="sylu-hero-title">欢迎来到<em>沈阳理工</em> OJ 网</h1>
+      <p class="sylu-hero-desc">一个面向全校师生的在线编程评测平台：多语言判题、比赛系统、题单训练与讨论社区。</p>
+      <div class="sylu-hero-actions">
+        <a class="sylu-hero-btn sylu-hero-btn--primary" href="{{ url('problem_main') }}">开始刷题</a>
+        <a class="sylu-hero-btn sylu-hero-btn--ghost" href="{{ url('training_main') }}">浏览训练</a>
+      </div>
+    </div>
+    <div class="sylu-code-window" aria-hidden="true">
+      <div class="sylu-code-bar">main.cpp</div>
+      <pre><code>#include &lt;iostream&gt;
+using namespace std;
+int main() {
+  int a, b;
+  cin &gt;&gt; a &gt;&gt; b;
+  cout &lt;&lt; a + b &lt;&lt; endl;
+  return 0;
+}</code></pre>
+      <div class="sylu-code-result">● Accepted · 在线评测</div>
+    </div>
+  </section>
+
+  <p class="sylu-band">快速判题 · 专题训练 · 在线比赛 · 学习交流</p>
+
+  <div class="sylu-entries">
+    <a class="sylu-entry" href="{{ url('problem_main') }}">
+      <span class="icon icon-code sylu-entry__icon"></span>
+      <span class="sylu-entry__title">在线评测</span>
+      <span class="sylu-entry__desc">浏览题目、提交代码并查看实时评测结果</span>
+    </a>
+    <a class="sylu-entry" href="{{ url('training_main') }}">
+      <span class="icon icon-book sylu-entry__icon"></span>
+      <span class="sylu-entry__title">题单训练</span>
+      <span class="sylu-entry__desc">按照专题和知识点持续训练</span>
+    </a>
+    <a class="sylu-entry" href="{{ url('contest_main') }}">
+      <span class="icon icon-award sylu-entry__icon"></span>
+      <span class="sylu-entry__title">比赛</span>
+      <span class="sylu-entry__desc">参加校内练习赛和程序设计比赛</span>
+    </a>
+    <a class="sylu-entry" href="{{ url('discussion_main') }}">
+      <span class="icon icon-comment--multiple sylu-entry__icon"></span>
+      <span class="sylu-entry__title">讨论</span>
+      <span class="sylu-entry__desc">交流题解、问题与平台反馈</span>
+    </a>
+  </div>
+
+  {# 动态模块仍由 HomeHandler 按域配置下发，本页只负责摆放，不自己取数 #}
+  <div class="sylu-home__modules">
+    {% for column in contents %}
+      <div class="sylu-home__col">
+        {% for s in column.sections %}
+          {% if templateExists("partials/homepage/" + s[0] + ".html") %}
+            {% set payload = s[1] %}
+            {% include "partials/homepage/" + s[0] + ".html" %}
+          {% else %}
+            {% set payload = _("Template {0} not found.").format(s[0]) %}
+            {% include "partials/homepage/error.html" %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

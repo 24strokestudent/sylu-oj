@@ -43,13 +43,17 @@ function legacyStylesheets(ref) {
     });
 }
 
-/** 用当前渲染结果换掉本站样式，得到"旧样式孪生页" */
+/**
+ * 用当前渲染结果换掉本站样式，得到"旧样式孪生页"。
+ * fixtures/ 下的冻结快照也要一并换掉：孪生页的旧样式来自 ref，两边都留会互相干扰。
+ */
 function buildTwin(page, links) {
     const src = path.join(OUT, `${page}.html`);
     if (!fs.existsSync(src)) return null;
     let html = fs.readFileSync(src, 'utf8');
     html = html.replace(/[ \t]*<link rel="stylesheet" href="[^"]*\/sylu\/css\/[^"]*">\n?/g, '');
     html = html.replace(/[ \t]*<link rel="stylesheet" href="[^"]*sylu-brand\.css">\n?/g, '');
+    html = html.replace(/[ \t]*<link rel="stylesheet" href="[^"]*fixtures\/legacy-[^"]*">\n?/g, '');
     const inject = links.map((l) => `  <link rel="stylesheet" href="${l}">`).join('\n');
     html = html.replace('</head>', `${inject}\n</head>`);
     const to = path.join(OUT, `legacy-${page}.html`);

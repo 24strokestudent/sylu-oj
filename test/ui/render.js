@@ -118,7 +118,7 @@ function buildEnv(opts) {
 }
 
 function renderPage({
-    template, state, env, settingGet, out,
+    template, state, env, settingGet, out, opts = {},
 }) {
     const zh = (function loadZh() {
         const f = path.join(H.REF, 'packages', 'ui-default', 'locales', 'zh.yaml');
@@ -150,6 +150,13 @@ function renderPage({
     const cssDir = path.join(ADDON, 'public', 'sylu', 'css');
     for (const f of CSS_FILES) {
         if (fs.existsSync(path.join(cssDir, f))) links.push(`<link rel="stylesheet" href="${rel}sylu/css/${f}">`);
+    }
+    // baseline-* 复刻的是"改造前"首页：那套按 DOM 位置写的样式已经从 addon 里删掉了，
+    // 只有 test/ui/fixtures 的冻结快照还留着它，否则基线页会得到一个线上从未存在过的外观。
+    for (const f of (opts.legacyCss || [])) {
+        const abs = path.join(__dirname, f);
+        if (!fs.existsSync(abs)) { throw new Error(`冻结样式缺失：${f}，baseline-* 无法复刻改造前外观`); }
+        links.push(`<link rel="stylesheet" href="${path.relative(OUT, abs).replace(/\\/g, '/')}">`);
     }
     html = html.replace('</head>', `  ${links.join('\n  ')}\n</head>`);
     // 绝对路径的静态资源（/sylu-logo.svg 等）由 server.ts:114-120 从各 addon 的
@@ -188,13 +195,14 @@ function homepageState(role, config, bulletin) {
 }
 
 /**
- * 场景表。baseline-* 必须复刻线上现状：公告里塞着整块 Hero HTML，
- * 且只加载上游模板（不启用 addon）；home-* 是改造后形态，
- * 公告只留纯文本，首屏改由模板承载。
+ * 场景表。baseline-* 必须复刻线上现状：公告里塞着整块 Hero HTML、只加载上游模板
+ * （不启用 addon）、并挂上 fixtures 里的冻结样式；home-* 是改造后形态，
+ * 公告只留纯文本，首屏改由 addon 的 main.html 承载。
  */
+const LEGACY_CSS = ['fixtures/legacy-home.css', 'fixtures/legacy-responsive.css'];
 const SCENARIOS = {
-    'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero' },
-    'baseline-student': { role: 'student', addon: false, bulletin: 'hero' },
+    'baseline-guest': { role: 'guest', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS },
+    'baseline-student': { role: 'student', addon: false, bulletin: 'hero', legacyCss: LEGACY_CSS },
     'home-guest': { role: 'guest', addon: true, bulletin: 'plain' },
     'home-student': { role: 'student', addon: true, bulletin: 'plain' },
     'home-teacher': { role: 'teacher', addon: true, bulletin: 'plain' },
@@ -228,6 +236,7 @@ function main() {
                 env,
                 settingGet,
                 out: `${t}.html`,
+                opts: sc,
             });
             console.log(`✓ ${t}.html  ${n} 字节${sc.addon ? '' : '（改造前基线）'}`);
         } catch (e) {

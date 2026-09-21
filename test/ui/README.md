@@ -8,13 +8,34 @@
 ## 用法
 
 ```bash
-cd test/ui && npm install          # 只装 nunjucks / js-yaml / markdown-it，不进主工程依赖
-node fetch-assets.js               # 从内测站抓 theme.css 与线上 sylu-brand.css 到 out/vendor
+cd test/ui && npm install          # nunjucks / js-yaml / markdown-it / puppeteer-core，不进主工程依赖
+node fetch-assets.js               # 从内测站抓 theme.css、iconfont 与线上 sylu-brand.css 到 out/vendor
 node render.js --all               # 渲染全部场景到 out/*.html
 node shot.js                       # 全场景 × 全断点出图到 out/shots
 node check.js                      # 回归闸门，违反红线即 exit 1
 node diag.js home-student          # 布局量测（排查"渲染出来了但看不见"这类问题）
 ```
+
+## 出图：窄屏只能走 puppeteer
+
+Windows 上的 Chrome 会把 `--window-size` 的宽度钳到一个最小值，实测
+`320 / 390 / 500` 都得到 `window.innerWidth === 504`（`--headless=new`、`--headless=old`、
+`--headless` 三种写法一致）。也就是说命令行出图**做不出真窄屏**：图是按 390 裁的，
+排版却是 504 的，拿它下"移动端没问题"的结论是假的。
+
+所以 `shot.js` 有两条路径：装了 `puppeteer-core` 就走 CDP 的 `setViewport`
+（视口宽度等于请求宽度，`fullPage` 截整页，`deviceScaleFactor` 固定 1 以免
+`diff.js` 的像素基准漂移）；没装则退回命令行，并为 `<504px` 的断点打印警告。
+`node_modules` 是 gitignore 的，所以 `puppeteer-core` 必须留在 `package.json` 里——
+否则换台机器 `npm install` 之后，390px 的图会静默变成 504 的裁切图。
+
+`diag.js` 仍走命令行，量到的 `INNER_W` 因此可能是 504 而不是请求值；它用来查
+"谁把页面撑宽"（`DOC_SCROLLW > INNER_W`）依然有效，不能用来断言窄屏排版。
+
+导航用 `domcontentloaded` 而不是 `load`：上游模板里的头像是协议相对地址
+`//cn.gravatar.com/…`，在 `file://` 下解析成 `file://cn.gravatar.com/…`，请求会挂住，
+等 `load` 就是 60 秒超时。本站样式表在 DOMContentLoaded 前已就位，补等
+`document.fonts.ready` 即可。
 
 ## 怎么证明"这次改动没改外观"
 
@@ -33,14 +54,29 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 `check.js` 分两类：
 
 - **HARD**：渲染产物不得泄漏错误串；必须保留 `Powered by Hydro` 归属与"非官方"声明；
-  addon 覆盖上游模板必须在 §49 的 A/B 级白名单内（C 级业务模板只能用 CSS）。
-- **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器、`:has()` 隐藏业务模块
-  三项计数只许下降，基线取改造前实测值。
+  addon 覆盖上游模板必须在 §49 的 A/B 级白名单内（C 级业务模板只能用 CSS）；
+  `:has()` 已清零，长回来即 fail；首屏只由模板出一份 Hero，公告里不得带结构。
+- **RATCHET**：`richmedia` 深层选择器、`first-child` 位置选择器两项计数只许下降。
+  首页模板化前是 53 / 51，模板化后 8 / 4 —— 剩下的都是公告富文本绕不开的语义标签，
+  以及导航品牌 hack（下一步覆盖 `partials/nav.html` 后清零）。
 - **装配一致性**：`public/sylu/css/` 目录、`configure.sh` 的 `CSS_ORDER`、
   `render.js` 的 `CSS_FILES` 三处必须同步——新增样式文件忘了挂链接会直接 fail。
+  产物里每一条相对 `link/script/img` 引用也会解析一遍，文件不存在就 fail。
+- **出图能力**：`package.json` 必须留着 `puppeteer-core`，否则窄屏出图会静默退化成
+  504px 裁切（见上一节），这种"看起来通过了"的假结论要拦住。
 
 上游模板来自 `.ref/Hydro`（gitignore 的只读参考）。找不到时设 `SYLU_HYDRO_REF` 指向
 `Hydro/packages/ui-default/templates` 的父目录。
+
+## fixtures/：冻结的改造前样式
+
+首页模板化之后，`public/sylu/css/` 里那套"按 DOM 位置猜公告"的样式被整体删除了。
+但 `baseline-*` 场景的存在意义就是复刻**删除之前**的线上页面，所以那套规则以
+`fixtures/legacy-home.css` + `fixtures/legacy-responsive.css` 的形式冻结在测试目录里，
+只挂给 `baseline-*`。它们不随 addon 发布，也不计入 RATCHET 统计。
+
+这样拆分的依据是 CSS 拆分那轮实测的 0.000% 像素差：新令牌/新分片 + 冻结的位置规则
+= 改造前的外观，两者可以叠加而不是互相覆盖。
 
 ## 场景
 
@@ -50,7 +86,7 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 | `baseline-student` | 仅上游 | 学生 | 含 Hero HTML | 复刻线上现状 |
 | `home-guest/student/teacher/admin` | 上游 + addon | 四档权限 | 纯文本 | 改造后效果 |
 
-`baseline-*` 用 `HERO_BULLETIN`（`deploy/configure.sh` 里那段公告原文），
+`baseline-*` 用 `HERO_BULLETIN`（改造前 `configure.sh` 往公告里塞的那段 HTML 的冻结副本），
 因为线上现状就是"整块首屏塞进公告"；`home-*` 用纯文本公告，首屏改由模板承载。
 两者用的是同一份数据源，差异只在渲染管线，这样才能验证 LEGACY 段样式是否被完整保留。
 
@@ -60,7 +96,7 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
 四档身份的 PERM/PRIV 取自上游真实位定义，用来验证"改 UI 不会给学生发权限"：
 导航项在四档下应各不相同，且 `关于本站` 只在加载 addon 时出现。
 
-## 沙箱与线上必须对齐的四处
+## 沙箱与线上必须对齐的五处
 
 少任何一处都会得到"看起来是坏的"或"看起来是好的"的假结论：
 
@@ -72,6 +108,9 @@ node compare.js 1794a1a --widths 1440,390     # 与某 git 版本比全部场景
    少了它，症状是"导航正常、正文一片空白"——已被这个坑浪费过一轮排查。
 4. **静态资源绝对路径** —— `/sylu-logo.svg` 这类由 `server.ts:114-120` 从各 addon 的
    `public/` 挂到 web 根；`file://` 解析不到，render.js 仅在文件确实存在时改写为相对路径。
+5. **iconfont** —— `.icon-*` 的 `content` 是私用区码点，缺 `hydro-icons` 字体会全部渲染成
+   豆腐块，"用 Hydro 已有图标"就无从验收。`fetch-assets.js` 会解析 theme.css 的
+   `@font-face` 把字体一并拉到 `out/vendor/`。
 
 ## 边界
 
