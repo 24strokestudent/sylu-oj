@@ -27,6 +27,24 @@ body {
   object-fit: contain;
 }
 
+/* 复用旧首页的品牌组合：徽标 + SYLU OJ + 平台副标题，链接仍由 Hydro 导航负责。 */
+.nav__list--main > .nav__list-item:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 14px;
+}
+
+.nav__list--main > .nav__list-item:first-child::after {
+  content: "SYLU OJ\A 在线程序设计与评测平台";
+  white-space: pre;
+  color: var(--sylu-brown);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+}
+
 .nav__item {
   color: var(--sylu-brown);
   transition: color .18s ease, background-color .18s ease;
@@ -82,6 +100,24 @@ body {
   letter-spacing: .02em;
 }
 
+.page--homepage .richmedia h2:first-child {
+  position: relative;
+  margin-bottom: 12px;
+  color: var(--sylu-brown);
+  font-size: 32px;
+  letter-spacing: .02em;
+}
+
+.page--homepage .richmedia h2:first-child::after {
+  content: "WELCOME TO SYLU OJ";
+  display: block;
+  margin-top: 6px;
+  color: var(--sylu-green);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .22em;
+}
+
 .page--homepage .richmedia h2 {
   margin-top: 30px;
   padding-left: 12px;
@@ -105,6 +141,45 @@ body {
   border-left: 4px solid var(--sylu-green);
   border-radius: 8px;
   background: var(--sylu-green-light);
+}
+
+.page--homepage .richmedia h3 + ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.page--homepage .richmedia h3 + ul li {
+  min-height: 76px;
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--sylu-border);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fff, #f8faf7);
+  box-shadow: 0 4px 14px rgba(38, 50, 31, .06);
+}
+
+.page--homepage .richmedia h3 + ul li::before {
+  content: "";
+  display: block;
+  width: 26px;
+  height: 3px;
+  margin-bottom: 9px;
+  border-radius: 99px;
+  background: var(--sylu-red);
+}
+
+.page--homepage .richmedia h3 + ul li a {
+  font-weight: 700;
+  color: var(--sylu-brown);
+}
+
+.page--homepage .richmedia h3 + ul li:hover {
+  border-color: rgba(177, 45, 40, .35);
+  box-shadow: 0 8px 20px rgba(177, 45, 40, .10);
 }
 
 .page--homepage .large-3 .section.side {
@@ -142,4 +217,6 @@ body {
   .main { padding-top: 16px; }
   .page--homepage .large-9 > .section:first-child .section__body { padding: 24px 20px 28px; }
   .page--homepage .richmedia h1 { font-size: 25px; }
+  .nav__list--main > .nav__list-item:first-child::after { font-size: 13px; }
+  .page--homepage .richmedia h3 + ul { grid-template-columns: 1fr; }
 }
