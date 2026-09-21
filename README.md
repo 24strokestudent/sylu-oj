@@ -12,7 +12,10 @@ sylu-oj/
 │   ├── index.html     # 首页
 │   ├── css/           # 样式（normalize + main）
 │   ├── js/            # 脚本（main.js 交互 / loader.js 加载动画）
-│   └── 沈阳理工大学-logo.svg
+│   ├── 沈阳理工大学-logo.svg
+│   ├──login.html      #登录页面
+│   └──register.html   #注册页面
+│ 
 └── server/            # 后端（开发中）
 ```
 

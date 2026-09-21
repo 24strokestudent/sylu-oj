@@ -1,0 +1,250 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>注册 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="注册 SYLU OJ 账号——沈阳理工大学在线评测系统，注册后即可提交代码、参加比赛、创建题单。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="注册 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <!-- 后续接入后端后，把 href 指向真实登录页面 -->
+        <a href="login.html">登录</a>
+        <a href="register.html" class="active">注册</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="index.html" class="btn btn-primary">首页</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 注册主体 ==================== -->
+  <main class="auth" id="register">
+    <div class="container auth-inner">
+
+      <!-- 左侧：平台介绍 -->
+      <aside class="auth-aside">
+        <p class="hero-tag">Join SYLU OJ</p>
+        <h1>加入<em>沈阳理工</em>OJ 网</h1>
+        <p class="lead">注册账号后即可提交代码、参加比赛、创建题单，与全校同学一起在算法之路上稳步进阶。</p>
+
+        <ul class="auth-perks">
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>多语言判题</strong>：C/C++、Java、Python、Go 实时评测</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>比赛系统</strong>：ACM/OI/IOI 赛制，实时排行榜与封榜滚榜</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>题单训练</strong>：按知识点组织，刷题路径清晰可见</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>讨论社区</strong>：题解分享、问题求助与站内消息</span>
+          </li>
+        </ul>
+
+        <p class="auth-note">
+          账号面向沈阳理工大学师生，建议使用真实学号注册。注册即表示同意本站
+          <a href="#">《用户协议》</a> 与 <a href="#">《隐私政策》</a>。
+        </p>
+      </aside>
+
+      <!-- 右侧：注册表单 -->
+      <section class="auth-card" aria-labelledby="registerTitle">
+        <div class="auth-head">
+          <h2 id="registerTitle">创建账号</h2>
+          <p>已有账号？<a href="login.html">直接登录</a></p>
+        </div>
+
+        <!-- 提示条（由 js/auth.js 填充：错误 / 成功 / 演示模式说明） -->
+        <div class="form-alert" id="formAlert" role="alert" aria-live="polite"></div>
+
+        <form class="auth-form" id="registerForm" novalidate>
+          <div class="form-row">
+            <div class="field" data-field="username">
+              <label for="username">用户名<span class="req">*</span><span class="hint">3–20 位字母 / 数字 / 下划线</span></label>
+              <div class="input-wrap">
+                <input type="text" id="username" name="username" placeholder="例如 sylu_2026"
+                  autocomplete="username" aria-describedby="usernameError" required>
+              </div>
+              <p class="field-error" id="usernameError"></p>
+            </div>
+
+            <div class="field" data-field="nickname">
+              <label for="nickname">昵称<span class="req">*</span><span class="hint">2–16 个字符</span></label>
+              <div class="input-wrap">
+                <input type="text" id="nickname" name="nickname" placeholder="展示在排行榜上的名字"
+                  autocomplete="nickname" aria-describedby="nicknameError" required>
+              </div>
+              <p class="field-error" id="nicknameError"></p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="field" data-field="studentId">
+              <label for="studentId">学号<span class="req">*</span></label>
+              <div class="input-wrap">
+                <input type="text" id="studentId" name="studentId" placeholder="请输入本人学号"
+                  inputmode="numeric" autocomplete="off" aria-describedby="studentIdError" required>
+              </div>
+              <p class="field-error" id="studentIdError"></p>
+            </div>
+
+            <div class="field" data-field="college">
+              <label for="college">学院<span class="req">*</span></label>
+              <div class="input-wrap">
+                <!-- 选项为占位数据，接入后端后改为由接口返回 -->
+                <select id="college" name="college" aria-describedby="collegeError" required>
+                  <option value="">请选择所在学院</option>
+                  <option value="国际工程学院">国际工程学院</option>
+                  <option value="信息科学与工程学院">信息科学与工程学院</option>
+                  <option value="计算机科学与工程学院">计算机科学与工程学院</option>
+                  <option value="自动化与电气工程学院">自动化与电气工程学院</option>
+                  <option value="机械工程学院">机械工程学院</option>
+                  <option value="其他学院">其他学院</option>
+                </select>
+              </div>
+              <p class="field-error" id="collegeError"></p>
+            </div>
+          </div>
+
+          <div class="field" data-field="email">
+            <label for="email">邮箱<span class="req">*</span><span class="hint">用于找回密码与接收通知</span></label>
+            <div class="input-wrap">
+              <input type="email" id="email" name="email" placeholder="name@example.com"
+                autocomplete="email" aria-describedby="emailError" required>
+            </div>
+            <p class="field-error" id="emailError"></p>
+          </div>
+
+          <div class="form-row">
+            <div class="field" data-field="password">
+              <label for="password">密码<span class="req">*</span><span class="hint">至少 8 位，含字母和数字</span></label>
+              <div class="input-wrap has-toggle">
+                <input type="password" id="password" name="password" placeholder="设置登录密码" maxlength="64"
+                  autocomplete="new-password" aria-describedby="passwordError passwordStrength" required>
+                <button type="button" class="pw-toggle" data-target="password"
+                  aria-label="显示密码" aria-pressed="false">👁</button>
+              </div>
+              <div class="pw-meter" id="passwordStrength" data-level="0" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </div>
+              <p class="field-error" id="passwordError"></p>
+            </div>
+
+            <div class="field" data-field="confirm">
+              <label for="confirm">确认密码<span class="req">*</span></label>
+              <div class="input-wrap has-toggle">
+                <input type="password" id="confirm" name="confirm" placeholder="再次输入密码" maxlength="64"
+                  autocomplete="new-password" aria-describedby="confirmError" required>
+                <button type="button" class="pw-toggle" data-target="confirm"
+                  aria-label="显示密码" aria-pressed="false">👁</button>
+              </div>
+              <p class="field-error" id="confirmError"></p>
+            </div>
+          </div>
+
+          <label class="check" id="agreeField">
+            <input type="checkbox" id="agree" name="agree" aria-describedby="agreeError">
+            <span>我已阅读并同意 <a href="#">《用户协议》</a> 与 <a href="#">《隐私政策》</a>，并保证注册信息真实有效。</span>
+          </label>
+          <p class="field-error" id="agreeError"></p>
+
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">注册</button>
+
+          <p class="auth-foot">已有账号？<a href="login.html">返回登录</a></p>
+        </form>
+
+        <!-- 注册成功提示（提交成功后显示，替换表单） -->
+        <div class="auth-success" id="registerSuccess">
+          <div class="tick-lg" aria-hidden="true">✓</div>
+          <h3>注册成功</h3>
+          <p class="success-text" id="registerSuccessText">账号已创建，请使用该账号登录。</p>
+          <div class="success-actions">
+            <a href="login.html" class="btn btn-primary btn-lg">前往登录</a>
+            <a href="index.html" class="btn btn-outline btn-lg">返回首页</a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/auth.js"></script>
+
+</body>
+
+</html>

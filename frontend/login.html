@@ -1,0 +1,202 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>登录 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="登录 SYLU OJ——沈阳理工大学在线评测系统，继续题单训练、查看提交记录与比赛排名。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="登录 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="login.html" class="active">登录</a>
+        <a href="register.html">注册</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="register.html" class="btn btn-ghost">注册</a>
+        <a href="index.html" class="btn btn-primary">首页</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 登录主体 ==================== -->
+  <main class="auth" id="login">
+    <div class="container auth-inner">
+
+      <!-- 左侧：平台介绍 -->
+      <aside class="auth-aside">
+        <p class="hero-tag">Welcome Back</p>
+        <h1>欢迎回到<em>沈阳理工</em>OJ 网</h1>
+        <p class="lead">登录后可继续未完成的题单与训练计划，学习进度、提交记录与比赛排名都会保留。</p>
+
+        <ul class="auth-perks">
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>继续训练</strong>：接着上次的题单和训练计划往下刷</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>提交记录</strong>：查看评测详情、耗时内存与错误原因</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>参加比赛</strong>：进入进行中的比赛，实时查看排行榜</span>
+          </li>
+          <li>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span><strong>讨论交流</strong>：发布题解、提问求助与站内消息</span>
+          </li>
+        </ul>
+
+        <!-- 数字为占位数据（来自现有系统统计），接入后端后改为接口返回 -->
+        <div class="aside-stats">
+          <div>
+            <b><span data-count="16">0</span></b>
+            <span>题库题目</span>
+          </div>
+          <div>
+            <b><span data-count="63">0</span></b>
+            <span>注册用户</span>
+          </div>
+          <div>
+            <b><span data-count="235">0</span></b>
+            <span>累计提交</span>
+          </div>
+        </div>
+
+        <p class="auth-note">
+          忘记密码或账号异常？请联系 <a href="#">系统管理员</a>，或查看 <a href="#">使用帮助</a>。
+        </p>
+      </aside>
+
+      <!-- 右侧：登录表单 -->
+      <section class="auth-card" aria-labelledby="loginTitle">
+        <div class="auth-head">
+          <h2 id="loginTitle">登录账号</h2>
+          <p>还没有账号？<a href="register.html">立即注册</a></p>
+        </div>
+
+        <!-- 提示条（由 js/login.js 填充：错误 / 演示模式说明） -->
+        <div class="form-alert" id="formAlert" role="alert" aria-live="polite"></div>
+
+        <form class="auth-form" id="loginForm" novalidate>
+          <div class="field" data-field="loginId">
+            <label for="loginId">用户名 / 邮箱<span class="req">*</span></label>
+            <div class="input-wrap">
+              <input type="text" id="loginId" name="loginId" placeholder="请输入用户名或注册邮箱"
+                autocomplete="username" aria-describedby="loginIdError" required>
+            </div>
+            <p class="field-error" id="loginIdError"></p>
+          </div>
+
+          <div class="field" data-field="password">
+            <label for="password">密码<span class="req">*</span></label>
+            <div class="input-wrap has-toggle">
+              <input type="password" id="password" name="password" placeholder="请输入登录密码" maxlength="64"
+                autocomplete="current-password" aria-describedby="passwordError" required>
+              <button type="button" class="pw-toggle" data-target="password"
+                aria-label="显示密码" aria-pressed="false">👁</button>
+            </div>
+            <p class="field-error" id="passwordError"></p>
+          </div>
+
+          <div class="auth-meta">
+            <label class="check-inline" for="remember">
+              <input type="checkbox" id="remember" name="remember">
+              <span>记住我的用户名</span>
+            </label>
+            <a href="#" class="auth-link">忘记密码？</a>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn">登录</button>
+
+          <p class="auth-foot">还没有账号？<a href="register.html">立即注册</a></p>
+        </form>
+
+        <!-- 登录成功提示（提交成功后显示，替换表单） -->
+        <div class="auth-success" id="loginSuccess">
+          <div class="tick-lg" aria-hidden="true">✓</div>
+          <h3>登录成功</h3>
+          <p class="success-text" id="loginSuccessText">欢迎回来，正在进入 SYLU OJ…</p>
+          <div class="success-actions">
+            <a href="index.html" class="btn btn-primary btn-lg">返回首页</a>
+            <a href="#" class="btn btn-outline btn-lg">进入题库</a>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/login.js"></script>
+
+</body>
+
+</html>
