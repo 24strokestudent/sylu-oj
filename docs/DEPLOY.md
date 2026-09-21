@@ -566,8 +566,8 @@ Using mongodb external event bus
 | §7 第一道 Gate | ✅ 注册 / 登录 / 管理员会话 / 管理面板权限，全部用真实 HTTP 请求验证（见 §3 第 3 步） |
 | `deploy/lib/common.sh` 版本探测 | ✅ `hydro_version` / `hydro_pkg_version` / `hydro_db_ver` 三个函数在真机上秒回 |
 | 评测链路 | ✅ 数据库中存在 `status:1`（Accepted）`score:100` 的记录；`localhost:5050/version` 返回 200 |
-| 沙箱与数据库隔离 | ✅ 实测 `27017` / `5050` / `2019` / `8888` **全部只听 127.0.0.1**，对外仅开放 22 与 80 |
-| `tools/problem-importer` | ✅ 已实测：自测 34 项断言全通过；端到端 preflight/convert/verify 跑通 |
+| 沙箱与数据库隔离 | ✅ 实测 `27017` / `5050` / `2019` / `8888` **全部只听 127.0.0.1**，对外入口为 80/443，SSH 为 22 |
+| `tools/problem-importer` | ✅ 已实测：自测 47 项断言全通过；端到端 preflight/convert/verify 跑通 |
 | `test/judge-suite` 题面与用例 | ✅ 已实测：本地校验 10 项全通过（含 WA/AC 判定） |
 | `deploy/secret-scan.sh` | ✅ 已实测：在仓库上运行，结果干净 |
 
@@ -579,11 +579,11 @@ Using mongodb external event bus
 | `deploy/rollback.sh`（§49 回滚） | ⚠️ 只验证了 `--list` 只读模式 | 同上 |
 | `deploy/restore-check.sh`（§46 恢复演练） | ⚠️ 未验证 | 目前还没有第一份备份（§45 第 8 步未执行） |
 | `deploy/backup.sh` + 异地副本 | ⚠️ 未执行 | 还没跑过一次真备份，异地副本也没有 |
-| 域名与 HTTPS（§41） | ⚠️ 未配置 | 目前裸 IP + HTTP/80；**上线前必须补** |
+| 域名与 HTTPS（§41） | ⚠️ 临时 IP 入口 | `http://101.42.27.44/` 可用；443 已监听但裸 IP 内部证书不适合作为生产 HTTPS，**上线前必须配置域名证书** |
 | `addons/sylu-brand` 插件 | ⚠️ 未安装未验证 | 品牌目前全部用原生设置实现，插件尚未 `hydrooj addon add` |
 | 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
 
-**IP 内测状态（2026-09-21）**：`http://101.42.27.44/` 已可用。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已导入并实测 C++ Accepted、Wrong Answer、TLE、Python Accepted；备份已重新生成并完成临时 MongoDB 恢复核对。当前仍属于 IP 内测，不宣称公网生产上线。
+**IP 内测状态（2026-09-21）**：`http://101.42.27.44/` 已可用，首页、题库、训练、比赛、作业、排名、登录、注册和状态页均已实测。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已导入并实测 C++ Accepted、Wrong Answer、TLE、Python Accepted；备份已重新生成并完成临时 MongoDB 恢复核对。当前仍属于 IP 内测，不宣称公网生产上线。
 
 IP 内测仍保留以下上线前工作：配置域名与 HTTPS、异地备份副本、完整人工恢复启动演练、教师作业与比赛链路验收，以及逐项执行沙箱网络测试。
 上线判定请看 `docs/ACCEPTANCE.md`（§72）。
