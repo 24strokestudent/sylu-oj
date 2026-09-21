@@ -20,7 +20,7 @@ bash deploy/healthcheck.sh --gate        # §7  第一道 Gate
 bash deploy/secret-scan.sh               # §44 密钥与 §69 危险实现扫描
 bash deploy/configure.sh --verify --url https://<你的域名>/   # §65 线上页面检查
 bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
-node test/ui/check.js                    # §8 §9 前端红线：模板覆盖范围、选择器债务、品牌归属
+node test/ui/check.js                    # §8 §9 §12 前端红线：模板覆盖范围、选择器债务、品牌归属、比赛数据不提前泄露
 node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出图，横向溢出即 fail
 ```
 

@@ -24,13 +24,13 @@
 | 题目详情 | `/p/:pid` | `PERM_VIEW_PROBLEM`；递交需 `PERM_SUBMIT_PROBLEM` | 题面、样例、标签、讨论/题解入口、递交面板 | 沙箱已验证（`problem-guest/student/admin`，仅静态结构） | C 级 CSS（§11）；递交面板/编辑器须线上人工回归 |
 | 提交记录 | `/record` | `PERM_VIEW_RECORD`（`1n<<70n`，学生默认含） | 按用户/题目/比赛/语言/状态筛选 | 沙箱已验证（`records-student`） | C 级 CSS + 窄屏列压缩（§13）；筛选表单须线上人工回归 |
 | 提交详情 | `/record/:rid` | `PERM_VIEW_RECORD` + `user.own()` 决定能否看他人代码 | 状态、子任务、编译/评测输出、代码 | 沙箱已验证（`record-student`） | C 级 CSS（§14）；输出折叠行为须线上人工回归 |
-| 登录 | `/login` | 未登录 | 账号口令登录 | 未覆盖（无场景） | 白名单已留 `login.html`，本轮未做，P1 |
-| 注册 | `/register` | 未登录 | 新建账号 | 未覆盖 | P1 |
-| 训练 | `/training` | `PERM_VIEW_TRAINING` | 训练列表与进入 | 未覆盖 | 只允许 CSS；状态色/分页已随全局组件生效，需截图后再定 |
-| 比赛 | `/contest` | `PERM_VIEW_CONTEST` | 列表、详情、榜单 | 未覆盖 | 只允许 CSS。**禁止**为统一外观提前显示隐藏题/榜单/赛后数据 |
-| 作业 | `/homework` | `PERM_VIEW_HOMEWORK` | 列表、详情、榜单 | 未覆盖 | 同上 |
-| 讨论 | `/discuss` | `PERM_VIEW_DISCUSSION` | 版块、帖子、回复 | 未覆盖 | 只允许 CSS，P1 |
-| 排名 | `/ranking` | `PERM_VIEW_RANKING` | RP 榜单 | 未覆盖 | 只允许 CSS，P1 |
+| 登录 | `/login` | 未登录 | 账号口令登录 | 沙箱已验证（`login-guest`，仅静态结构） | 版式是 `layout/immersive.html`（无导航那套），本轮只把背景从 Hydro 风景照换成墨色令牌；模板覆盖与输入框配色留 P1 |
+| 注册 | `/register` | 未登录 | 新建账号 | 未覆盖 | P1：注册表单要 captcha 服务产物才能渲染，沙箱不造假验证码 |
+| 训练 | `/training` | `PERM_VIEW_TRAINING` | 训练列表与进入 | 沙箱已验证（`training-student/guest`） | C 级 CSS：进度条换成站内"通过"色；题单详情页未覆盖 |
+| 比赛 | `/contest`、`/contest/:tid` | `PERM_VIEW_CONTEST`；隐藏题/分组题另需 `PERM_VIEW_HIDDEN_CONTEST`；榜单需 `PERM_VIEW_CONTEST_SCOREBOARD`，未放榜时另需 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`（`model/contest.ts:1051-1073`） | 列表、详情、题目列表、榜单、我的提交 | 沙箱已验证（`contests-student/admin`、`contest-live/upcoming/ended-hidden/ended-open` 四态） | C 级 CSS（横幅与按钮换品牌色）；**"禁止提前显示隐藏题/榜单"已做成 `checkContestGates` 断言**，榜单页本身需 handler 复刻，留 P1 |
+| 作业 | `/homework` | `PERM_VIEW_HOMEWORK` | 列表、日历视图 | 沙箱已验证（`homework-student`，列表态） | 只允许 CSS；日历视图需要 `calendar` 字段，已按 `handler/homework.ts:61-67` 复刻但未出图核对，P1 |
+| 讨论 | `/discuss` | `PERM_VIEW_DISCUSSION` | 版块、帖子、回复 | 沙箱已验证（`discuss-student/guest`，列表页） | 只允许 CSS；帖子详情与回复树未覆盖 |
+| 排名 | `/ranking` | `PERM_VIEW_RANKING` | RP 榜单 | 沙箱已验证（`ranking-student/guest`） | 只允许 CSS。`pagination.ranking` 已补进设置默认值，否则名次列渲染成 NaN |
 | 用户中心 | `/home/*` | `PRIV_USER_PROFILE` | 设置、通知、域名加入 | `user/settings.html` 在白名单内未使用 | P1 |
 | 管理域 | `/manage/*` | `PERM_ADMIN` 组合 | 题目/用户/域名管理 | 未覆盖（`manage.css` 已从装配名单里删掉，不留空文件） | P2，做之前先把文件加回三处名单（`render.js` / `configure.sh` / `check.js` 会互查） |
 | 关于本站 | `/sylu/about` | 无（新增只读页） | 非官方声明 + 使用须知 | 沙箱已验证（`about-student`） | 结构归模板、样式归 `about.css`（§25，已完成） |
@@ -41,10 +41,28 @@
 
 | 角色 | perm | priv | 实测到的分支差异 |
 | --- | --- | --- | --- |
-| guest | `PERM_BASIC` | `PRIV_REGISTER_USER` | 题库 9 题、无状态列内容；题面显示"登录后递交" |
-| student | `PERM_DEFAULT` | `PRIV_DEFAULT\|PRIV_REGISTER_USER` | 题面有递交入口；题库侧栏只有 Edit/复制选中；看不到隐藏题 |
-| teacher | `PERM_DEFAULT\|PERM_EDIT_DOMAIN\|PERM_CREATE_PROBLEM\|PERM_EDIT_PROBLEM` | 同上 | 多出「创建题目」「Hide/Unhide Selected」；**仍然看不到隐藏题** |
-| admin | `PERM_ALL` | `PRIV_DEFAULT` + 系统位 | 看到隐藏题 1009（带"隐藏"标）；导航多出「控制面板」 |
+| guest | `PERM_BASIC` | `PRIV_REGISTER_USER` | 题库 9 题、无状态列内容；题面显示"登录后递交"；训练页无进度 |
+| student | `PERM_DEFAULT` | `PRIV_DEFAULT\|PRIV_REGISTER_USER` | 题面有递交入口；题库侧栏只有 Edit/复制选中；看不到隐藏题；比赛侧栏没有「编辑比赛」 |
+| teacher | `PERM_DEFAULT\|PERM_EDIT_DOMAIN\|PERM_CREATE_PROBLEM\|PERM_EDIT_PROBLEM` | 同上 | 多出「创建题目」「Hide/Unhide Selected」；**仍然看不到隐藏题**（`PERM_DEFAULT` 不含 `PERM_VIEW_PROBLEM_HIDDEN`，也不含 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`） |
+| admin | `PERM_ALL` | `PRIV_DEFAULT` + 系统位 | 看到隐藏题 1009（带"隐藏"标）与分组比赛；导航多出「控制面板」 |
+
+`PERM_DEFAULT` 里有 `PERM_EDIT_CONTEST_SELF` 而**没有** `PERM_EDIT_CONTEST`
+（`permission.ts:110-153`），所以学生侧栏不该出现「编辑比赛」；
+沙箱里学生确实出现的「提前结束比赛」是 `contest_sidebar.html:120` 的自助入口
+（条件只有"已参加 + 进行中 + 非作业"），不是管理权限，两者不要混为一谈。
+
+### 比赛四态 × 身份：侧栏里到底该出现什么
+
+`checkContestGates` 逐条断言的就是这张表（"链接"指 `/contest/:tid/problems` 与
+`/contest/:tid/scoreboard` 两个入口）：
+
+| 夹具时间线 | 身份 | 题目列表 | 成绩表 | 依据 |
+| --- | --- | --- | --- | --- |
+| 进行中（ACM） | student | 有 | 有 | `isOngoing` + `showScoreboard` |
+| 未开始（OI，榜隐藏） | student | 无 | 无 | 三条时间判定全 false，且无隐藏榜权限 |
+| 已结束、榜未公布（OI） | student | 有 | **无** | `canShowScoreboard` false，`canViewHiddenScoreboard` 也 false |
+| 已结束、榜未公布（OI） | admin | 有 | 有 | `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD` 放行 |
+| 已结束、榜已公布（OI） | student | 有 | 有 | `isDone` 且未 `keepScoreboardHidden` |
 
 这张表的意义是反向的：**普通学生不能因为 UI 改造多出任何一个入口**。
 `checkTierC` 把"隐藏题只出现在 admin 页"钉成断言，且正例反例都查——
@@ -55,9 +73,9 @@
 ```bash
 cd test/ui && npm install
 node fetch-assets.js            # 拉上游编译产物 theme.css + iconfont 到 out/vendor
-node render.js --all            # 16 个场景 → out/*.html
+node render.js --all            # 31 个场景 → out/*.html
 node shot.js --widths 1440,1024,768,390   # 全断点出图，溢出即 exit 1
-node check.js                   # 13 项闸门（其中 3 项是只降不升的计数）
+node check.js                   # 15 项闸门（其中 3 项是只降不升的计数）
 node compare.js HEAD            # 与上一版逐像素比（tier C 的差异是本轮刻意改出来的）
 ```
 

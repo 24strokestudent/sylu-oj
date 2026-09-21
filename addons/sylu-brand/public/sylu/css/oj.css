@@ -1,11 +1,12 @@
-/* 题库 / 题面 / 提交记录 / 提交详情（计划 §10 §11 §13 §14）。
-   这四组页面属 C 级：只用 CSS 改造，不覆盖上游模板，所以这里的选择器全部来自
+/* C 级业务页（题库 / 题面 / 提交记录 / 提交详情 / 比赛 / 作业 / 训练 / 讨论 / 排名 / 登录背景）。
+   计划 §10 §11 §13 §14，以及 2026-09-21 补齐的六页。
+   这些页面属 C 级：只用 CSS 改造，不覆盖上游模板，所以这里的选择器全部来自
    .ref/Hydro/packages/ui-default/templates 的原文类名，改名或换结构都会静默失效。
    窄屏的断点规则统一放 responsive.css。
 
    作用域分两种，是刻意的：
      - 版面类规则（卡片、表格列宽、题面排版）一律挂在 .page--<对应页面> 上，
-       没验收过的页面（训练/比赛/作业/讨论/后台）不会被顺手改掉。
+       名单与 test/ui/render.js 的场景一一对应：没截过图的页面不顺手改（后台 manage 至今未验）。
      - 判题状态色、分页、侧栏菜单、搜索控件是上游的共享组件，不限定页面，
        这样比赛/作业里的同一枚状态格子也一起换成品牌色。
    例外是分类侧栏（.group-list/.chip-list）：同一个 partial 也出现在首页，
@@ -15,12 +16,19 @@
 /* ---------- 区块卡片 ---------- */
 /* 上游 .section 是"白底 + 大片蓝灰投影、无描边、无圆角"，和首页那套
    描边 + 圆角 + 柔和投影的卡片是两种语言——计划 §10 说的"与首页视觉割裂"，
-   主要就割在这里。这里只给已经目视验收过的四个页面换上卡片外观：
-   训练/比赛/作业/讨论/后台没截过图，先不跟着改（见 test/ui/README.md 的待办）。 */
+   主要就割在这里。名单只放沙箱里真截过图、目视验收过的页面：
+   比赛/作业/训练/讨论/排名是 2026-09-21 补齐的六页，后台（manage）仍未验，
+   所以不在这里。新增一个页面作用域的前提是它在 render.js 里有场景。 */
 .page--problem_main .section,
 .page--problem_detail .section,
 .page--record_main .section,
-.page--record_detail .section {
+.page--record_detail .section,
+.page--contest_main .section,
+.page--contest_detail .section,
+.page--homework_main .section,
+.page--training_main .section,
+.page--discussion_main .section,
+.page--ranking .section {
   overflow: hidden;
   border: 1px solid var(--sylu-border);
   border-radius: var(--sylu-radius-container);
@@ -31,7 +39,12 @@
 .page--problem_main .section__header,
 .page--record_main .section__header,
 .page--record_detail .section__header,
-.page--problem_detail .section__header {
+.page--problem_detail .section__header,
+.page--contest_main .section__header,
+.page--homework_main .section__header,
+.page--training_main .section__header,
+.page--discussion_main .section__header,
+.page--ranking .section__header {
   border-bottom: 1px solid var(--sylu-border);
 }
 
@@ -46,7 +59,13 @@
 .page--problem_main .section__title,
 .page--problem_detail .section__title,
 .page--record_main .section__title,
-.page--record_detail .section__title {
+.page--record_detail .section__title,
+.page--contest_main .section__title,
+.page--contest_detail .section__title,
+.page--homework_main .section__title,
+.page--training_main .section__title,
+.page--discussion_main .section__title,
+.page--ranking .section__title {
   color: var(--sylu-ink);
 }
 
@@ -447,3 +466,62 @@ td.record-status--border.ignored { background: var(--sylu-status-ignored-soft); 
 }
 
 .page--problem_main .chip-list__item a:hover { color: var(--sylu-primary); }
+
+/* ---------- 比赛横幅 ---------- */
+/* 列表页顶部那两块"正在进行 / 即将开始"是上游最抢眼的非品牌色：
+   粉红与天蓝的径向渐变，配一枚荧光黄按钮（#f6df45），和站内其余页面
+   不是一套语言。语义只有两个（进行中=主色、未开始=信息蓝），
+   所以直接换成同名令牌，并把上游的渐变图撤掉——只覆盖 background 会被
+   它单独声明的 background-image 留着，必须显式 none。
+   上游这里没有 border，卡片规则会给横幅描一圈浅灰边，压在品牌色上很脏，
+   所以把描边透明掉，圆角和投影保留。 */
+.page--contest_main .section--contest { border-color: transparent; }
+
+.page--contest_main .section--contest.live {
+  background-color: var(--sylu-primary);
+  background-image: none;
+}
+
+.page--contest_main .section--contest.ready {
+  background-color: var(--sylu-link);
+  background-image: none;
+}
+
+/* "查看详情"压在两种品牌色上，白底深字在两边都有足够对比；
+   上游的 hover 是"更亮的黄 + 黄色光晕"，这里换成抬升阴影。 */
+.page--contest_main .section--contest .detail-button {
+  color: var(--sylu-ink);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.page--contest_main .section--contest .detail-button:hover {
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-raised);
+}
+
+/* 横幅里的信息图标原本是黄色（#ffeb81），在白字行里比文字还亮，跟着文字走。 */
+.page--contest_main .section--contest .info .icon {
+  color: var(--sylu-surface);
+  opacity: .85;
+}
+
+/* ---------- 训练进度条 ---------- */
+/* 上游用 #2ecc40 的荧光绿配 #eee 的灰槽，和记录页/题库的状态色对不上；
+   换成"通过"色与描边色，进度语义不变。 */
+.page--training_main .training__progress-bar { background: var(--sylu-border); }
+.page--training_main .training__progress-track { background-color: var(--sylu-status-pass); }
+
+/* ---------- 登录页背景 ---------- */
+/* 登录页走 layout/immersive.html：上游把整块画布铺成一张 Hydro 的蓝色风景照
+   （#80b2d5 + immersive-background.jpg），与品牌层毫无关系。
+   换成墨色底：.immersive--content 的白字、以及 base.css 的主色按钮在它上面都读得清。
+   选择器与上游同形（类 + id），靠加载顺序覆盖，不用 !important。 */
+.layout--immersive #panel {
+  background: var(--sylu-ink);
+  /* theme.css 里还有一条同特异性的 @media (min-resolution:1.5dppx) 规则，
+     在高倍屏上把 @2x 照片塞回 background-image。出图固定 deviceScaleFactor 1，
+     沙箱量不到这一条，所以 background-image 必须显式关掉（媒体查询不加特异性，
+     本站样式表在 theme.css 之后，后写覆盖先写）。 */
+  background-image: none;
+}
