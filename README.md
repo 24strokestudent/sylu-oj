@@ -14,8 +14,9 @@ sylu-oj/
 │   ├── js/            # 脚本（main.js 交互 / loader.js 加载动画）
 │   ├── 沈阳理工大学-logo.svg
 │   ├──login.html      #登录页面
-│   └──register.html   #注册页面
-│ 
+│   ├──register.html   #注册页面
+│   ├──level.html    #排名页面
+│   └──talk.html     #讨论页面
 └── server/            # 后端（开发中）
 ```
 

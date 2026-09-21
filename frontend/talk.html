@@ -1,0 +1,181 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>讨论区 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 讨论区——沈阳理工大学在线评测系统题解分享、问题求助、站内公告与交流，和全校同学一起刷题进阶。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="讨论区 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <!-- 子页面没有首页那些锚点区块，所以指回 index.html 对应位置 -->
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="index.html#latest">题库</a>
+        <a href="index.html#features">比赛</a>
+        <a href="talk.html" class="active">讨论</a>
+        <a href="level.html">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 页头 ==================== -->
+  <section class="page-head">
+    <div class="container">
+      <h1 class="section-title">讨论区</h1>
+      <p class="section-sub">题解分享 · 问题求助 · 站内公告 · 闲聊交流</p>
+      <p class="page-head-meta">数据来源 <code>GET /api/topics</code> · 当前为占位示例数据</p>
+    </div>
+  </section>
+
+  <!-- ==================== 讨论主体 ==================== -->
+  <section class="talk" id="talk">
+    <div class="container talk-layout">
+
+      <!-- 左：话题列表 -->
+      <div class="talk-main">
+
+        <div class="talk-toolbar">
+          <div class="field">
+            <label for="talkSearch">搜索话题</label>
+            <div class="input-wrap">
+              <input type="search" id="talkSearch" placeholder="搜索标题、作者或题目编号" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="talkCategory">分类</label>
+            <div class="input-wrap">
+              <select id="talkCategory">
+                <option value="">全部分类</option>
+                <option value="题解">题解</option>
+                <option value="求助">求助</option>
+                <option value="公告">公告</option>
+                <option value="闲聊">闲聊</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="talkSort">排序方式</label>
+            <div class="input-wrap">
+              <select id="talkSort">
+                <option value="lastReply">最新回复（默认）</option>
+                <option value="created">最新发布</option>
+                <option value="replies">回复最多</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="talk-actions">
+          <p class="talk-hint">发帖、回复与点赞需要登录后使用</p>
+          <a href="login.html" class="btn btn-primary">发布新帖</a>
+        </div>
+
+        <!-- 话题列表由 js/talk.js 渲染 -->
+        <div class="talk-list" id="talkList"></div>
+
+        <p class="talk-count" id="talkCount" aria-live="polite"></p>
+      </div>
+
+      <!-- 右：侧边栏 -->
+      <aside class="talk-side">
+        <div class="panel">
+          <h3 class="panel-title">本周热门</h3>
+          <ul class="panel-list" id="hotTopics"></ul>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">活跃贡献者</h3>
+          <ul class="panel-list" id="topAuthors"></ul>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">发帖须知</h3>
+          <ul class="talk-rules">
+            <li>题解请写清思路与复杂度，代码建议贴完整片段</li>
+            <li>求助请附题目编号、错误现象和已尝试的做法</li>
+            <li>请勿发布与竞赛、课程学习无关的内容</li>
+          </ul>
+        </div>
+      </aside>
+
+    </div>
+  </section>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/talk.js"></script>
+
+</body>
+
+</html>

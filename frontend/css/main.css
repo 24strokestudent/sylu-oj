@@ -985,6 +985,238 @@ img {
 }
 
 /* ============================================================
+   讨论区（talk）
+   复用校色变量、.page-head、.panel 与 .field/.input-wrap
+   ============================================================ */
+
+.talk {
+  padding: 40px 0 76px;
+  background: var(--bg);
+}
+
+.talk-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.talk-main {
+  min-width: 0;
+}
+
+/* ---------- 工具条 ---------- */
+
+.talk-toolbar {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.talk-toolbar .field {
+  margin-bottom: 0;
+}
+
+.talk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.talk-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 话题列表 ---------- */
+
+.talk-list {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.topic-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 20px 16px 22px;
+  border-top: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+
+.topic-item:first-child {
+  border-top: 0;
+}
+
+.topic-item:hover {
+  background: #fafcf9;
+}
+
+/* 左侧分类色条 */
+.topic-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--border);
+}
+
+.topic-item.is-solution::before { background: #7fb47c; }
+.topic-item.is-help::before     { background: #d99b93; }
+.topic-item.is-notice::before   { background: #7fb0d9; }
+.topic-item.is-chat::before     { background: #a79bd6; }
+
+.topic-main {
+  min-width: 0;
+}
+
+.topic-title {
+  margin: 0 0 8px;
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+
+.topic-title a {
+  color: var(--green-deeper);
+  transition: color 0.15s ease;
+}
+
+.topic-title a:hover {
+  color: var(--brand-red);
+}
+
+.topic-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.topic-author {
+  color: var(--brown);
+  font-weight: 600;
+}
+
+.topic-ref {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--brown-light);
+  color: var(--brown);
+  padding: 1px 7px;
+  border-radius: 5px;
+}
+
+.topic-stats {
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.topic-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 38px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.topic-stat b {
+  font-size: 14.5px;
+  color: var(--green-deeper);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分类标签（与首页 .tag 同一套配色） */
+.tag-solution { background: #e5f2e5; color: #3c7a3c; }
+.tag-help     { background: #fbe6e3; color: #b3453a; }
+.tag-notice   { background: #e2f0fd; color: #2c6cb0; }
+.tag-chat     { background: #eceaf6; color: #6a5bb0; }
+
+.talk-empty {
+  padding: 46px 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.talk-count {
+  margin: 14px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.talk-count.is-error {
+  color: var(--brand-red);
+}
+
+/* ---------- 侧边栏 ---------- */
+
+.talk-side {
+  position: sticky;
+  top: 92px;
+}
+
+.talk-side .panel + .panel {
+  margin-top: 20px;
+}
+
+.talk-side .panel-list {
+  margin-bottom: 0;
+}
+
+.talk-rules {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+
+/* ---------- 讨论区响应式 ---------- */
+
+@media (max-width: 980px) {
+  .talk-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .talk-side {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .talk {
+    padding: 28px 0 56px;
+  }
+
+  .talk-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .topic-item {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+/* ============================================================
    认证页（注册 / 登录）
    复用首页校色变量与导航、页脚样式
    ============================================================ */
