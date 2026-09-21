@@ -1,0 +1,67 @@
+/* 页面外壳：主内容区、导航、页脚。导航的品牌结构是唯一仍需按位置猜 DOM 的地方，
+   已在 "真实导航结构" 一步替换；此处其余规则均绑定 Hydro 的稳定类名。 */
+.main {
+  padding-top: 28px;
+  padding-bottom: 40px;
+}
+
+.nav {
+  background: rgba(255, 255, 255, .97);
+  border-bottom: 1px solid var(--sylu-border);
+  box-shadow: var(--sylu-shadow-nav);
+}
+
+.nav__logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+/* LEGACY(导航品牌结构)：把 "SYLU OJ / 在线程序设计与评测平台" 用伪元素塞进第一个导航项。
+   正确做法是覆盖 partials/nav.html 让品牌有自己的 DOM，这一步做完即删。 */
+.nav__list--main > .nav__list-item:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 14px;
+}
+
+.nav__list--main > .nav__list-item:first-child::after {
+  content: "SYLU OJ\A 在线程序设计与评测平台";
+  white-space: pre;
+  color: var(--sylu-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .02em;
+}
+
+.nav__item {
+  color: var(--sylu-ink);
+  transition: color .18s ease, background-color .18s ease;
+}
+
+.nav__item:hover,
+.nav__item.nav--active {
+  color: var(--sylu-primary);
+  background: #f8eeec;
+}
+
+.nav__item--round {
+  color: var(--sylu-primary);
+  border-color: var(--sylu-primary);
+}
+
+.nav__item--round:hover {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary);
+}
+
+.footer {
+  border-top: 1px solid var(--sylu-border);
+  background: var(--sylu-surface);
+}
+
+.footer__extra-link-item {
+  color: var(--sylu-muted);
+}

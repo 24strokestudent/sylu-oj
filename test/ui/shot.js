@@ -69,7 +69,8 @@ function main() {
     const argv = process.argv.slice(2);
     const wi = argv.indexOf('--widths');
     const widths = wi >= 0 ? argv[wi + 1].split(',').map(Number) : null;
-    const pages = argv.filter((a, i) => !a.startsWith('--') && i !== wi + 1);
+    // 排除 --widths 本身，以及它的取值（下标 wi+1，不以 -- 开头）
+    const pages = argv.filter((a, i) => !a.startsWith('--') && !(wi >= 0 && i === wi + 1));
 
     const browser = findBrowser();
     if (!browser) {

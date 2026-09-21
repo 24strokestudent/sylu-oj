@@ -74,8 +74,10 @@ cat <<'EOF'
      ui-default.footer_extra_html    页脚附加 HTML，一行一条，例如：
                                        <span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>
                                        <span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>
-                                       <link rel="stylesheet" href="/sylu-brand.css">
-                                     ← 免责声明走这里，零插件、零侵入
+                                       <link rel="stylesheet" href="/sylu/css/tokens.css">
+                                       <link rel="stylesheet" href="/sylu/css/base.css">
+                                     ← 免责声明走这里，零插件、零侵入；
+                                       样式也只能走这里挂——injectUI 没有注入 CSS 的能力
 
   【建议】关于页与公告（§40）
      ui-default.about                关于本站正文（Markdown）。放入：
@@ -114,10 +116,30 @@ if [ "$APPLY" = 1 ]; then
 
     # footer_extra_html 按行拆分：footer.html 会 .split('\n') 遍历，
     # 每条自动包一层 <li class="footer__extra-link-item">，所以这里**不要**自己写 <li>。
+    #
+    # 样式按职责拆成多份，放在 addons/sylu-brand/public/sylu/css/，由 server.ts 的
+    # public 静态目录以 web 根路径托管。逐份直链而不是 @import：@import 串行阻塞渲染。
+    # 挂在 /sylu/ 命名空间下，不占用 /css 这种上游将来可能用的根路径。
+    #
+    # 版本号取内容哈希：手动写死 ?v= 的话，改了样式却忘记 bump 就会让客户端继续吃旧缓存。
+    # 链接清单同样由目录内容生成，避免"加了文件忘了挂链接"这种静默失效。
+    CSS_DIR="${SYLU_OJ_ROOT}/addons/sylu-brand/public/sylu/css"
+    # 层叠顺序由这个名单决定，改名单即改层叠；render.js 的 CSS_FILES 必须与之一致（check.js 断言）
+    CSS_ORDER="tokens base shell home oj manage responsive"
+    CSS_LINKS=()
+    if [ -d "$CSS_DIR" ]; then
+        CSS_V="$(cat "$CSS_DIR"/*.css 2>/dev/null | md5sum | cut -c1-8)"
+        for _name in $CSS_ORDER; do
+            [ -f "$CSS_DIR/${_name}.css" ] || continue
+            CSS_LINKS+=("<link rel='stylesheet' href='/sylu/css/${_name}.css?v=${CSS_V}'>")
+        done
+    else
+        log_warn "找不到 ${CSS_DIR}，本次不会挂载本站样式，页面将退回 Hydro 原生外观"
+    fi
     FOOTER_HTML="$(printf '%s\n' \
         '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>' \
         '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>' \
-        '<link rel="stylesheet" href="/sylu-brand.css?v=20260921b">')"
+        ${CSS_LINKS[@]+"${CSS_LINKS[@]}"})"
 
     # §40 关于页正文：只写事实，不编造统计数字、不放假联系方式（§29 §65）
     ABOUT_MD="$(cat <<'ABOUT'

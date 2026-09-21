@@ -1,0 +1,6 @@
+/* 全局基线：只放跨页面共用的底色与字体，页面结构一律归 shell/home/oj。 */
+body {
+  background: var(--sylu-bg);
+  color: var(--sylu-text);
+  font-family: var(--sylu-font-ui);
+}

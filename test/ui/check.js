@@ -32,9 +32,9 @@ const HOMEPAGE_PREFIX = 'partials/homepage/';
 
 // RATCHET 基线：2026-09-21 实测（改造前）
 const DEBT_BASELINE = {
-    'sylu-brand.css 中的 richmedia 深层选择器': 53,
-    'sylu-brand.css 中的 first-child 位置选择器': 51,
-    'sylu-brand.css 中的 :has() 隐藏业务模块': 2,
+    '本站 CSS 中的 richmedia 深层选择器': 53,
+    '本站 CSS 中的 first-child 位置选择器': 51,
+    '本站 CSS 中的 :has() 隐藏业务模块': 2,
 };
 
 const LEAKS = ['DATETIME_SPAN_ERROR', 'Template render error', 'Cannot get template', 'undefined undefined'];
@@ -45,17 +45,15 @@ function pass(msg) { console.log(`✓ ${msg}`); }
 
 function htmlFiles() {
     if (!fs.existsSync(OUT)) return [];
-    return fs.readdirSync(OUT).filter((f) => f.endsWith('.html') && !f.startsWith('live-') && !f.startsWith('__'));
+    // live-/legacy-/__ 前缀是对照用的临时产物，不算场景
+    return fs.readdirSync(OUT)
+        .filter((f) => f.endsWith('.html') && !/^(live-|legacy-|__)/.test(f));
 }
 
 function cssFiles() {
-    const dirs = [path.join(ADDON, 'public'), path.join(ADDON, 'public', 'css')];
-    const out = [];
-    for (const d of dirs) {
-        if (!fs.existsSync(d)) continue;
-        for (const f of fs.readdirSync(d)) if (f.endsWith('.css')) out.push(path.join(d, f));
-    }
-    return out;
+    const dir = path.join(ADDON, 'public', 'sylu', 'css');
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).filter((f) => f.endsWith('.css')).map((f) => path.join(dir, f));
 }
 
 function checkLeaks() {
@@ -101,12 +99,13 @@ function checkOverrideWhitelist() {
 function checkDebtRatchet() {
     const files = cssFiles();
     if (!files.length) { pass('尚未产生拆分后的 CSS 文件'); return; }
-    const all = files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+    // 注释里会出现 :has() 这类字样，先剥掉注释再统计，否则指标会被文字描述干扰
+    const all = files.map((f) => fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')).join('\n');
     const count = (re) => (all.match(re) || []).length;
     const now = {
-        'sylu-brand.css 中的 richmedia 深层选择器': count(/richmedia/g),
-        'sylu-brand.css 中的 first-child 位置选择器': count(/first-child/g),
-        'sylu-brand.css 中的 :has() 隐藏业务模块': count(/:has\(/g),
+        '本站 CSS 中的 richmedia 深层选择器': count(/richmedia/g),
+        '本站 CSS 中的 first-child 位置选择器': count(/first-child/g),
+        '本站 CSS 中的 :has() 隐藏业务模块': count(/:has\(/g),
     };
     for (const k of Object.keys(DEBT_BASELINE)) {
         const cur = now[k] || 0;
@@ -115,6 +114,26 @@ function checkDebtRatchet() {
         else if (cur === base) console.log(`… ${k}：${cur}（仍为改造前水平）`);
         else console.log(`↓ ${k}：${base} → ${cur}`);
     }
+}
+
+function checkCssWiring() {
+    const dir = path.join(ADDON, 'public', 'sylu', 'css');
+    const real = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.css')).map((f) => f.slice(0, -4)) : [];
+    const sh = fs.readFileSync(path.join(ROOT, 'deploy', 'configure.sh'), 'utf8');
+    const orderLine = (sh.match(/^\s*CSS_ORDER="([^"]*)"/m) || [, ''])[1].split(/\s+/).filter(Boolean);
+    // eslint-disable-next-line global-require
+    const harness = require('./render.js').CSS_FILES.map((f) => f.replace(/\.css$/, ''));
+    let bad = 0;
+    if (!orderLine.length) { fail('configure.sh 里找不到 CSS_ORDER 名单，样式不会被挂载'); bad++; }
+    for (const f of real) {
+        if (!orderLine.includes(f)) { fail(`${f}.css 存在于目录，但不在 configure.sh 的 CSS_ORDER 里，线上不会加载`); bad++; }
+        if (!harness.includes(f)) { fail(`${f}.css 不在 render.js 的 CSS_FILES 里，沙箱不会加载它`); bad++; }
+    }
+    // 线上按 CSS_ORDER 层叠，沙箱按 CSS_FILES 层叠；两边顺序不一致会让沙箱失真
+    const sameOrder = orderLine.length === harness.length && orderLine.every((v, i) => v === harness[i]);
+    if (!sameOrder) { fail(`configure.sh 的 CSS_ORDER 与 render.js 的 CSS_FILES 不一致：[${orderLine}] vs [${harness}]`); bad++; }
+    const pending = harness.filter((f) => !real.includes(f));
+    if (!bad) pass(`样式装配一致：${real.length} 个文件已就位，名单两边同步${pending.length ? `，${pending.length} 个待建（${pending.join('/')}）` : ''}`);
 }
 
 function checkHomepageSections() {
@@ -134,6 +153,7 @@ function main() {
     checkBrandLines();
     checkOverrideWhitelist();
     checkDebtRatchet();
+    checkCssWiring();
     checkHomepageSections();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');
     process.exit(failed ? 1 : 0);

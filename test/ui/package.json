@@ -8,6 +8,8 @@
     "assets": "node fetch-assets.js",
     "render": "node render.js --all",
     "shot": "node shot.js",
+    "diff": "node diff.js",
+    "compare": "node compare.js",
     "check": "node check.js"
   },
   "devDependencies": {

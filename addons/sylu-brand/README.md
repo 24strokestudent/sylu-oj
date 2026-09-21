@@ -16,7 +16,7 @@ Hydro 原生系统设置已经覆盖了大部分品牌需求。**优先用原生
 | 监听端口 | `server.port` | 默认 `8888`，由反向代理对外提供服务，保持 `127.0.0.1` |
 | 反代模式 | `server.xproxy` | 前面挂了 Caddy/Nginx 时开启，否则取到的客户端 IP 会全是 127.0.0.1 |
 | 导航栏 Logo | `ui-default.nav_logo_dark` | 填 `/sylu-logo.svg`，资源由本插件提供 |
-| 页脚附加内容 | `ui-default.footer_extra_html` | **多行 HTML**，每行渲染成页脚一条；其中加载 `/sylu-brand.css` |
+| 页脚附加内容 | `ui-default.footer_extra_html` | **多行 HTML**，每行渲染成页脚一条；本站用它逐条直链 `/sylu/css/*.css` |
 | 关于页正文 | `ui-default.about` | Markdown。对应 `/wiki/about` 页面 |
 | 上传大小上限 | `server.upload` | 默认 `256m`，按需调整 |
 
@@ -66,9 +66,29 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 
 - 路由 `GET /sylu/about` —— 非官方声明 + 平台使用须知（使用须知 / 判题环境 / 反馈方式 / 隐私说明，§40）
 - 顶栏导航注入一个「关于本站」入口（指向上面这个路由）
-- 通过 `public/sylu-brand.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
+- 通过 `public/sylu/css/*.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
 
 它**不碰**用户系统、题库、Judge，也不改任何 Hydro 模板。
+
+## 样式是怎么加载的
+
+`ctx.injectUI()` 只支持 `ProblemAdd|Notification|Nav|UserDropdown|DomainManage|ControlPanel`
+六类挂载点，**没有注入 CSS/JS 的能力**；把全局样式打进 `entry.js` 需要走
+`frontend/*.page.tsx` + `builder.ts buildUI()` 的构建链。本插件不引入构建步骤，
+所以用的是另一条受支持的路：`public/` 下的文件会被 `server.ts` 以 web 根路径静态托管
+（`/sylu/css/tokens.css` 就是这么来的），再由 `ui-default.footer_extra_html` 逐条 `<link>` 引入。
+
+拆成多份而不是合成一份，是为了让"改哪块看哪块"和 git 归因一致：
+
+| 文件 | 负责 |
+|---|---|
+| `tokens.css` | 设计令牌，颜色的唯一出处 |
+| `base.css` | 全站底色与字体 |
+| `shell.css` | 导航、页脚、主内容区 |
+| `home.css` | 首页版面、公告排版、首屏 |
+| `responsive.css` | 全部断点，移动端改造只看这里 |
+
+直链而非 `@import`：`@import` 会串行阻塞渲染，且绕过版本号导致改样式后客户端拿旧缓存。
 
 ## 部署
 
