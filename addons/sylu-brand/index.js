@@ -157,9 +157,11 @@ async function apply(ctx) {
         // args.displayName 会直接作为导航文字（见 ui-default templates/partials/nav.html）
         ctx.injectUI('Nav', 'sylu_about', {
             prefix: 'sylu',
-            displayName: '关于本站',
             before: 'ranking',
         });
+        // injectUI 的节点名称用于路由，显示文案需写到节点本身，避免导航直接显示内部 route 名。
+        const navNode = global.Hydro.ui?.nodes?.Nav?.find((item) => item.name === 'sylu_about');
+        if (navNode) navNode.displayName = '关于本站';
     }
 
     ctx.logger.info('[sylu-brand] 已启用：路由 /sylu/about，导航入口=%s', brand.showNavEntry ? '开' : '关');

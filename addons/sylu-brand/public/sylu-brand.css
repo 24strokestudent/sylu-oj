@@ -1,0 +1,140 @@
+/* SYLU OJ 品牌适配：只覆盖 Hydro 现有页面的品牌层，题库、提交和后台结构保持不变。 */
+:root {
+  --sylu-red: #b12d28;
+  --sylu-red-dark: #8f201c;
+  --sylu-brown: #231815;
+  --sylu-green: #485742;
+  --sylu-green-light: #eef3ec;
+  --sylu-bg: #f6f8f5;
+  --sylu-border: #e3e8e0;
+}
+
+body {
+  background: var(--sylu-bg);
+  color: #2b2f2a;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+.nav {
+  background: rgba(255, 255, 255, .97);
+  border-bottom: 1px solid var(--sylu-border);
+  box-shadow: 0 2px 14px rgba(38, 50, 31, .08);
+}
+
+.nav__logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.nav__item {
+  color: var(--sylu-brown);
+  transition: color .18s ease, background-color .18s ease;
+}
+
+.nav__item:hover,
+.nav__item.nav--active {
+  color: var(--sylu-red);
+  background: #f8eeec;
+}
+
+.nav__item--round {
+  color: var(--sylu-red);
+  border-color: var(--sylu-red);
+}
+
+.nav__item--round:hover {
+  color: #fff;
+  background: var(--sylu-red);
+}
+
+.main {
+  padding-top: 28px;
+  padding-bottom: 40px;
+}
+
+.page--homepage .main > .row {
+  max-width: 1180px;
+}
+
+.page--homepage .large-9 > .section:first-child {
+  overflow: hidden;
+  border: 1px solid var(--sylu-border);
+  border-top: 4px solid var(--sylu-red);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(38, 50, 31, .10);
+}
+
+.page--homepage .large-9 > .section:first-child .section__body {
+  padding: 34px 38px 40px;
+}
+
+.page--homepage .richmedia h1,
+.page--homepage .richmedia h2,
+.page--homepage .richmedia h3 {
+  color: var(--sylu-brown);
+}
+
+.page--homepage .richmedia h1 {
+  margin-top: 0;
+  font-size: 30px;
+  letter-spacing: .02em;
+}
+
+.page--homepage .richmedia h2 {
+  margin-top: 30px;
+  padding-left: 12px;
+  border-left: 3px solid var(--sylu-red);
+  font-size: 19px;
+}
+
+.page--homepage .richmedia a,
+.page--homepage .section__body a {
+  color: #2f6f9f;
+}
+
+.page--homepage .richmedia a:hover,
+.page--homepage .section__body a:hover {
+  color: var(--sylu-red);
+}
+
+.page--homepage .richmedia blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  border-left: 4px solid var(--sylu-green);
+  border-radius: 8px;
+  background: var(--sylu-green-light);
+}
+
+.page--homepage .large-3 .section.side {
+  overflow: hidden;
+  border: 1px solid var(--sylu-border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(38, 50, 31, .07);
+}
+
+.page--homepage .large-3 .section__header {
+  border-bottom: 1px solid var(--sylu-border);
+  background: #fff;
+}
+
+.page--homepage .large-3 .section__title {
+  color: var(--sylu-brown);
+}
+
+.footer {
+  border-top: 1px solid var(--sylu-border);
+  background: #fff;
+}
+
+.footer__extra-link-item {
+  color: #687266;
+}
+
+@media (max-width: 640px) {
+  .main { padding-top: 16px; }
+  .page--homepage .large-9 > .section:first-child .section__body { padding: 24px 20px 28px; }
+  .page--homepage .richmedia h1 { font-size: 25px; }
+}

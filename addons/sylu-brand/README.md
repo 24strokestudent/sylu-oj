@@ -15,8 +15,8 @@ Hydro 原生系统设置已经覆盖了大部分品牌需求。**优先用原生
 | 默认语言 | `server.language` | `zh_CN` |
 | 监听端口 | `server.port` | 默认 `8888`，由反向代理对外提供服务，保持 `127.0.0.1` |
 | 反代模式 | `server.xproxy` | 前面挂了 Caddy/Nginx 时开启，否则取到的客户端 IP 会全是 127.0.0.1 |
-| 导航栏 Logo | `ui-default.nav_logo_dark` | 填图片 URL。默认 `/components/navigation/nav-logo-small_dark.png` |
-| 页脚附加内容 | `ui-default.footer_extra_html` | **多行 HTML**，每行渲染成页脚一条。非官方声明、备案号放这里 |
+| 导航栏 Logo | `ui-default.nav_logo_dark` | 填 `/sylu-logo.svg`，资源由本插件提供 |
+| 页脚附加内容 | `ui-default.footer_extra_html` | **多行 HTML**，每行渲染成页脚一条；其中加载 `/sylu-brand.css` |
 | 关于页正文 | `ui-default.about` | Markdown。对应 `/wiki/about` 页面 |
 | 上传大小上限 | `server.upload` | 默认 `256m`，按需调整 |
 
@@ -66,6 +66,7 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 
 - 路由 `GET /sylu/about` —— 非官方声明 + 平台使用须知（使用须知 / 判题环境 / 反馈方式 / 隐私说明，§40）
 - 顶栏导航注入一个「关于本站」入口（指向上面这个路由）
+- 通过 `public/sylu-brand.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚，不改题库、提交、比赛与管理页面结构
 
 它**不碰**用户系统、题库、Judge，也不改任何 Hydro 模板。
 
@@ -114,7 +115,6 @@ pm2 logs hydrooj --lines 100 | grep -i sylu      # 看 [sylu-brand] 的日志
 > 本插件在 Windows 上完成了静态语法检查，但**尚未在真实 Hydro 实例上验证过**（本地无 Debian/Hydro 环境）。
 > 上线前请按上面清单逐项验证，并如实记录结果——不要把它标记为"已完成"。
 
-## 后续（Phase 7 之后）
+## 视觉适配边界
 
-如果要做**整站配色**（校红 `#b12d28` / 校棕 `#231815` / 校绿 `#485742`，§33），原生设置没有自定义 CSS 入口，需要在插件里加 `frontend/*.page.tsx` 入口并构建（`yarn build`，产物由 Hydro 自动作为页面 bundle 加载）。
-这件事的优先级排在"核心链路可用"之后（§1.3），且必须保证不改 Hydro 模板。**本次未实现，不要假装它已存在。**
+本插件只覆盖品牌层：颜色、间距、首页信息卡片、导航状态和页脚。题目详情、提交记录、比赛、作业与管理后台继续使用 Hydro 原生交互，避免破坏成熟功能和升级路径。

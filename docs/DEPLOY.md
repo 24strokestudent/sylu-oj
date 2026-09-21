@@ -580,7 +580,7 @@ Using mongodb external event bus
 | `deploy/restore-check.sh`（§46 恢复演练） | ⚠️ 未验证 | 目前还没有第一份备份（§45 第 8 步未执行） |
 | `deploy/backup.sh` + 异地副本 | ⚠️ 未执行 | 还没跑过一次真备份，异地副本也没有 |
 | 域名与 HTTPS（§41） | ⚠️ 临时 IP 入口 | `http://101.42.27.44/` 可用；443 已监听但裸 IP 内部证书不适合作为生产 HTTPS，**上线前必须配置域名证书** |
-| `addons/sylu-brand` 插件 | ⚠️ 未安装未验证 | 品牌目前全部用原生设置实现，插件尚未 `hydrooj addon add` |
+| `addons/sylu-brand` 插件 | ✅ 已安装并验证 | `/sylu/about`、导航「关于本站」、`/sylu-brand.css`、`/sylu-logo.svg` 均已生效；Hydro 原生题库/提交/比赛/后台结构保留 |
 | 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
 
 **IP 内测状态（2026-09-21）**：`http://101.42.27.44/` 已可用，首页、题库、训练、比赛、作业、排名、登录、注册和状态页均已实测。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已导入并实测 C++ Accepted、Wrong Answer、TLE、Python Accepted；备份已重新生成并完成临时 MongoDB 恢复核对。当前仍属于 IP 内测，不宣称公网生产上线。

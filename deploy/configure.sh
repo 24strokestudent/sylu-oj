@@ -69,11 +69,12 @@ cat <<'EOF'
      server.port                     8888（保持默认，对外由 Caddy/Nginx 反代）
 
   【必改】品牌视觉（§32 §34）
-     ui-default.nav_logo_dark        你的 Logo 地址（建议 /sylu-brand/logo.svg）
+     ui-default.nav_logo_dark        /sylu-logo.svg（由 sylu-brand 提供）
                                      ← 原生支持，不需要改任何模板
      ui-default.footer_extra_html    页脚附加 HTML，一行一条，例如：
                                        <span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>
                                        <span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>
+                                       <link rel="stylesheet" href="/sylu-brand.css">
                                      ← 免责声明走这里，零插件、零侵入
 
   【建议】关于页与公告（§40）
@@ -115,7 +116,8 @@ if [ "$APPLY" = 1 ]; then
     # 每条自动包一层 <li class="footer__extra-link-item">，所以这里**不要**自己写 <li>。
     FOOTER_HTML="$(printf '%s\n' \
         '<span>SYLU OJ · 学生维护的非官方编程学习与在线评测平台</span>' \
-        '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>')"
+        '<span>非学校官方信息系统 · 请勿上传隐私数据 · 请勿提交恶意代码</span>' \
+        '<link rel="stylesheet" href="/sylu-brand.css">')"
 
     # §40 关于页正文：只写事实，不编造统计数字、不放假联系方式（§29 §65）
     ABOUT_MD="$(cat <<'ABOUT'
@@ -179,6 +181,34 @@ ABOUT
     apply_setting server.language zh_CN
     apply_setting ui-default.footer_extra_html "$FOOTER_HTML"
     apply_setting ui-default.about "$ABOUT_MD"
+
+    # 首页公告属于 system 域资料，使用官方 DomainModel.edit 写入，避免直接操作 MongoDB。
+    SYLU_BULLETIN="$(cat <<'BULLETIN'
+## SYLU OJ
+
+面向程序设计学习与算法训练的在线评测平台。
+
+> 这是学生维护的非官方平台，不代表学校官方立场。请勿上传隐私数据或提交恶意代码。
+
+### 从这里开始
+
+- [浏览题库](/p)：按标签和难度查找题目，提交代码并查看评测结果。
+- [训练](/training)：进入题单，按计划持续练习。
+- [比赛](/contest)：参加站内比赛，实时查看排名。
+- [作业](/homework)：查看教师发布的作业与截止时间。
+
+### 评测环境
+
+提交会在隔离沙箱中运行。编译器、时间限制和内存限制以题目页面显示为准；遇到题面或评测异常，请在讨论区反馈提交记录编号。
+BULLETIN
+    )"
+    if SYLU_BULLETIN="$SYLU_BULLETIN" timeout 90 hydrooj cli execute \
+        'return await global.Hydro.model.domain.edit("system", { name: "SYLU OJ", bulletin: process.env.SYLU_BULLETIN })' \
+        >/dev/null 2>&1; then
+        pk_pass "system 域名称与首页公告已更新"
+    else
+        pk_fail "system 域名称与首页公告更新失败"
+    fi
     pk_summary
 
     # server.url 会被部分组件在启动时读入并缓存，改完重启一次最稳
@@ -189,10 +219,11 @@ ABOUT
         log_warn "自动重启失败，请手动执行：pm2 restart hydrooj"
     fi
 
-    # 有意不动 nav_logo_dark：本站还没有 Logo 资源，保持上游默认值，
-    # 免得指向一个不存在的文件变成死图（§65）。
-    log_warn "ui-default.nav_logo_dark 未改动：本站还没有 Logo 资源，先保持上游默认值。"
-    log_warn "等有真实 Logo 再设，免得指向不存在的文件变成死图（§65）。"
+    if hydro_sys_set ui-default.nav_logo_dark /sylu-logo.svg; then
+        log_ok "ui-default.nav_logo_dark 已指向 SYLU 品牌资源"
+    else
+        log_warn "ui-default.nav_logo_dark 写入失败，请在系统设置中填写 /sylu-logo.svg"
+    fi
 
     record_note "configure.sh --apply site_url=${SITE_URL}"
 else

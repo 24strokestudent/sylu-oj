@@ -17,7 +17,7 @@
 | 目录 | 职责 | 状态 |
 |---|---|---|
 | `deploy/` | 部署前检查、安装、配置、备份、恢复演练、升级、回滚、密钥扫描 | 已交付（需在 Debian 12 服务器执行） |
-| `addons/sylu-brand/` | 顶栏「关于本站」入口 + 平台须知聚合页（站点名称/Logo/页脚走 Hydro 原生设置，不需要插件） | 代码已就绪，待服务器验证 |
+| `addons/sylu-brand/` | 顶栏「关于本站」入口、平台须知聚合页、SYLU Logo 与 Hydro 原生界面视觉适配 | 已部署并验证 |
 | `addons/sylu-campus/` | 学号绑定与身份验证（**V1 不启用**） | 仅设计说明 |
 | `tools/problem-importer/` | 题库 ZIP 预检、预览、转换为 Hydro 可导入格式 | 已交付并本地自测 |
 | `test/` | Judge 验收集（AC/WA/CE/RE/TLE/MLE/OLE）与沙箱安全用例 | 已交付 |
