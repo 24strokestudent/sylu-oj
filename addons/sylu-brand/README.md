@@ -191,3 +191,4 @@ pm2 logs hydrooj --lines 100 | grep -i sylu      # 看 [sylu-brand] 的日志
 改动前后的视觉差异用 `node test/ui/compare.js <ref>` 量，不是靠目视：
 `home-*` 与 `about-student` 相对上一版应当 ≈0（本轮没碰它们），
 C 级四组页面则是本轮刻意改出来的差异。
+每个页面允许动什么、动到哪一步、用什么证明，记在 `docs/UI-FUNCTION-BASELINE.md`。

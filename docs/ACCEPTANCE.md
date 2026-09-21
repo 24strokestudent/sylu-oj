@@ -21,6 +21,7 @@ bash deploy/secret-scan.sh               # §44 密钥与 §69 危险实现扫�
 bash deploy/configure.sh --verify --url https://<你的域名>/   # §65 线上页面检查
 bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
 node test/ui/check.js                    # §8 §9 前端红线：模板覆盖范围、选择器债务、品牌归属
+node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出图，横向溢出即 fail
 ```
 
 | 命令 | 期望 | 实际 | 结论 |
@@ -31,6 +32,11 @@ node test/ui/check.js                    # §8 §9 前端红线：模板覆盖�
 | `configure.sh --verify` | 无 FAIL | | |
 | `check-fixtures.sh` | 全绿 | | |
 | `test/ui/check.js` | 退出码 0（离线渲染，不需要起服务） | | |
+| `test/ui/shot.js` | 退出码 0，即各断点均无横向溢出 | | |
+
+前端改造的逐项对照（页面 / 路由 / 权限 / 主要功能 / 状态 / 要求）在
+`docs/UI-FUNCTION-BASELINE.md`；沙箱怎么用、以及哪些计划条目靠 CSS 落不了地，
+在 `test/ui/README.md`。这两份与上面的命令一起构成前端验收的证据链，缺一份就等于该项没有证据。
 
 > 脚本判不了的（人脑才知道对不对的），在下面各章逐项人工过。
 
