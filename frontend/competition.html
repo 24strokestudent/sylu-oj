@@ -1,10 +1,191 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+  <meta charset="utf-8">
+  <title>比赛 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 比赛——沈阳理工大学在线评测系统竞赛列表，支持 ACM / OI / IOI 赛制，周赛、校赛与专题训练实时排行榜。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="比赛 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
 </head>
+
 <body>
-$END$
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <!-- 子页面没有首页那些锚点区块，所以指回 index.html 对应位置 -->
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="bank.html">题库</a>
+        <a href="competition.html" class="active">比赛</a>
+        <a href="talk.html">讨论</a>
+        <a href="level.html">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 页头 ==================== -->
+  <section class="page-head">
+    <div class="container">
+      <h1 class="section-title">比赛</h1>
+      <p class="section-sub">ACM / OI / IOI 赛制 · 周赛、校赛与专题训练</p>
+      <p class="page-head-meta">数据来源 <code>GET /api/contests</code> · 当前为占位示例数据</p>
+    </div>
+  </section>
+
+  <!-- ==================== 比赛列表 ==================== -->
+  <section class="comp" id="competition">
+    <div class="container">
+
+      <div class="comp-toolbar">
+        <div class="field">
+          <label for="compSearch">搜索比赛</label>
+          <div class="input-wrap">
+            <input type="search" id="compSearch" placeholder="搜索比赛名称或赛制" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="compStatus">状态</label>
+          <div class="input-wrap">
+            <select id="compStatus">
+              <option value="">全部状态</option>
+              <option value="ongoing">进行中</option>
+              <option value="upcoming">未开始</option>
+              <option value="ended">已结束</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="compFormat">赛制</label>
+          <div class="input-wrap">
+            <select id="compFormat">
+              <option value="">全部赛制</option>
+              <option value="ACM">ACM</option>
+              <option value="OI">OI</option>
+              <option value="IOI">IOI</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="compSort">排序方式</label>
+          <div class="input-wrap">
+            <select id="compSort">
+              <option value="status">进行中优先（默认）</option>
+              <option value="participants">参赛人数</option>
+              <option value="problems">题目数量</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="comp-actions">
+        <p class="comp-hint">参加比赛、提交代码与查看实时榜单需要登录后使用</p>
+        <a href="level.html" class="panel-more">查看总榜单 →</a>
+      </div>
+
+      <!-- 比赛卡片由 js/competition.js 渲染 -->
+      <div class="comp-grid" id="compList"></div>
+
+      <p class="comp-count" id="compCount" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- ==================== 赛制说明 ==================== -->
+  <section class="features">
+    <div class="container">
+      <h2 class="section-title">赛制说明</h2>
+      <p class="section-sub">三种常见赛制的计分与排名规则</p>
+
+      <div class="comp-rules-grid">
+        <article class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>ACM 赛制</h3>
+          <p>按通过题数排名，题数相同则按罚时（总用时 + 每次错误提交 20 分钟）由少到多排序，实时榜单、封榜滚榜。</p>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>OI 赛制</h3>
+          <p>每题按测试点得分累加，比赛结束前不显示实时榜单，赛后可查看各测试点得分与最终排名。</p>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon">🏅</div>
+          <h3>IOI 赛制</h3>
+          <p>每题取历史最高得分计入总分，比赛过程中可反复提交，实时显示分数与排名，适合训练与模拟赛。</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/competition.js"></script>
+
 </body>
+
 </html>

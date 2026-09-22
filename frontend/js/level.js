@@ -169,9 +169,9 @@
     var tdRate = document.createElement('td');
     var rate = rateOf(row);
     var rateWrap = document.createElement('span');
-    rateWrap.className = 'rank-rate';
+    rateWrap.className = 'rate-cell';
     var bar = document.createElement('span');
-    bar.className = 'rank-bar';
+    bar.className = 'rate-bar';
     bar.setAttribute('aria-hidden', 'true');
     var fill = document.createElement('i');
     fill.style.width = Math.round(Math.min(rate, 1) * 100) + '%';
@@ -189,7 +189,7 @@
   function renderEmpty(message) {
     var tr = document.createElement('tr');
     var td = document.createElement('td');
-    td.className = 'rank-empty';
+    td.className = 'data-empty';
     td.colSpan = 6;
     td.textContent = message;
     tr.appendChild(td);

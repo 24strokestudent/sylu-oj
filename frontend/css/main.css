@@ -757,7 +757,8 @@ img {
 }
 
 .page-head-meta code,
-.rank-note code {
+.rank-note code,
+.bank-note code {
   font-family: "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   background: var(--brown-light);
@@ -785,9 +786,9 @@ img {
   margin-bottom: 0;
 }
 
-/* ---------- 排名表格 ---------- */
+/* ---------- 表格骨架（排行榜 / 题库共用） ---------- */
 
-.rank-card {
+.data-card {
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -800,21 +801,21 @@ img {
   -webkit-overflow-scrolling: touch;
 }
 
-.rank-table {
+.data-table {
   width: 100%;
   min-width: 720px;
   border-collapse: collapse;
   font-size: 14px;
 }
 
-.rank-table th,
-.rank-table td {
+.data-table th,
+.data-table td {
   padding: 13px 16px;
   text-align: left;
   white-space: nowrap;
 }
 
-.rank-table thead th {
+.data-table thead th {
   background: var(--green-light);
   color: var(--green-deeper);
   font-size: 13px;
@@ -822,20 +823,21 @@ img {
   border-bottom: 1px solid var(--border);
 }
 
-.rank-table tbody tr + tr {
+.data-table tbody tr + tr {
   border-top: 1px solid var(--border);
 }
 
-.rank-table tbody tr:hover {
+.data-table tbody tr:hover {
   background: #fafcf9;
 }
 
-.rank-table .num {
+.data-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-/* 名次徽标 */
+/* ---------- 名次徽标（排行榜） ---------- */
+
 .rank-no {
   display: inline-grid;
   place-items: center;
@@ -883,14 +885,15 @@ img {
   color: var(--muted);
 }
 
-/* 通过率（数值 + 进度条） */
-.rank-rate {
+/* ---------- 通过率（数值 + 进度条，排行榜 / 题库共用） ---------- */
+
+.rate-cell {
   display: inline-flex;
   align-items: center;
   gap: 9px;
 }
 
-.rank-bar {
+.rate-bar {
   width: 56px;
   height: 6px;
   border-radius: 999px;
@@ -898,7 +901,7 @@ img {
   overflow: hidden;
 }
 
-.rank-bar i {
+.rate-bar i {
   display: block;
   height: 100%;
   border-radius: 999px;
@@ -906,7 +909,7 @@ img {
 }
 
 /* 空结果 */
-.rank-empty {
+.data-empty {
   padding: 46px 16px;
   text-align: center;
   color: var(--muted);
@@ -981,6 +984,320 @@ img {
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
+  }
+}
+
+/* ============================================================
+   题库页（bank）
+   表格骨架复用 .data-card / .data-table / .rate-cell / .data-empty
+   ============================================================ */
+
+.bank {
+  padding: 40px 0 76px;
+  background: var(--bg);
+}
+
+.bank-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.bank-toolbar .field {
+  margin-bottom: 0;
+}
+
+.bank-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.bank-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 七列比排行榜宽，窄屏由 .table-scroll 横向滚动 */
+.bank .data-table {
+  min-width: 880px;
+}
+
+/* 提交状态圆点（默认=未尝试） */
+.bank-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ccd3c9;
+}
+
+.bank-dot.is-solved    { background: #5b9b58; }
+.bank-dot.is-attempted { background: #e0a83f; }
+
+/* 胶囊标签（题号 / 知识点共用） */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--brown-light);
+  color: var(--brown);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chip + .chip {
+  margin-left: 6px;
+}
+
+.chip-mono {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+
+.bank-code:hover {
+  color: var(--brand-red);
+}
+
+.bank-title {
+  color: var(--green-deeper);
+  transition: color 0.15s ease;
+}
+
+.bank-title:hover {
+  color: var(--brand-red);
+}
+
+.bank-count {
+  margin: 14px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.bank-count.is-error {
+  color: var(--brand-red);
+}
+
+.bank-note {
+  margin: 18px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+@media (max-width: 620px) {
+  .bank {
+    padding: 28px 0 56px;
+  }
+}
+
+/* ============================================================
+   比赛页（competition）
+   复用校色变量、.page-head、.field/.input-wrap 与 .feature-card
+   ============================================================ */
+
+.comp {
+  padding: 40px 0 76px;
+  background: var(--bg);
+}
+
+.comp-toolbar {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.comp-toolbar .field {
+  margin-bottom: 0;
+}
+
+.comp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.comp-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 比赛卡片 ---------- */
+
+.comp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.comp-card {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.comp-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.comp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.comp-card h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--green-deeper);
+}
+
+.comp-desc {
+  flex: 1;
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+/* 时间行 + 进行中进度条 */
+.comp-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.comp-time .is-urgent {
+  color: var(--brand-red);
+  font-weight: 600;
+}
+
+.comp-progress-bar {
+  height: 6px;
+  margin: 8px 0 0;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.comp-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-red);
+}
+
+/* 元信息（时长 / 题目数 / 参赛人数） */
+.comp-meta {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 18px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.comp-meta-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comp-meta-item b {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.comp-card-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 状态 / 赛制标签 */
+.tag-ended {
+  background: var(--brown-light);
+  color: var(--muted);
+}
+
+.tag-format {
+  background: var(--brown-light);
+  color: var(--brown);
+}
+
+.comp-empty {
+  grid-column: 1 / -1;
+  padding: 52px 20px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.comp-count {
+  margin: 16px 2px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.comp-count.is-error {
+  color: var(--brand-red);
+}
+
+/* ---------- 赛制说明 ---------- */
+
+.comp-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+/* ---------- 比赛页响应式 ---------- */
+
+@media (max-width: 980px) {
+  .comp-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .comp-grid,
+  .comp-rules-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .comp {
+    padding: 28px 0 56px;
+  }
+
+  .comp-toolbar,
+  .comp-grid,
+  .comp-rules-grid {
+    grid-template-columns: 1fr;
   }
 }
 

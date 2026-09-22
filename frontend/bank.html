@@ -1,10 +1,206 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+  <meta charset="utf-8">
+  <title>题库 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 题库——沈阳理工大学在线评测系统题目列表，按难度与知识点筛选，查看通过率与提交情况。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="题库 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
 </head>
+
 <body>
-$END$
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="bank.html" class="active">题库</a>
+        <a href="competition.html">比赛</a>
+        <a href="talk.html">讨论</a>
+        <a href="level.html">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 页头 ==================== -->
+  <section class="page-head">
+    <div class="container">
+      <h1 class="section-title">题库</h1>
+      <p class="section-sub">按难度与知识点筛选 · 查看通过率与提交情况</p>
+      <p class="page-head-meta">数据来源 <code>GET /api/problems</code> · 当前为占位示例数据</p>
+    </div>
+  </section>
+
+  <!-- ==================== 题目列表 ==================== -->
+  <section class="bank" id="bank">
+    <div class="container">
+
+      <div class="bank-toolbar">
+        <div class="field">
+          <label for="bankSearch">搜索题目</label>
+          <div class="input-wrap">
+            <input type="search" id="bankSearch" placeholder="搜索题号、标题或知识点" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="bankDifficulty">难度</label>
+          <div class="input-wrap">
+            <select id="bankDifficulty">
+              <option value="">全部难度</option>
+              <option value="简单">简单</option>
+              <option value="中等">中等</option>
+              <option value="困难">困难</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="bankTag">知识点</label>
+          <div class="input-wrap">
+            <select id="bankTag">
+              <option value="">全部知识点</option>
+              <option value="模拟">模拟</option>
+              <option value="数学">数学</option>
+              <option value="字符串">字符串</option>
+              <option value="排序">排序</option>
+              <option value="二分">二分</option>
+              <option value="前缀和">前缀和</option>
+              <option value="并查集">并查集</option>
+              <option value="图论">图论</option>
+              <option value="动态规划">动态规划</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="bankStatus">提交状态</label>
+          <div class="input-wrap">
+            <select id="bankStatus">
+              <option value="">全部状态</option>
+              <option value="solved">已通过</option>
+              <option value="attempted">尝试过</option>
+              <option value="none">未尝试</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="bankSort">排序方式</label>
+          <div class="input-wrap">
+            <select id="bankSort">
+              <option value="default">默认题号（默认）</option>
+              <option value="rate">通过率</option>
+              <option value="submissions">提交次数</option>
+              <option value="difficulty">难度由易到难</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="bank-actions">
+        <p class="bank-hint">提交状态为占位示例，登录后显示本人真实进度；点击题号可进入题目详情</p>
+        <a href="level.html" class="panel-more">查看排名 →</a>
+      </div>
+
+      <div class="data-card">
+        <div class="table-scroll">
+          <table class="data-table" id="bankTable">
+            <caption class="visually-hidden">题目列表，可按难度、知识点、提交状态与通过率查看</caption>
+            <thead>
+              <tr>
+                <th scope="col"><span class="visually-hidden">提交状态</span></th>
+                <th scope="col">题号</th>
+                <th scope="col">题目</th>
+                <th scope="col">难度</th>
+                <th scope="col">知识点</th>
+                <th scope="col">通过率</th>
+                <th scope="col" class="num">提交</th>
+              </tr>
+            </thead>
+            <tbody id="bankBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <p class="bank-count" id="bankCount" aria-live="polite"></p>
+
+      <p class="bank-note">
+        通过率 = 通过次数 / 提交次数；难度与知识点用于筛选，排序不影响题号顺序。
+        当前为占位示例数据，接入后端后改为 <code>/api/problems</code> 返回，题目详情页与判题功能待开发。
+      </p>
+
+    </div>
+  </section>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/bank.js"></script>
+
 </body>
+
 </html>
