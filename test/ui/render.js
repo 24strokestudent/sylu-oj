@@ -161,10 +161,6 @@ function renderPage({
     };
     // template.ts:238 —— UiContext 由渲染管线注入，html5.html 会对它做 Object.create，缺失即报错
     ctx.UiContext = state.UiContext || handler.UiContext || {};
-    // 上游模板里的 model.contest.canShow* 依赖 this.user 判权限，
-    // 而 nunjucks 会把模板中 .call(handler, ...) 的 thisArg 吞掉，
-    // 所以每个场景按当前 handler 重绑一份 model（原因见 lib/hydro.js 的 modelFor 注释）。
-    env.addGlobal('model', H.modelFor(handler));
     let html = env.render(template, ctx);
     // 样式层叠顺序 = 线上层叠顺序：上游 theme.css 在前，本站样式在后
     const vendor = path.join(OUT, 'vendor', 'theme.css');
@@ -243,7 +239,7 @@ function aboutState(role) {
  * tier C 页面的 body 构造器。
  * 键名就是模板名：一个 handler 对应一个模板，这样新增页面只需要在这里加一行。
  * 参数统一收 (role, udoc, sc)，用不到的可以先忽略；sc.arg 给"同一模板、不同夹具"
- * 用（比赛详情的四种时间状态就是这种情况）。
+ * 用（比赛详情的五种时间状态就是这种情况，未开始还要分已报名与没报名）。
  */
 const PAGE_BODIES = {
     'problem_main.html': (role, udoc) => D.problemList({ role, udoc }),
@@ -251,7 +247,7 @@ const PAGE_BODIES = {
     'record_main.html': () => D.recordListBody(),
     'record_detail.html': () => D.recordDetailBody(),
     'contest_main.html': (role, udoc) => D.contestListBody({ udoc }),
-    'contest_detail.html': (role, udoc, sc) => D.contestDetailBody(sc.arg, { udoc }),
+    'contest_detail.html': (role, udoc, sc) => D.contestDetailBody(sc.arg, { udoc, attend: sc.attend }),
     'homework_main.html': () => D.homeworkListBody(),
     'training_main.html': (role) => D.trainingListBody({ role }),
     'discussion_main_or_node.html': () => D.discussionListBody(),
@@ -314,6 +310,12 @@ const SCENARIOS = {
     'contests-admin': { role: 'admin', addon: true, page: 'contest_main.html' },
     'contest-live-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'live' },
     'contest-upcoming-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'upcoming' },
+    // 未开始 + 已报名：上游的侧栏只看 tsdoc.attend（contest_sidebar.html:44 的 else 分支），
+    // 不看 beginAt，所以这一格会给出题目列表入口。它是"点进去会被后端拦"的 UX 死路，
+    // 不是数据泄露——两者必须由不同的闸门分开表述，见 check.js 的注释。
+    'contest-upcoming-attended-student': {
+        role: 'student', addon: true, page: 'contest_detail.html', arg: 'upcoming', attend: true,
+    },
     'contest-ended-hidden-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'endedHidden' },
     // 同一份夹具换身份：管理员看到的榜单入口是"隐藏"变体，而不是提前公开。
     'contest-ended-hidden-admin': { role: 'admin', addon: true, page: 'contest_detail.html', arg: 'endedHidden' },

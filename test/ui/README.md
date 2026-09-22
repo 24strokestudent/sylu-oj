@@ -84,8 +84,18 @@ ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻�
   同一处还断言隐藏题 1009 只出现在 `problems-admin`（guest/student/teacher 三页都必须没有，
   管理员必须**有**：只查反例会养出一个"永远过滤掉"的假通过）；
   判题状态文字没被 `display:none` 抹掉；窄屏 `font-size:0` 压缩状态列必有 `> span` 还原配对。
-- **比赛数据不提前泄露**（`checkContestGates`）：见上一节，正反例都断言；
-  另外分组题（`tdoc.assign` 非空）只对有 `PERM_VIEW_HIDDEN_CONTEST` 的身份出现。
+- **运行时保真**（`checkRuntimeParity`）：同一份 tdoc、两份身份（无权限 / 持有
+  `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`）跑 `model.contest.canShowScoreboard.call(handler, tdoc, true)`，
+  必须得到 `false` / `true`。它是下面两条闸门可信的前提——thisArg 丢了的时候，
+  可见性会静默坍成 false，"看不到入口"这类断言反而全绿。
+- **比赛入口链接**（`checkContestGates`）：侧栏在五种时间状态 × 身份下给不给
+  `/problems`、`/scoreboard` 链接，正反例都断言；另外分组题（`tdoc.assign` 非空）
+  只对有 `PERM_VIEW_HIDDEN_CONTEST` 的身份出现。**这只查链接，不查数据**——
+  未开始但已报名那一格甚至会给出链接（上游只看 attend），点进去由后端 handler 拦。
+- **比赛数据层**（`checkContestDataLeak`）：解码产物末尾的 `window.UiContextNew`，
+  数未开赛详情页下发的赛前字段（`pids`、`privateFiles`），并确认 `_code` 不在里面。
+  当前测到 2 个字段 × 2 个场景，是上游 5.0.7 的既有行为，所以按 RATCHET 记账：
+  只许变小，清零后升级为 HARD。详见下一节。
 - **死链接**（`checkDeadLinks`）：产物里每个 `href="#"` 都必须是登记过的例外
   （目前只有游客页的"忘记密码"触发器，且该页必须带 `data-lostpass`）。
   上游模板引用了未移植进 `lib/hydro.js` 的路由时，`url()` 会静默返回 `#`，
@@ -143,7 +153,8 @@ home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 
 | `records-student` / `record-student` | 仅上游 `record_main/record_detail.html` | 学生 | — | 记录列表与判题详情 |
 | `contests-student` / `contests-admin` | 仅上游 `contest_main.html` | 学生 / 管理员 | — | 比赛列表 + 分组题的可见性 |
 | `contest-live-student` | 仅上游 `contest_detail.html` | 学生 | — | 进行中：题目列表与榜单都该在 |
-| `contest-upcoming-student` | 同上 | 学生 | — | 未开始：两个入口都不该出现 |
+| `contest-upcoming-student` | 同上 | 学生 | — | 未开始：两个入口都不该出现（链接层）；赛前字段仍会随 UiContextNew 下发（数据层，见上） |
+| `contest-upcoming-attended-student` | 同上 | 学生（已报名） | — | 未开始 + 已报名：上游给出题目列表链接但后端拦，榜单仍无 |
 | `contest-ended-hidden-student` / `-admin` | 同上 | 学生 / 管理员 | — | OI 榜未公布：只有管理员看得到入口 |
 | `contest-ended-open-student` | 同上 | 学生 | — | 已放榜：入口正常出现 |
 | `homework-student` | 仅上游 `homework_main.html` | 学生 | — | 作业列表与日历字段 |
@@ -158,31 +169,83 @@ C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造�
 `handler/discussion.ts`、`handler/ranking.ts`，登记在 `PAGE_BODIES` 里；
 新增场景没登记会直接抛错，不会静默出一张空白页）。
 
-### 比赛可见性：为什么要复刻 model.contest，以及 nunjucks 吞掉 thisArg 这件事
+### 比赛可见性：为什么要复刻 model.contest，以及沙箱漏复刻 Hydro 自定义 memberLookup 这件事
 
 侧栏的「题目列表 / 成绩表 / 我的提交」三个入口全部由 `model.contest.canShow*` 决定
 输不输出（`partials/contest_sidebar.html:117-159`），而这四个函数的上游签名是
 `this: { user: User }`（`model/contest.ts:1051-1073`）——它们靠 `this.user` 判权限。
-所以沙箱做了两件事：
+所以沙箱做了三件事：
 
 1. `lib/hydro.js` 逐字移植时间判定（`isNew/isUpcoming/isNotStarted/isOngoing/isDone/isLocked/isExtended`）、
    六种赛制的可见性回调和 `statusText`。不复刻这一层，"榜单会不会提前出现"就取决于
    我在夹具里手写的布尔值，而不是模板真正的判断；闸门测的就是一句自我确认。
-2. 每个场景渲染前 `env.addGlobal('model', H.modelFor(handler))` 重绑一次 model。
-   原因是 nunjucks 3.2.4 的 `memberLookup` 把成员函数调用编译成 `obj[val].apply(obj, args)`：
-   模板里写 `model.contest.canShowScoreboard.call(handler, tdoc, False)`，
-   真正执行的却是 `canShowScoreboard.apply(model.contest, [tdoc, False])`——
-   **模板显式给的 `handler` 这个 thisArg 被吞掉了**，`this.user` 因此是 undefined。
-   （这个写法由 `.ref/Hydro` 的 `78e898f core: contest team (#1183)` 引入，
-   线上有没有等价影响要看运行时 `model.contest` 上是否挂了 user，沙箱不替上游下结论，
-   只保证自己按声明的签名把 `handler` 递进去。）
-   顺带一句：`False` 在 JS 侧是未定义标识符，于是第三个参数走默认值
-   `allowPermOverride = true`——所以沙箱里"未开始的 OI 赛"看不到榜单，靠的是
-   `canViewHiddenScoreboard` 真的按权限返回 false，而不是那个 `False`。
+2. `lib/hydro.js` 在装载模板前替换 `nunjucks.runtime.memberLookup`，逐字复刻上游
+   （`backendlib/template.ts:47-59`）。这一步是**运行时语义**而不是可选优化：
+   上游那版把原函数记在包装的 `_original` 上，于是
+   `model.contest.canShowScoreboard.call(handler, tdoc, …)` 里
+   `memberLookup(包装, 'call')` 会先解包回原函数，最终执行的是
+   `canShowScoreboard.call(handler, tdoc, …)`，`this` 确实是 handler。
+   stock nunjucks 3.2.4 没有 `_original`，只有 `obj[val].apply(obj, args)`，
+   `this` 落在宿主对象 `model.contest` 上，`this.user` 因此是 undefined。
+   上一版沙箱在这里给那四个函数逐个手工重绑（`modelFor(handler)`）——那是掩盖失真的
+   局部补丁：它只救活了这四处，任何别处的 `.call(...)` 仍然是错的，而且没人能发现。
+   现在改成复刻运行时，`modelFor` 已删除。
+3. `checkRuntimeParity` 把这段语义钉住：同一份 tdoc、两份身份（无权限 / 持有
+   `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`），渲染结果必须是 `false` / `true`。
+   thisArg 一旦被吞掉，这两次要么一起抛错要么坍成同一个值，闸门立刻变红。
+   实测：把第 2 步的复刻删掉，该闸门报错、其余 16 项仍然全绿——说明少了它，
+   后面那些可见性断言完全可能在错误前提下"通过"。
 
-`checkContestGates` 把这条链路钉住：拿四条时间线（进行中 / 未开始 / 已结束且榜未公布 /
-已结束且已放榜）逐个问侧栏里有没有 `/contest/:tid/scoreboard` 与 `/problems` 链接，
-正反例都查。改 `lib/data.js` 里那几处 `d(-1, 18)` 之类的时间偏移量，等于改断言本身。
+两个与上游一致、但读代码时容易误判的细节：
+
+- `contest_sidebar.html:131` 写的是 `..., False)`（大写 F）。nunjucks 3.2.4 只认小写字面量，
+  所以 `False` 是一次符号查找 → `undefined` → 第三个参数落到默认值 `allowPermOverride = true`。
+  同一处的 `homework_sidebar.html:49` 用的是小写 `false`。因此"管理员在隐藏榜单的赛里
+  看得到什么入口"这个结论**不能写死**，它取决于那一个大写字母。
+- `homework_sidebar.html:53` 的 `elif` 分支写成 `canViewHiddenScoreboard(handler, tdoc)`（漏了
+  `.call`）。按上游运行时，这里的 `this` 就是 `model.contest` 本身，真的走到那一支会抛错；
+  它没被触发是因为 `RULES.homework.showScoreboard` 恒为 true，`elif` 不可达。
+  沙箱现在与上游同命：既不会替上游把这一支救活，也不会比上游更早抛错。
+
+`checkContestGates` 把这条链路钉住：拿五条时间线（进行中 / 未开始 / 未开始且已报名 /
+已结束且榜未公布 / 已结束且已放榜）逐个问侧栏里有没有 `/contest/:tid/scoreboard` 与
+`/problems` 链接，正反例都查。改 `lib/data.js` 里那几处 `d(-1, 18)` 之类的时间偏移量，
+等于改断言本身。这条闸门查的是**入口链接**，不等于"数据没下发"——见下一节。
+
+### UiContextNew 里的赛前题号：入口藏住了，数据没藏住
+
+`checkContestDataLeak` 解码每个比赛详情页产物末尾的 `window.UiContextNew`。
+这条链在上游 5.0.7 里是这样的：
+
+1. `handler/contest.ts:166-184` 把整份 `this.tdoc` 放进 body；只有 `files` 做了判断
+   （`this.tsdoc?.attend && !contest.isNotStarted(this.tdoc)`）。
+2. `contest_detail.html:6-7` `{{ set(UiContext, 'tdoc', tdoc) }}`。
+3. `layout/html5.html:66-69` 在 `{% block body %}` **之后**把 UiContext 整份序列化进
+   `window.UiContextNew`，供前端接管渲染。
+4. 序列化的 replacer（`backendlib/template.ts:21-26`）只丢 `_` 前缀的键（`_id` 除外）。
+   `Tdoc` 里的 `pids`、`privateFiles`、`assign`、`content` 都是普通字段
+   （`hydrooj/src/interface.ts:260-283`），所以全部落地到浏览器。
+
+实测（沙箱产物 `out/contest-upcoming-student.html`，学生身份、开赛前六天）：
+
+```
+"pids":[1001,1003,1005]                        ← 精确题号
+"privateFiles":[{name:"generator.sbp",size:4213,etag:…}]  ← 私有附件文件名
+"keepScoreboardHidden":true  "assign":[]  "content":"…"  "_code" 不在（被 replacer 剥掉）
+```
+
+页面上看不到 Files 区块，也看不到题目列表入口——**这正是"前端藏住了、数据照样下发"的形状**。
+`_code`（报名口令）是被 `_` 前缀救下的那一类，所以闸门单独盯它一眼：
+它出现在 `UiContextNew` 里就是报名门槛没了。
+
+因此"比赛数据不得提前泄露"这条红线的准确表述是：**未开赛时，非 owner 学生拿不到题号与私有附件**。
+按现在的上游代码这个判据不成立，而它不是我们改出来的，也不属于 C 级 CSS 能修的范围——
+要么覆盖 `contest_detail.html`（动 §49 的 C 级边界），要么在 addon 里挂 handler 钩子做脱敏
+（动线上后端）。两条都是需要拍板的决定，所以这一步先落闸门：
+`UICTX_LEAK_BASELINE` 记 2（两个字段 × 两个未开赛场景），只许降不许升，清零后升级为 HARD。
+
+夹具为此带了一条形状完整的 `PRIVATE_FILE`（`common/types.ts:68-77` 的 FileInfo），
+而不是留空数组——留空数组的话，这条闸门只能证明"文件名列表恰好是空的"，证明不了"没下发"。
 
 `baseline-*` 用 `HERO_BULLETIN`（改造前 `configure.sh` 往公告里塞的那段 HTML 的冻结副本），
 因为线上现状就是"整块首屏塞进公告"；`home-*` 用纯文本公告，首屏改由模板承载。

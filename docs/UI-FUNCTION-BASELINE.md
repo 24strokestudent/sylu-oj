@@ -27,7 +27,7 @@
 | 登录 | `/login` | 未登录 | 账号口令登录 | 沙箱已验证（`login-guest`，仅静态结构） | 版式是 `layout/immersive.html`（无导航那套），本轮只把背景从 Hydro 风景照换成墨色令牌；模板覆盖与输入框配色留 P1 |
 | 注册 | `/register` | 未登录 | 新建账号 | 未覆盖 | P1：注册表单要 captcha 服务产物才能渲染，沙箱不造假验证码 |
 | 训练 | `/training` | `PERM_VIEW_TRAINING` | 训练列表与进入 | 沙箱已验证（`training-student/guest`） | C 级 CSS：进度条换成站内"通过"色；题单详情页未覆盖 |
-| 比赛 | `/contest`、`/contest/:tid` | `PERM_VIEW_CONTEST`；隐藏题/分组题另需 `PERM_VIEW_HIDDEN_CONTEST`；榜单需 `PERM_VIEW_CONTEST_SCOREBOARD`，未放榜时另需 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`（`model/contest.ts:1051-1073`） | 列表、详情、题目列表、榜单、我的提交 | 沙箱已验证（`contests-student/admin`、`contest-live/upcoming/ended-hidden/ended-open` 四态） | C 级 CSS（横幅与按钮换品牌色）；**"禁止提前显示隐藏题/榜单"已做成 `checkContestGates` 断言**，榜单页本身需 handler 复刻，留 P1 |
+| 比赛 | `/contest`、`/contest/:tid` | `PERM_VIEW_CONTEST`；隐藏题/分组题另需 `PERM_VIEW_HIDDEN_CONTEST`；榜单需 `PERM_VIEW_CONTEST_SCOREBOARD`，未放榜时另需 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`（`model/contest.ts:1051-1073`） | 列表、详情、题目列表、榜单、我的提交 | 沙箱已验证（`contests-student/admin` + `contest-live/upcoming/upcoming-attended/ended-hidden/ended-open` 五种时间状态） | C 级 CSS（横幅与按钮换品牌色）；**侧栏入口按时间状态分叉已做成 `checkContestGates`**，**赛前数据层是未关闭的 P0（`checkContestDataLeak` 记账中，见上）**；榜单页本身需 handler 复刻，留 P1 |
 | 作业 | `/homework` | `PERM_VIEW_HOMEWORK` | 列表、日历视图 | 沙箱已验证（`homework-student`，列表态） | 只允许 CSS；日历视图需要 `calendar` 字段，已按 `handler/homework.ts:61-67` 复刻但未出图核对，P1 |
 | 讨论 | `/discuss` | `PERM_VIEW_DISCUSSION` | 版块、帖子、回复 | 沙箱已验证（`discuss-student/guest`，列表页） | 只允许 CSS；帖子详情与回复树未覆盖 |
 | 排名 | `/ranking` | `PERM_VIEW_RANKING` | RP 榜单 | 沙箱已验证（`ranking-student/guest`） | 只允许 CSS。`pagination.ranking` 已补进设置默认值，否则名次列渲染成 NaN |
@@ -51,7 +51,7 @@
 沙箱里学生确实出现的「提前结束比赛」是 `contest_sidebar.html:120` 的自助入口
 （条件只有"已参加 + 进行中 + 非作业"），不是管理权限，两者不要混为一谈。
 
-### 比赛四态 × 身份：侧栏里到底该出现什么
+### 比赛的时间状态 × 身份：侧栏里到底该出现什么
 
 `checkContestGates` 逐条断言的就是这张表（"链接"指 `/contest/:tid/problems` 与
 `/contest/:tid/scoreboard` 两个入口）：
@@ -60,22 +60,51 @@
 | --- | --- | --- | --- | --- |
 | 进行中（ACM） | student | 有 | 有 | `isOngoing` + `showScoreboard` |
 | 未开始（OI，榜隐藏） | student | 无 | 无 | 三条时间判定全 false，且无隐藏榜权限 |
+| 未开始（OI，榜隐藏） | student（已报名） | **有** | 无 | 入口判断只看 `tsdoc.attend`（`contest_sidebar.html:44` 的 else 分支），不看 `beginAt`；点进去由 `ContestProblemListHandler` 抛 `ContestNotLiveError` 拦 |
 | 已结束、榜未公布（OI） | student | 有 | **无** | `canShowScoreboard` false，`canViewHiddenScoreboard` 也 false |
-| 已结束、榜未公布（OI） | admin | 有 | 有 | `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD` 放行 |
+| 已结束、榜未公布（OI） | admin | 有 | 有 | 有隐藏榜权限。但走的是"成绩表"还是"成绩表（隐藏）"那一条分支，取决于 `contest_sidebar.html:131` 传给第三个参数的到底是什么——那里写的是大写 `False`，在 nunjucks 里是一次未定义符号查找，落到 JS 默认值 `allowPermOverride = true`。所以这一格只断言"有链接"，不断言文案（同一模板的 `homework_sidebar.html:49` 用的是小写 `false`） |
 | 已结束、榜已公布（OI） | student | 有 | 有 | `isDone` 且未 `keepScoreboardHidden` |
 
 这张表的意义是反向的：**普通学生不能因为 UI 改造多出任何一个入口**。
 `checkTierC` 把"隐藏题只出现在 admin 页"钉成断言，且正例反例都查——
 只查"学生看不到"的话，把夹具改成永远过滤掉也能通过，那就不是在测权限，是在测自己。
 
+最后一列写的是 `model.contest` 的判断链，而它成立的前提是运行时真的把 `handler` 传进了
+那些 `.call(handler, …)`。这件事由 `checkRuntimeParity` 单独守住，
+原因见 `test/ui/README.md`「比赛可见性」一节——上一版沙箱在这点上与线上不一致，
+而失真方向恰好是"权限判定恒为 false"，会让上面这些"无"变成自我确认。
+
+### 未开赛的数据层：入口藏住了，数据没藏住（P0 未关闭）
+
+上表只描述链接。**数据层不满足"不得提前出现"**：`contest_detail.html:6-7` 把整份 `tdoc`
+塞进 `UiContext`，`layout/html5.html:66-69` 又把它序列化到 `window.UiContextNew`，
+而序列化的 replacer（`backendlib/template.ts:21-26`）只丢 `_` 前缀的键。
+沙箱实测（学生身份、开赛前六天）产物里含：
+
+| 字段 | 值 | 是否该在开赛前下发给非 owner 学生 |
+| --- | --- | --- |
+| `pids` | `[1001,1003,1005]` | 否——精确题号 |
+| `privateFiles` | 附件名 / size / etag | 否——handler 已把 `body.files` 判成空（`handler/contest.ts:178`），tdoc 里这份却没判 |
+| `_code`（报名口令） | 不出现 | 由 `_` 前缀被 replacer 剥掉，闸门单独盯住它 |
+
+这是上游 5.0.7 的既有行为（源码链已逐段核对，非本站改出），修它要动模板或动 handler 输出，
+两条路都超出一轮 UI 重构能自主拍板的范围，已列为待决（见 `ACCEPTANCE.md` 的未关闭项）。
+`checkContestDataLeak` 先把它记成 RATCHET：当前 2 个字段 × 2 个未开赛场景，只许降不许升，
+清零后升级为 HARD。**在方案定案前，任何"比赛数据不会提前泄露"的表述都只适用于链接层。**
+
+而"直接敲 URL"这一层是有后端闸门的：`ContestProblemListHandler` 抛
+`ContestNotLiveError` / `ContestNotAttendedError`，`ContestScoreboardHandler` 重跑
+`canShowScoreboard` 并检查 `isNotStarted`。这一条的 provenance 要写清楚：
+**后端源码闸门：已确认（读 `.ref/Hydro` 的 5.0.7 源码）；真实部署链路：仍需真机 smoke test。**
+
 ## 截图基线与复现
 
 ```bash
 cd test/ui && npm install
 node fetch-assets.js            # 拉上游编译产物 theme.css + iconfont 到 out/vendor
-node render.js --all            # 31 个场景 → out/*.html
+node render.js --all            # 32 个场景 → out/*.html
 node shot.js --widths 1440,1024,768,390   # 全断点出图，溢出即 exit 1
-node check.js                   # 15 项闸门（其中 3 项是只降不升的计数）
+node check.js                   # 17 项闸门（其中 4 项是只降不升的计数）
 node compare.js HEAD            # 与上一版逐像素比（tier C 的差异是本轮刻意改出来的）
 ```
 

@@ -160,8 +160,14 @@ C 级页面（沙箱只证明"渲染成什么样"，证明不了"点起来对不
 - [ ] 学生账号看不到隐藏题，也看不到「隐藏/移除选中」等管理项（沙箱已断言渲染分支，线上再确认一次）
 - [ ] 手机宽度下题库/记录表格无横向滚动条（`node test/ui/shot.js` 已把这一步做成出图断言）
 - [ ] `/contest` 列表：搜索 + 两个下拉能提交；分组比赛对普通学生仍然不出现
-- [ ] `/contest/<tid>` 详情：**未开始的比赛点不进题目列表和榜单**（沙箱用 `checkContestGates`
-      断言了渲染分支，线上要确认后端 `handler/contest.ts` 的同一分支也拦得住直接敲 URL）
+- [ ] `/contest/<tid>` 详情：**未开始的比赛点不进题目列表和榜单**。
+      链接层沙箱已用 `checkContestGates` 断言；直接敲 URL 的后端闸门
+      （`ContestProblemListHandler` 抛 `ContestNotLiveError` / `ContestNotAttendedError`，
+      `ContestScoreboardHandler` 重跑 `canShowScoreboard`）**源码已确认，真实部署链路仍需真机 smoke test**
+- [ ] 未开赛比赛的详情页 HTML 里不含赛前题号：`curl -s <详情页> | grep -c '"pids":\[' ` 应为 0。
+      **当前不为 0**（上游 5.0.7 把整份 `tdoc` 序列化进 `window.UiContextNew`，`pids` 与
+      `privateFiles` 都不是 `_` 前缀，逃过了 replacer）。这条由 `checkContestDataLeak` 记账，
+      脱敏方案未定案前本项不得勾选——插件层没有任何 CSS/模板手段能让已经下发的字段收回去
 - [ ] `/contest/<tid>/scoreboard`：榜单自动刷新、ACM 封榜提示、导出功能都还在
 - [ ] `/training/<tid>` 题单详情：小节展开、进度写回（列表页沙箱已验，详情页未覆盖）
 - [ ] `/discuss` 发帖与回复：节点选择器、Markdown 编辑器（列表页沙箱已验，详情页未覆盖）

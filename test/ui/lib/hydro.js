@@ -8,6 +8,7 @@
  * 注册的 globals / filters，以及 handler 交给模板的那几个变量。
  *
  * 复刻依据（上游只读副本，可用 SYLU_HYDRO_REF 覆盖路径）：
+ *   - 模板运行时语义：backendlib/template.ts:47-59（自定义 memberLookup，见下方同名注释）
  *   - 模板发现与优先级：backendlib/template.ts:257-278（addon 的 templates/ 后者覆盖前者）
  *   - globals/filters：backendlib/template.ts:61-161
  *   - 渲染入参：backendlib/template.ts:224-245 + hydrooj/src/handler/home.ts:172-177
@@ -19,6 +20,30 @@ const crypto = require('crypto');
 const nunjucks = require('nunjucks');
 const MarkdownIt = require('markdown-it');
 const yaml = require('js-yaml');
+
+/**
+ * Hydro 在装载模板前替换了 nunjucks 的成员访问实现（backendlib/template.ts:47-59），
+ * 把原函数挂在返回值的 `_original` 上。这一步是**运行时语义**，不是可选优化：
+ * 模板里 `model.contest.canShowScoreboard.call(handler, tdoc)` 靠它才能把 this 绑到 handler——
+ * memberLookup(obj,'call') 先按 `_original` 解包回原函数，返回的包装再执行
+ * `Function.prototype.call.call(原函数, handler, tdoc)`，于是 thisArg 真的生效。
+ * stock nunjucks 3.2.4 没有 `_original`，`obj[val].apply(obj, args)` 会把 this 定在宿主对象上，
+ * 上一版沙箱因此给这四个可见性函数逐个手工重绑（modelFor），那是掩盖失真的局部补丁。
+ * 这里按上游逐字复刻，check.js 的 checkRuntimeParity 盯住这段语义没被改回去。
+ */
+// eslint-disable-next-line no-import-assign
+nunjucks.runtime.memberLookup = function memberLookup(obj, val) {
+    if ((obj || {})._original) obj = obj._original;
+    if (obj === undefined || obj === null) return undefined;
+    if (typeof obj[val] === 'function') {
+        const fn = function (...args) {
+            return obj[val].call(obj, ...args);
+        };
+        fn._original = obj[val];
+        return fn;
+    }
+    return obj[val];
+};
 
 /** 向上寻找 .ref/Hydro（该目录在 .gitignore 内，属本机的上游只读副本） */
 function findRef() {
@@ -511,25 +536,6 @@ function difficulty(nSubmit, nAccept) {
 
 // ---------------------------------------------------------------- model stubs
 const DAY = 86400 * 1000;
-/**
- * nunjucks 的 runtime.memberLookup 会把"成员函数"包一层 `obj[name].apply(obj, args)`，
- * 于是模板里写 `model.contest.canShowScoreboard.call(handler, tdoc, False)` 时，
- * 那个 handler 只被当作 thisArg 传给了 Function.prototype.call，
- * 真正被调用的函数拿到的 this 仍是 model.contest（实测于 nunjucks 3.2.4，见 test/ui/README）。
- * 上游这几个函数的签名写的是 this: { user: User }（model/contest.ts:1051-1073），
- * 所以沙箱按签名把 this 绑成本次渲染的 handler：不绑的话比赛侧栏整页抛错，
- * 而抛错原因是模板写法与 nunjucks 的相互作用，不是我们的夹具错了。
- */
-function modelFor(handler) {
-    const contest = Object.assign({}, model.contest);
-    for (const name of ['canViewHiddenScoreboard', 'canShowRecord', 'canShowSelfRecord', 'canShowScoreboard']) {
-        const fn = contest[name];
-        contest[name] = function bound(...args) {
-            return fn.call(handler, ...args);
-        };
-    }
-    return Object.assign({}, model, { contest });
-}
 
 // hydrooj/setting.yaml 的 langs 默认表，按 parseLang 的合并规则展开后的结果：
 // `[foo].[bar]` 继承 `[foo]` 的 highlight/monaco，display 各自覆盖。
@@ -647,8 +653,9 @@ const model = {
             if (tdoc.rule === 'homework') return this.user.hasPerm(PERM.PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD);
             return this.user.hasPerm(PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD);
         }
-        // model/contest.ts:1057-1073。模板用 .call(handler, tdoc, ...) 调用，
-        // 所以这三个必须是普通 function（拿 this.user），不能写成箭头函数。
+        // model/contest.ts:1057-1073。模板用 `.call(handler, tdoc, ...)` 调用，
+        // 这几个必须是普通 function（从 this.user 取身份），不能写成箭头函数；
+        // this 能真的落到 handler 上，靠的是文件顶部复刻的 memberLookup。
         function canShowRecord(tdoc, allowPermOverride = true) {
             if (RULES[tdoc.rule].showRecord(tdoc, new Date())) return true;
             if (allowPermOverride && canViewHiddenScoreboard.call(this, tdoc)) return true;
@@ -859,7 +866,7 @@ function createEnv({ addonTemplateDirs = [], settings = {} } = {}) {
 }
 
 module.exports = {
-    createEnv, model, modelFor, PERM, PRIV, STATUS, ROUTES, makeUrl, formatString,
+    createEnv, model, PERM, PRIV, STATUS, ROUTES, makeUrl, formatString,
     datetimeSpan, size, formatSeconds, avatarUrl, loadLocale,
     TEMPLATES_UPSTREAM, REF, buildRegistry,
 };

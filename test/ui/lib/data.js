@@ -548,15 +548,29 @@ function contestDoc(docId, title, rule, beginAt, endAt, extra = {}) {
         allowPrint: false,
         allowTeam: false,
         _code: extra._code || null,
-        privateFiles: [],
+        privateFiles: extra.privateFiles || [],
     };
 }
+
+// 一条形状完整的私有附件（common/types.ts:68-77 的 FileInfo）。
+// 夹具故意带上它，而不是留空数组：handler 已经按 attend + 开赛时间把它判成空
+// （handler/contest.ts:178），页面上因此看不到 Files 区块；但 tdoc 整份进 UiContextNew，
+// 文件名照样落到浏览器。留空数组就测不出这件事，闸门会变成一句空话。
+const PRIVATE_FILE = {
+    _id: 'system/t/c00000000000000000000002/file/private/generator.sbp',
+    name: 'generator.sbp',
+    size: 4213,
+    etag: '9f2c4e1a7b3d05e8',
+    lastModified: new Date('2026-09-15T02:11:00.000Z'),
+};
 
 const CONTEST_DOCS = {
     // acm：进行中且本人已参加。showScoreboard = now > beginAt，所以此刻榜单入口应当出现。
     live: contestDoc('c00000000000000000000001', '2026 新生程序设计练习赛', 'acm', d(-1, 18), d(0, 21), { attend: 42, rated: true }),
     // oi：还有六天开始。未开始的比赛既不该有题目列表入口，也不该有榜单入口。
-    upcoming: contestDoc('c00000000000000000000002', '数据结构专题月赛', 'oi', d(6, 9), d(6, 14), { attend: 17, keepScoreboardHidden: true }),
+    upcoming: contestDoc('c00000000000000000000002', '数据结构专题月赛', 'oi', d(6, 9), d(6, 14), {
+        attend: 17, keepScoreboardHidden: true, privateFiles: [PRIVATE_FILE],
+    }),
     // oi：已结束但教师勾了"隐藏榜单"。榜单入口仍不该对学生出现（管理员看到的是"(隐藏)"变体）。
     endedHidden: contestDoc('c00000000000000000000003', '校赛第一轮（榜单未公布）', 'oi', d(-12, 9), d(-10, 12), { keepScoreboardHidden: true }),
     // oi：已结束且榜单公开。
@@ -586,18 +600,21 @@ CONTEST_DOCS.grouped = contestDoc(
     d(2, 18), d(2, 21), { assign: ['2024 级'], attend: 3 },
 );
 
-/** 比赛详情 body（contest.ts:166-184）。state 取 CONTEST_DOCS 的键名。 */
-function contestDetailBody(state, { udoc = null } = {}) {
+/** 比赛详情 body（contest.ts:166-184）。state 取 CONTEST_DOCS 的键名。
+ *  attend 覆盖"本人是否已参赛"：默认只有进行中的那场参赛，
+ *  未开始 + 已报名是另一种组合（侧栏会给出题目列表入口，见 checkContestGates）。 */
+function contestDetailBody(state, { udoc = null, attend = state === 'live' } = {}) {
     const tdoc = CONTEST_DOCS[state];
     if (!tdoc) throw new Error(`没有 ${state} 号比赛夹具，可用：${Object.keys(CONTEST_DOCS).join(', ')}`);
-    const attended = state === 'live';
     return {
         tdoc,
-        tsdoc: contestStatus(tdoc, attended),
+        tsdoc: contestStatus(tdoc, attend),
         udict: { [tdoc.owner]: Udict[tdoc.owner] || user(tdoc.owner, `user${tdoc.owner}`) },
         team_vdocs: [],
-        // tsdoc.attend 且有私有附件时才有内容；夹具给空数组，页面因此不渲染 Files 区块
-        files: [],
+        // handler 的这一行是带条件判断的：未开赛或没报名时给空数组（contest.ts:178）。
+        // 模板据此不渲染 Files 区块——但 tdoc.privateFiles 仍会随 UiContextNew 下发，
+        // 这个反差正是 checkContestDataLeak 要盯的东西。
+        files: attend && state !== 'upcoming' ? (tdoc.privateFiles || []) : [],
         urlForFile: () => '#',
     };
 }

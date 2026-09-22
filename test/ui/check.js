@@ -13,7 +13,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const nunjucks = require('nunjucks');
 const H = require('./lib/hydro');
+const D = require('./lib/data');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = path.join(__dirname, 'out');
@@ -396,6 +398,7 @@ const TIER_C_MARKERS = {
     'contests-admin': ['class="section__list contest__list"'],
     'contest-live-student': ['class="problem__tag-item"'],
     'contest-upcoming-student': ['class="problem__tag-item"'],
+    'contest-upcoming-attended-student': ['class="problem__tag-item"'],
     'contest-ended-hidden-student': ['class="problem__tag-item"'],
     'contest-ended-hidden-admin': ['class="problem__tag-item"'],
     'contest-ended-open-student': ['class="problem__tag-item"'],
@@ -467,24 +470,74 @@ function checkTierC() {
 }
 
 /**
- * 比赛与作业的"数据不得提前出现"闸门（计划 §49 附加红线）。
+ * 运行时保真闸门：`.call(handler, ...)` 的 thisArg 必须真的落到 handler 上。
+ *
+ * 上游在装载模板前替换了 nunjucks 的 memberLookup（backendlib/template.ts:47-59），
+ * 把原函数记在包装的 `_original` 上；模板里 `model.contest.canShowScoreboard.call(handler, tdoc, ...)`
+ * 因此能按 model/contest.ts:1051-1073 的签名拿到 `this.user`。
+ * stock nunjucks 3.2.4 没有这一步，`obj[val].apply(obj, args)` 会把 this 定在宿主对象上，
+ * 可见性函数读不到本次渲染的身份。那种失真最坏的地方不是渲染失败，而是**静默换分支**：
+ * 权限判断恒为 false 时，"学生看不到 X"这类断言会提前变绿。
+ * 所以先钉住运行时语义，再谈下面那些可见性断言可信不可信。
+ */
+function checkRuntimeParity() {
+    // 夹具是"已结束但勾了隐藏榜单"的 OI 比赛：规则本身不出榜，
+    // 于是这里的 true/false 完全由 this.user 的权限决定，正是被吞 thisArg 影响的那一支。
+    const src = '{{ model.contest.canShowScoreboard.call(handler, tdoc, true) }}';
+    const probe = (perm) => {
+        const { env } = H.createEnv({ addonTemplateDirs: [] });
+        env.addGlobal('handler', { user: D.user(1001, 'probe', { perm }) });
+        try {
+            return new nunjucks.Template(src, env).render({ tdoc: D.CONTEST_DOCS.endedHidden });
+        } catch (e) {
+            return `抛错：${String(e.message).split('\n')[0]}`;
+        }
+    };
+    // 同一份 tdoc、两份身份：唯一的差别就是传进 .call() 的那个 handler。
+    // thisArg 被吞掉时这两次要么一起抛错（this.user 读不到），要么坍成同一个值——
+    // 无论哪种，下面这一对都不成立。
+    const noPerm = probe(0n);
+    const withPerm = probe(H.PERM.PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD);
+    if (noPerm !== 'false' || withPerm !== 'true') {
+        fail(`运行时保真失败：无权限=${JSON.stringify(noPerm)}、有隐藏榜权限=${JSON.stringify(withPerm)}，期望 false / true`
+            + '（模板里 .call(handler, …) 的 this 没落到 handler 上，检查 lib/hydro.js 复刻的 memberLookup）');
+        return;
+    }
+    pass('Nunjucks 运行时与上游一致：模板里的 .call(handler, …) 把 this 绑到本次渲染的 handler');
+}
+
+/**
+ * 比赛入口链接闸门（**不是**数据泄露闸门，数据层由下面的 checkContestDataLeak 负责）。
+ *
+ * 这里守的是 UX 一致性：侧栏在什么时间点给不给"题目列表 / 成绩表"链接，
+ * 由 model.contest 的可见性函数 + attend 状态决定（partials/contest_sidebar.html:44-149）。
+ * 链接消失了不代表数据安全——直接敲 URL 时兜底的是后端 handler
+ * （ContestProblemListHandler 抛 ContestNotLiveError / ContestNotAttendedError，
+ * ContestScoreboardHandler 重跑 canShowScoreboard 并查 isNotStarted）。
+ * 反过来，链接出现了也不代表能看到数据。所以这两种"提前"要分开断言。
  *
  * 上游把这三件事交给 model.contest 的可见性函数（model/contest.ts:1051-1073），
- * 侧栏据此决定输不输出链接（partials/contest_sidebar.html:130-149）。
- * C 级不覆盖模板，所以我们改不了这个判断——但"改坏了也没人知道"这件事可以消除：
- * 夹具里备好四种时间状态，逐条断言链接该有 / 不该有。
+ * 侧栏据此决定输不输出链接。C 级不覆盖模板，所以我们改不了这个判断——
+ * 但"改坏了也没人知道"这件事可以消除：夹具里备好五种时间状态，逐条断言链接该有 / 不该有。
  * 断言一律按 URL 而不是文案：文案走 i18n，翻译一改假失败就来了。
  */
 const CONTEST_GATE_EXPECT = [
     // [场景, 比赛链接片段, 期望出现?]
     ['contest-live-student', '/problems', true],
     ['contest-live-student', '/scoreboard', true],
-    // 未开始：既没有题目列表，也没有榜单，只有一个参赛表单
+    // 未开始且没报名：既没有题目列表，也没有榜单，只有一个参赛表单
     ['contest-upcoming-student', '/problems', false],
     ['contest-upcoming-student', '/scoreboard', false],
+    // 未开始但已报名：上游的入口判断只看 attend，所以题目列表链接在这里会出现，
+    // 点进去由 handler 拦（ContestNotLiveError）。记下来是为了把这个 UX 死路钉住：
+    // 将来若改成"未开始不给链接"，这条断言会红，逼着写改动说明而不是顺手改掉。
+    ['contest-upcoming-attended-student', '/problems', true],
+    ['contest-upcoming-attended-student', '/scoreboard', false],
     // OI 结束但教师勾了隐藏榜单：普通学生仍然看不到
     ['contest-ended-hidden-student', '/scoreboard', false],
-    // 同一份夹具换管理员：出现的是"榜单（隐藏）"入口，而不是提前公开榜单
+    // 同一份夹具换管理员：有 PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD 时出现的是"（隐藏）"变体。
+    // 注意这一支是否走到，取决于模板第 131 行传的到底是 false 还是未定义（见 README 的大写 False 一条），
+    // 所以这里只断言"有榜单链接"，不断言它是哪一种文案。
     ['contest-ended-hidden-admin', '/scoreboard', true],
     ['contest-ended-open-student', '/scoreboard', true],
 ];
@@ -520,7 +573,69 @@ function checkContestGates() {
     if (!listAdmin.includes('图论专题训练赛')) {
         fail('contests-admin.html 看不到指定分组的比赛：夹具的权限分支写反了'); bad++;
     }
-    if (!bad) pass(`比赛四态可见性闸门通过（未开始无题目列表/榜单，OI 隐藏榜单仅管理员可见入口）`);
+    if (!bad) pass('比赛入口链接闸门通过：侧栏入口按时间状态与 attend 分叉（仅链接层，数据层见下一项）');
+}
+
+/**
+ * 比赛数据层泄露闸门（P0 安全完整性）。
+ *
+ * 上面那条只看链接。真正的判据是"未开赛时，浏览器拿不到赛前才该出现的数据"，
+ * 而这一层在 HTML 里：contest_detail.html:6-7 把 tdoc 塞进 UiContext，
+ * html5.html:66-69 在 {% block body %} 之后把 UiContext 整份序列化到 window.UiContextNew。
+ * 序列化只丢 `_` 前缀的键（backendlib/template.ts:21-26），而 `pids`、`privateFiles`
+ * 都是普通字段（interface.ts:260-283），于是精确题号列表和私有附件名会随页面一起下发。
+ * handler 那边倒是把 body.files 按 attend + 开赛时间判过（handler/contest.ts:178）——
+ * 页面不显示，但数据照发。这不是我们改出来的，是上游 5.0.7 的既有行为，
+ * 修复方案（最小 Addon 模板覆盖 vs Handler hook 脱敏）待定，所以这里先按 RATCHET 记账：
+ * 数值只许变小不许变大，清零后升级为 HARD（和 :has() 一条相同的处理路径）。
+ */
+const UIPRESTART_FIELDS = ['pids', 'privateFiles'];
+const UICTX_LEAK_BASELINE = {
+    // 未开赛的两格：非 owner 学生在 beginAt 之前打开详情页
+    'contest-upcoming-student': 2,
+    'contest-upcoming-attended-student': 2,
+};
+
+/** 解析 html5.html 末尾那行 window.UiContextNew = '<json>'; */
+function uiContextNew(html) {
+    const m = /window\.UiContextNew = '([\s\S]*?)';\s*\n/.exec(html);
+    if (!m) return null;
+    try {
+        return JSON.parse(JSON.parse(m[1]));
+    } catch {
+        return null;
+    }
+}
+
+function checkContestDataLeak() {
+    let bad = 0;
+    const found = {};
+    for (const scene of Object.keys(UICTX_LEAK_BASELINE)) {
+        const p = path.join(OUT, `${scene}.html`);
+        if (!fs.existsSync(p)) { fail(`缺少 ${scene}.html，先跑 node test/ui/render.js --all`); bad++; continue; }
+        const ctx = uiContextNew(fs.readFileSync(p, 'utf8'));
+        if (!ctx) { fail(`${scene}.html 解析不出 UiContextNew：序列化格式变了，闸门看不到真实数据`); bad++; continue; }
+        if (!ctx.tdoc) { fail(`${scene}.html 的 UiContextNew 没有 tdoc：夹具或模板变了，本项断言失去对象`); bad++; continue; }
+        // `_code` 是参赛密码（postAttend 里拿它比对），靠 `_` 前缀被 replacer 剥掉。
+        // 单独盯它一眼：这层剥离一旦改坏（比如换成白名单式序列化），报名门槛就没了。
+        if (ctx.tdoc._code !== undefined) {
+            fail(`${scene}.html 的 UiContextNew 里出现了 _code：报名口令随页面下发`);
+            bad++;
+        }
+        found[scene] = UIPRESTART_FIELDS.filter((k) => ctx.tdoc[k] !== undefined);
+    }
+    for (const [scene, base] of Object.entries(UICTX_LEAK_BASELINE)) {
+        const now = (found[scene] || []).length;
+        if (now > base) {
+            fail(`${scene}：未开赛详情页下发了 ${now} 个赛前字段（${(found[scene] || []).join(', ')}），基线 ${base}，只许减少`);
+            bad++;
+        } else if (now === base && now > 0) {
+            console.log(`… ${scene}：赛前字段 ${now} 个（${found[scene].join(', ')}）随 UiContextNew 下发——上游 5.0.7 既有行为，待脱敏方案定案`);
+        } else if (now < base) {
+            console.log(`↓ ${scene}：赛前字段 ${base} → ${now}${now ? '' : '（已清零，可升级为 HARD）'}`);
+        }
+    }
+    if (!bad) pass('比赛数据层闸门：未开赛的 tdoc 下发字段数未超过基线，且没有出现未登记字段');
 }
 
 /**
@@ -556,7 +671,9 @@ function main() {
     checkNavClearance();
     checkAboutPage();
     checkTierC();
+    checkRuntimeParity();
     checkContestGates();
+    checkContestDataLeak();
     checkDeadLinks();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');

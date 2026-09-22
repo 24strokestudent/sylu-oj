@@ -20,7 +20,7 @@ bash deploy/healthcheck.sh --gate        # §7  第一道 Gate
 bash deploy/secret-scan.sh               # §44 密钥与 §69 危险实现扫描
 bash deploy/configure.sh --verify --url https://<你的域名>/   # §65 线上页面检查
 bash test/judge-suite/check-fixtures.sh  # 本地校验用例本身写对了
-node test/ui/check.js                    # §8 §9 §12 前端红线：模板覆盖范围、选择器债务、品牌归属、比赛数据不提前泄露
+node test/ui/check.js                    # §8 §9 §12 前端红线：模板覆盖范围、选择器债务、品牌归属、比赛入口与赛前数据
 node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出图，横向溢出即 fail
 ```
 
@@ -78,6 +78,15 @@ node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出�
 - [ ] 学生提交后作业里能看到自己的成绩 / 通过状态
 - [ ] 能创建比赛，比赛题目在学生视角正常显示
 - [ ] 比赛期间榜单正常刷新；比赛结束后榜单冻结 / 排名正确
+- [ ] 未开赛比赛：学生侧栏没有题目列表与榜单入口（沙箱 `checkContestGates` 已断言链接层，这里查真机）
+- [ ] 未开赛比赛直接敲 `/contest/:tid/problems`、`/scoreboard` 被后端拦：
+      预期 `ContestNotLiveError` / `ContestNotAttendedError`（`ContestScoreboardHandler` 重跑
+      `canShowScoreboard` 并查 `isNotStarted`）。**后端源码闸门：已确认（5.0.7）；真实部署链路：仍需真机 smoke test**
+- [ ] **未关闭（P0 安全完整性）**：未开赛比赛的详情页 HTML 里不应出现赛前题号与私有附件名。
+      判据：`curl -s <详情页> | grep -o '"pids":\[[^]]*\]'` 应为空。
+      沙箱 `checkContestDataLeak` 实测 `window.UiContextNew` 当前含 `pids` 与 `privateFiles`
+      两个字段（上游 5.0.7 既有行为，链路见 `docs/UI-FUNCTION-BASELINE.md`），
+      脱敏方式（最小 Addon 模板覆盖 / Handler 钩子）待拍板，本项在此之前不得勾选。
 
 ### A5 讨论与其它
 
