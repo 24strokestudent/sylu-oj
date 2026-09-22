@@ -29,6 +29,10 @@ const ALLOWED_OVERRIDES = [
     'login.html',
     'user/settings.html',
     'sylu/about.html',
+    // 这两页是 C 级（§49 默认只许改 CSS），例外只为赛前数据脱敏这一处，
+    // 改动范围由 checkOverrideDrift 逐行钉住：除那段之外必须与上游逐字一致。
+    'contest_detail.html',
+    'homework_detail.html',
 ];
 const HOMEPAGE_PREFIX = 'partials/homepage/';
 
@@ -577,24 +581,26 @@ function checkContestGates() {
 }
 
 /**
- * 比赛数据层泄露闸门（P0 安全完整性）。
+ * 比赛/作业详情页的赛前数据闸门（P0 安全完整性）。
  *
  * 上面那条只看链接。真正的判据是"未开赛时，浏览器拿不到赛前才该出现的数据"，
- * 而这一层在 HTML 里：contest_detail.html:6-7 把 tdoc 塞进 UiContext，
- * html5.html:66-69 在 {% block body %} 之后把 UiContext 整份序列化到 window.UiContextNew。
- * 序列化只丢 `_` 前缀的键（backendlib/template.ts:21-26），而 `pids`、`privateFiles`
- * 都是普通字段（interface.ts:260-283），于是精确题号列表和私有附件名会随页面一起下发。
- * handler 那边倒是把 body.files 按 attend + 开赛时间判过（handler/contest.ts:178）——
- * 页面不显示，但数据照发。这不是我们改出来的，是上游 5.0.7 的既有行为，
- * 修复方案（最小 Addon 模板覆盖 vs Handler hook 脱敏）待定，所以这里先按 RATCHET 记账：
- * 数值只许变小不许变大，清零后升级为 HARD（和 :has() 一条相同的处理路径）。
+ * 而这一层在 HTML 里：上游把整个 tdoc 塞进 UiContext（contest_detail.html:6、
+ * homework_detail.html:5），html5.html:66-69 在 {% block body %} 之后把 UiContext
+ * 整份序列化到 window.UiContextNew。序列化只丢 `_` 前缀的键（template.ts:21-26），
+ * 于是 pids（精确题号列表）和 privateFiles（附件名/大小/etag）随页面一起下发，
+ * 而同一时刻页面主体它们是藏着的（contest.ts:179、homework.ts:116-121）。
+ *
+ * 现在由 addons/sylu-brand/templates/{contest,homework}_detail.html 在赛前只下发
+ * 一份白名单字段，所以这一项不再是"只降不升"的记账，而是硬断言：
+ * 未开赛场景的 tdoc 键集必须是 CLIENT_TDOC_FIELDS 的子集，且 pids / privateFiles / _code 不得出现。
+ * 反例同样要成立：进行中的比赛仍然照常带 pids，否则这条闸门就只是在测"永远过滤掉"。
  */
-const UIPRESTART_FIELDS = ['pids', 'privateFiles'];
-const UICTX_LEAK_BASELINE = {
-    // 未开赛的两格：非 owner 学生在 beginAt 之前打开详情页
-    'contest-upcoming-student': 2,
-    'contest-upcoming-attended-student': 2,
-};
+const CLIENT_TDOC_FIELDS = ['docId', 'title', 'rule', 'beginAt', 'endAt', 'duration'];
+const UICTX_FORBIDDEN = ['pids', 'privateFiles', '_code'];
+// 这三个场景是"赛前身份"：学生、比赛/作业还没开始
+const UICTX_PRESTART_SCENES = ['contest-upcoming-student', 'contest-upcoming-attended-student', 'homework-upcoming-student'];
+// 这个场景是反例：进行中，题目清单本来就该下发
+const UICTX_LIVE_SCENE = 'contest-live-student';
 
 /** 解析 html5.html 末尾那行 window.UiContextNew = '<json>'; */
 function uiContextNew(html) {
@@ -609,52 +615,134 @@ function uiContextNew(html) {
 
 function checkContestDataLeak() {
     let bad = 0;
-    const found = {};
-    for (const scene of Object.keys(UICTX_LEAK_BASELINE)) {
+    const tdocOf = (scene) => {
         const p = path.join(OUT, `${scene}.html`);
-        if (!fs.existsSync(p)) { fail(`缺少 ${scene}.html，先跑 node test/ui/render.js --all`); bad++; continue; }
+        if (!fs.existsSync(p)) { fail(`缺少 ${scene}.html，先跑 node test/ui/render.js --all`); return undefined; }
         const ctx = uiContextNew(fs.readFileSync(p, 'utf8'));
-        if (!ctx) { fail(`${scene}.html 解析不出 UiContextNew：序列化格式变了，闸门看不到真实数据`); bad++; continue; }
-        if (!ctx.tdoc) { fail(`${scene}.html 的 UiContextNew 没有 tdoc：夹具或模板变了，本项断言失去对象`); bad++; continue; }
-        // `_code` 是参赛密码（postAttend 里拿它比对），靠 `_` 前缀被 replacer 剥掉。
-        // 单独盯它一眼：这层剥离一旦改坏（比如换成白名单式序列化），报名门槛就没了。
-        if (ctx.tdoc._code !== undefined) {
-            fail(`${scene}.html 的 UiContextNew 里出现了 _code：报名口令随页面下发`);
+        if (!ctx) { fail(`${scene}.html 解析不出 UiContextNew：序列化格式变了，闸门看不到真实数据`); return undefined; }
+        if (!ctx.tdoc) { fail(`${scene}.html 的 UiContextNew 没有 tdoc：夹具或模板变了，本项断言失去对象`); return undefined; }
+        return ctx.tdoc;
+    };
+    for (const scene of UICTX_PRESTART_SCENES) {
+        const tdoc = tdocOf(scene);
+        if (!tdoc) { bad++; continue; }
+        const leaked = UICTX_FORBIDDEN.filter((k) => tdoc[k] !== undefined);
+        if (leaked.length) {
+            fail(`${scene}.html：赛前下发了 ${leaked.join(' / ')}，题号清单与附件元数据不得在开赛前落到浏览器`);
             bad++;
         }
-        found[scene] = UIPRESTART_FIELDS.filter((k) => ctx.tdoc[k] !== undefined);
-    }
-    for (const [scene, base] of Object.entries(UICTX_LEAK_BASELINE)) {
-        const now = (found[scene] || []).length;
-        if (now > base) {
-            fail(`${scene}：未开赛详情页下发了 ${now} 个赛前字段（${(found[scene] || []).join(', ')}），基线 ${base}，只许减少`);
+        const extra = Object.keys(tdoc).filter((k) => !CLIENT_TDOC_FIELDS.includes(k));
+        if (extra.length) {
+            fail(`${scene}.html：赛前多下发了白名单外的字段 ${extra.join(', ')}——白名单是 CLIENT_TDOC_FIELDS，加字段要在评审里说明理由`);
             bad++;
-        } else if (now === base && now > 0) {
-            console.log(`… ${scene}：赛前字段 ${now} 个（${found[scene].join(', ')}）随 UiContextNew 下发——上游 5.0.7 既有行为，待脱敏方案定案`);
-        } else if (now < base) {
-            console.log(`↓ ${scene}：赛前字段 ${base} → ${now}${now ? '' : '（已清零，可升级为 HARD）'}`);
         }
     }
-    if (!bad) pass('比赛数据层闸门：未开赛的 tdoc 下发字段数未超过基线，且没有出现未登记字段');
+    // 反例：进行中的比赛必须照样带 pids。只查赛前"没有"，把模板改成永远过滤也能通过，
+    // 那就不是在测权限脱敏，是在测自己。
+    const live = tdocOf(UICTX_LIVE_SCENE);
+    if (!live) bad++;
+    else if (!Array.isArray(live.pids) || !live.pids.length) {
+        fail(`${UICTX_LIVE_SCENE}.html 的进行中比赛没有 pids：脱敏过头了，比赛题目清单是开赛后再下发`);
+        bad++;
+    }
+    if (!bad) {
+        pass(`赛前数据闸门：${UICTX_PRESTART_SCENES.length} 个未开赛场景只下发 ${CLIENT_TDOC_FIELDS.length} 个白名单字段，进行中场景仍带 pids`);
+    }
 }
 
 /**
- * 路由完整性：沙箱的 url() 遇到没登记的 route 会回落到 '#'（lib/hydro.js 的 ROUTES），
- * 页面照样出图、链接却是死的。游客页有一处是上游自己的"忘记密码"触发器（由 JS 接管），
- * 所以只允许它一处，且只允许出现在游客页。
+ * 上游模板漂移闸门：本插件整份覆盖了哪几页，就要盯住"除了那段脱敏，其余与上游逐字一致"。
+ * 覆盖别人的模板换来的收益是可控的，代价是上游一改我们就要重新对齐；
+ * 这个代价只有写成断言才靠得住——所以逐行比对，不靠记得。
  */
+const OVERRIDE_DRIFT = [
+    {
+        name: 'contest_detail.html',
+        // 我们的改动替换的就是这一行；上游若改写它，下面的比对会指名道姓地报出来
+        replaced: "{{ set(UiContext, 'tdoc', tdoc) }}",
+        require: ['{% set notStarted = model.contest.isNotStarted(tdoc) %}', "{{ set(UiContext, 'tdoc', tdocClient) }}"],
+    },
+    {
+        name: 'homework_detail.html',
+        replaced: "{{ set(UiContext, 'tdoc', tdoc) }}",
+        require: ['{% set notLive = model.contest.isNotStarted(tdoc)', "{{ set(UiContext, 'tdoc', tdocClient) }}"],
+    },
+];
+
+function checkOverrideDrift() {
+    let bad = 0;
+    for (const { name, replaced, require: need } of OVERRIDE_DRIFT) {
+        const upPath = path.join(H.TEMPLATES_UPSTREAM, name);
+        const minePath = path.join(ADDON, 'templates', name);
+        if (!fs.existsSync(upPath)) { fail(`找不到上游模板 ${name}，漂移闸门看不到参照物`); bad++; continue; }
+        if (!fs.existsSync(minePath)) { fail(`本插件不再覆盖 ${name}：脱敏没了，请同步删除本项与白名单`); bad++; continue; }
+        const up = fs.readFileSync(upPath, 'utf8').split(/\r?\n/);
+        const mine = fs.readFileSync(minePath, 'utf8').split(/\r?\n/);
+        const at = up.indexOf(replaced);
+        if (at < 0) { fail(`上游 ${name} 里找不到「${replaced}」：上游把下发点改掉了，本插件的脱敏段落已经悬空`); bad++; continue; }
+        // 去掉我们那一段（含它前面的注释块）之后的行，必须与上游去掉 replaced 之后的行逐字相同
+        const cut = mine.slice();
+        const start = cut.findIndex((l) => l.includes('{#- SYLU OVERRIDE'));
+        const stop = cut.findIndex((l) => /set\(UiContext, 'tdoc',/.test(l));
+        if (start < 0 || stop < 0 || stop < start) {
+            fail(`${name}：找不到 SYLU OVERRIDE 段落的首尾标记，漂移闸门无法界定改动范围`);
+            bad++;
+            continue;
+        }
+        for (const s of need) {
+            if (!cut.slice(start, stop + 1).join('\n').includes(s)) {
+                fail(`${name}：脱敏段落里缺少「${s}」，判定或下发方式被改动`);
+                bad++;
+            }
+        }
+        const mineRest = [...cut.slice(0, start), ...cut.slice(stop + 1)];
+        const upRest = [...up.slice(0, at), ...up.slice(at + 1)];
+        if (mineRest.length !== upRest.length) {
+            fail(`${name}：与上游 ${name} 行数不一致（本插件 ${mineRest.length} / 上游 ${upRest.length}），上游模板已变或我们多改了别处`);
+            bad++;
+        } else {
+            const diff = mineRest.map((l, i) => [i, l, upRest[i]]).filter(([, a, b]) => a !== b);
+            if (diff.length) {
+                for (const [i, a, b] of diff.slice(0, 5)) {
+                    fail(`${name}：脱敏段落之外第 ${i + 1} 处与上游不同（不计我们那一段）\n    本插件：${a}\n    上游：  ${b}`);
+                }
+                bad++;
+            }
+        }
+    }
+    if (!bad) pass(`模板覆盖漂移闸门：${OVERRIDE_DRIFT.length} 页除脱敏段落外与上游逐字一致`);
+}
+
+/**
+ * 路由完整性：沙箱的 url() 遇到没登记的 route 会回落到 '#'（lib/hydro.js 的 buildRoutes
+ * 是从 .ref/Hydro 里逐个 ctx.Route(...) 扫出来的），页面照样出图、链接却是死的。
+ * 两处已知例外，都来自上游本身，不是我们改出来的：
+ *  - 游客页的"忘记密码"触发器（由 JS 接管，本就没有 href）；
+ *  - 作业侧栏的"帮助"：partials/homework_sidebar.html:78 调 url('wiki', page='help')，
+ *    而 5.0.7 注册的是 wiki_help / wiki_about（ui-default/index.ts:199-200），
+ *    全仓扫不到名为 wiki 的 ctx.Route，且这是上游唯一一处用它。
+ *    装了提供 /wiki/:page 的插件时这一处会复活，所以只豁免"恰好一处"，第二处仍然红。
+ * 例外按"哪一页、哪一处"限定，多出第二处仍然会红。
+ */
+const DEAD_LINK_EXCEPTIONS = [
+    { scene: /-guest\.html$/, count: 1, marker: /data-lostpass/, why: '游客页的忘记密码触发器由 JS 接管' },
+    { scene: /^homework-/, count: 1, marker: /icon-help/, why: "上游 url('wiki') 指向未注册的 wiki 路由" },
+];
+
 function checkDeadLinks() {
     const files = htmlFiles();
     let bad = 0;
+    const notes = [];
     for (const f of files) {
         const s = fs.readFileSync(path.join(OUT, f), 'utf8');
         const n = (s.match(/href="#"/g) || []).length;
         if (!n) continue;
-        if (/-guest\.html$/.test(f) && n === 1 && /data-lostpass/.test(s)) continue;
+        const hit = DEAD_LINK_EXCEPTIONS.find((e) => e.scene.test(f) && n === e.count && e.marker.test(s));
+        if (hit) { notes.push(`${f.replace(/\.html$/, '')}：${n} 处（${hit.why}）`); continue; }
         fail(`${f} 有 ${n} 处 href="#"：多半是 ROUTES 少登记了路由，线上会是死链接`);
         bad++;
     }
-    if (!bad) pass(`${files.length} 个页面无未登记路由产生的死链接（游客页的"忘记密码"触发器除外）`);
+    if (!bad) pass(`${files.length} 个页面无未登记路由产生的死链接（上游自有 ${notes.length} 处：${notes.join('；')}）`);
 }
 
 function main() {
@@ -674,6 +762,7 @@ function main() {
     checkRuntimeParity();
     checkContestGates();
     checkContestDataLeak();
+    checkOverrideDrift();
     checkDeadLinks();
     checkShotPath();
     console.log(failed ? `\n${failed} 项未通过` : '\n全部通过');

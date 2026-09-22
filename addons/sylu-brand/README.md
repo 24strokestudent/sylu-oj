@@ -75,21 +75,28 @@ Hydro 启动时会把每个 addon 的 `public/` 目录按顺序复制到 `~/.hyd
 - 覆盖 `templates/partials/nav.html`，**只把第一个导航项换成有 DOM 的品牌区**
   （Logo + 站名 + 副标题），其余 130 多行与上游逐字一致；上游若改动该文件，
   整份重新对齐再重放这一处 delta，别只改本地副本
+- 覆盖 `templates/contest_detail.html` 与 `templates/homework_detail.html`，**唯一一处改动**：
+  未开赛 / 未开放时塞进 `UiContext` 的 `tdoc` 换成六字段白名单副本（`docId / title / rule / beginAt / endAt / duration`），
+  使 `window.UiContextNew` 不再提前携带 `pids`、`privateFiles`。判据与豁免条件抄后端
+  （`handler/contest.ts:179`、`handler/homework.ts:116-121`），其余逐字照抄上游；
+  这两页因此是 §49 C 级"只准 CSS"的签核例外，由 `checkOverrideDrift` 逐行盯住与上游的偏差，
+  升级 Hydro 时若漂移即红（原委与 nunjucks 写法限制见 `docs/UI-FUNCTION-BASELINE.md`）
 - `homepage.yaml` 是首页模块编排的内容，部署时原样写入 `hydrooj.homepage`
 - `public/sylu/css/oj.css` 给所有 C 级业务页换上同一套设计语言：题库、题面、提交记录、
   提交详情，以及补齐的六页（比赛列表/详情、作业、训练、讨论、排名）与登录页背景
   （卡片、状态色、表格、标签、搜索键、题面排版、比赛横幅、训练进度条、窄屏列压缩）。
-  **只挂样式，不改结构、不覆盖这些页面的上游模板**（§49 C 级），因此选择器全部来自
-  上游模板原文类名，上游升级时需要对齐；`test/ui/check.js` 的 `checkTierC` 与
+  **只挂样式，不改结构、不覆盖这些页面的上游模板**（§49 C 级；比赛/作业详情页的脱敏覆盖是上面那条签核例外），
+  因此选择器全部来自上游模板原文类名，上游升级时需要对齐；`test/ui/check.js` 的 `checkTierC` 与
   `checkContestGates` 会盯住渲染结果
 - 通过 `public/sylu/css/*.css` 适配 Hydro 原有导航、首页卡片、侧栏和页脚。
   版面规则按 `.page--<页面>` 逐个签发：只有沙箱截过图并目视验收过的页面在名单里，
   管理后台（`/manage`）至今未验，所以仍是上游原样
 
-它**不碰**用户系统、题库、Judge。模板只覆盖上列四份（`main.html`、
-`partials/homepage/discussion_nodes.html`、`partials/nav.html`、`sylu/about.html`），
-且都是 addon 覆盖而非改 Hydro 源码（§49 A/B 级）；题库、记录、比赛、作业、讨论、
-排名与后台仍然完全使用上游模板。
+它**不碰**用户系统、题库、Judge。覆盖上游模板只有五份（`main.html`、
+`partials/homepage/discussion_nodes.html`、`partials/nav.html`、
+`contest_detail.html`、`homework_detail.html`），另有一份自有的 `sylu/about.html`（新增页面，不算覆盖），
+且都是 addon 覆盖而非改 Hydro 源码（§49 A/B 级）；题库、记录、比赛列表、榜单、作业列表、
+讨论、排名与后台仍然完全使用上游模板。
 
 ## 样式是怎么加载的
 
@@ -161,13 +168,17 @@ C 级页面（沙箱只证明"渲染成什么样"，证明不了"点起来对不
 - [ ] 手机宽度下题库/记录表格无横向滚动条（`node test/ui/shot.js` 已把这一步做成出图断言）
 - [ ] `/contest` 列表：搜索 + 两个下拉能提交；分组比赛对普通学生仍然不出现
 - [ ] `/contest/<tid>` 详情：**未开始的比赛点不进题目列表和榜单**。
-      链接层沙箱已用 `checkContestGates` 断言；直接敲 URL 的后端闸门
+      链接层沙箱已用 `checkContestGates` 断言（注意已报名学生**会**看到题目列表入口，
+      那是 UX 死路不是泄露，真正的拦截在后端）；直接敲 URL 的后端闸门
       （`ContestProblemListHandler` 抛 `ContestNotLiveError` / `ContestNotAttendedError`，
       `ContestScoreboardHandler` 重跑 `canShowScoreboard`）**源码已确认，真实部署链路仍需真机 smoke test**
 - [ ] 未开赛比赛的详情页 HTML 里不含赛前题号：`curl -s <详情页> | grep -c '"pids":\[' ` 应为 0。
-      **当前不为 0**（上游 5.0.7 把整份 `tdoc` 序列化进 `window.UiContextNew`，`pids` 与
-      `privateFiles` 都不是 `_` 前缀，逃过了 replacer）。这条由 `checkContestDataLeak` 记账，
-      脱敏方案未定案前本项不得勾选——插件层没有任何 CSS/模板手段能让已经下发的字段收回去
+      上游 5.0.7 把整份 `tdoc` 序列化进 `window.UiContextNew`（`pids` 与 `privateFiles` 都不是 `_` 前缀，
+      逃过了 replacer），本站用 `templates/contest_detail.html`、`templates/homework_detail.html`
+      两页最小覆盖做白名单脱敏，沙箱侧 `checkContestDataLeak`（HARD）已为 0；
+      **真机这一条还没跑过，勾选前先执行上面的 curl**。
+      代价：这两页不再是"只改 CSS"，升级 Hydro 时必须重跑 `node test/ui/check.js`，
+      `checkOverrideDrift` 会在上游模板与本插件不一致时立刻红（详见 `docs/UI-FUNCTION-BASELINE.md`）
 - [ ] `/contest/<tid>/scoreboard`：榜单自动刷新、ACM 封榜提示、导出功能都还在
 - [ ] `/training/<tid>` 题单详情：小节展开、进度写回（列表页沙箱已验，详情页未覆盖）
 - [ ] `/discuss` 发帖与回复：节点选择器、Markdown 编辑器（列表页沙箱已验，详情页未覆盖）

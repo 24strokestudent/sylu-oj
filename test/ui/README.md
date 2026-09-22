@@ -79,7 +79,7 @@ ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻�
   题目详情接入后 10 / 3（新增两条挂在题面 markdown 的块首标题上，与公告同类）；
   字面色值当前 14（首页深色代码窗口 12 + 导航 2），oj.css 是 0，说明这个标准做得到。
 - **C 级页面**（`checkTierC`）：题库/题面/记录/提交详情/比赛/作业/训练/讨论/排名/登录
-  二十四个场景必须渲染出正文——夹具与上游模板脱节时 Nunjucks 不报错，只交出一张空表，
+  二十五套场景必须渲染出正文——夹具与上游模板脱节时 Nunjucks 不报错，只交出一张空表，
   据此出的截图全是假的。标记串一律取上游模板自己写出的 class，不是本站起的名字。
   同一处还断言隐藏题 1009 只出现在 `problems-admin`（guest/student/teacher 三页都必须没有，
   管理员必须**有**：只查反例会养出一个"永远过滤掉"的假通过）；
@@ -92,12 +92,22 @@ ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻�
   `/problems`、`/scoreboard` 链接，正反例都断言；另外分组题（`tdoc.assign` 非空）
   只对有 `PERM_VIEW_HIDDEN_CONTEST` 的身份出现。**这只查链接，不查数据**——
   未开始但已报名那一格甚至会给出链接（上游只看 attend），点进去由后端 handler 拦。
-- **比赛数据层**（`checkContestDataLeak`）：解码产物末尾的 `window.UiContextNew`，
-  数未开赛详情页下发的赛前字段（`pids`、`privateFiles`），并确认 `_code` 不在里面。
-  当前测到 2 个字段 × 2 个场景，是上游 5.0.7 的既有行为，所以按 RATCHET 记账：
-  只许变小，清零后升级为 HARD。详见下一节。
-- **死链接**（`checkDeadLinks`）：产物里每个 `href="#"` 都必须是登记过的例外
-  （目前只有游客页的"忘记密码"触发器，且该页必须带 `data-lostpass`）。
+- **赛前数据层**（`checkContestDataLeak`，HARD）：解码产物末尾的 `window.UiContextNew`，
+  三个未开赛场景（`contest-upcoming-student`、`contest-upcoming-attended-student`、
+  `homework-upcoming-student`）的 `tdoc` 键集必须 ⊆ 客户端白名单
+  （`docId / title / rule / beginAt / endAt / duration`），且 `pids`、`privateFiles`、`_code`
+  一个都不许出现。**同时反方向也查**：`contest-live-student` 必须仍带非空 `pids`，
+  否则"脱敏"会变成"永远清空"这种假通过。加白名单字段要在评审里说明理由。
+  清零前它是 RATCHET（2 字段 × 2 场景），清零后按本仓库的规矩升级为 HARD，并各自证伪过一次。
+- **模板覆盖漂移**（`checkOverrideDrift`）：`contest_detail.html`、`homework_detail.html`
+  是 C 级"只准 CSS"的签核例外，所以逐行比对——脱敏段落之外必须与上游参考模板一字不差，
+  且段落里必须留着那几行判据标记。上游改模板或本站多改了别处，都会在这里红（不是靠人记得去看）。
+- **死链接**（`checkDeadLinks`）：产物里每个 `href="#"` 都必须是登记过的例外，
+  且例外要求"恰好 N 处 + 页面上有对应标记"，多出来的那处仍然 fail。目前两条例外：
+  游客页的"忘记密码"触发器（该页必须带 `data-lostpass`），以及作业详情页的
+  `icon-help`——那是上游 `partials/homework_sidebar.html:78` 的 `url('wiki')` 指向了
+  5.0.7 未注册的 wiki 路由（`ui-default/index.ts:199-200` 只注册了 `wiki_help`/`wiki_about`），
+  上游自有页面本来就是死的，沙箱不替它编一个假路由。
   上游模板引用了未移植进 `lib/hydro.js` 的路由时，`url()` 会静默返回 `#`，
   页面照样好看，点下去才知道是死的——所以做成闸门而不是靠点击。
 - **品牌区**：站名与副标题必须由 `partials/nav.html` 渲染成真实文本节点；
@@ -152,18 +162,20 @@ home.css / responsive.css 摘掉）；`legacy-shell-nav.css` 是几段，所以 
 | `problem-guest/student/admin` | 仅上游 `problem_detail.html` | 三档权限 | — | 题面与递交入口的权限分叉 |
 | `records-student` / `record-student` | 仅上游 `record_main/record_detail.html` | 学生 | — | 记录列表与判题详情 |
 | `contests-student` / `contests-admin` | 仅上游 `contest_main.html` | 学生 / 管理员 | — | 比赛列表 + 分组题的可见性 |
-| `contest-live-student` | 仅上游 `contest_detail.html` | 学生 | — | 进行中：题目列表与榜单都该在 |
-| `contest-upcoming-student` | 同上 | 学生 | — | 未开始：两个入口都不该出现（链接层）；赛前字段仍会随 UiContextNew 下发（数据层，见上） |
-| `contest-upcoming-attended-student` | 同上 | 学生（已报名） | — | 未开始 + 已报名：上游给出题目列表链接但后端拦，榜单仍无 |
+| `contest-live-student` | addon 覆盖 `contest_detail.html` | 学生 | — | 进行中：题目列表与榜单都该在，`UiContextNew` 仍带非空 `pids`（数据层反例） |
+| `contest-upcoming-student` | 同上 | 学生 | — | 未开始：两个入口都不该出现（链接层），且 `UiContextNew.tdoc` 只剩六字段白名单（数据层） |
+| `contest-upcoming-attended-student` | 同上 | 学生（已报名） | — | 未开始 + 已报名：上游给出题目列表链接但后端拦，榜单仍无；数据层同样已脱敏 |
 | `contest-ended-hidden-student` / `-admin` | 同上 | 学生 / 管理员 | — | OI 榜未公布：只有管理员看得到入口 |
 | `contest-ended-open-student` | 同上 | 学生 | — | 已放榜：入口正常出现 |
 | `homework-student` | 仅上游 `homework_main.html` | 学生 | — | 作业列表与日历字段 |
+| `homework-upcoming-student` | addon 覆盖 `homework_detail.html` | 学生（未报名） | — | 未开放作业：数据层按 `handler/homework.ts:116-121` 的条件脱敏；该页有一处上游自填的 `href="#"`（`url('wiki')` 未注册），见死链接例外 |
 | `training-student` / `training-guest` | 仅上游 `training_main.html` | 学生 / 未登录 | — | 训练进度与未完成态 |
 | `discuss-student` / `discuss-guest` | 仅上游 `discussion_main.html` | 学生 / 未登录 | — | 帖子列表与讨论节点 |
 | `ranking-student` / `ranking-guest` | 仅上游 `ranking.html` | 学生 / 未登录 | — | RP 榜单表格 |
 | `login-guest` | 仅上游 `login.html` | 未登录 | — | `layout/immersive.html` 版式下的品牌层 |
 
-C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造出这些页面的 body
+C 级页面原则上不覆盖模板（唯一的签核例外就是上面那两份详情页，由 `checkOverrideDrift` 盯漂移），
+所以 `render.js` 必须能替上游 handler 造出这些页面的 body
 （形状取自 `handler/problem.ts:183-193 / 355-368`、`handler/record.ts:119-133 / 218-220`、
 `handler/contest.ts`、`handler/homework.ts:61-67`、`handler/training.ts`、
 `handler/discussion.ts`、`handler/ranking.ts`，登记在 `PAGE_BODIES` 里；
@@ -193,7 +205,7 @@ C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造�
 3. `checkRuntimeParity` 把这段语义钉住：同一份 tdoc、两份身份（无权限 / 持有
    `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`），渲染结果必须是 `false` / `true`。
    thisArg 一旦被吞掉，这两次要么一起抛错要么坍成同一个值，闸门立刻变红。
-   实测：把第 2 步的复刻删掉，该闸门报错、其余 16 项仍然全绿——说明少了它，
+   实测（当时其余 16 项全绿）：把第 2 步的复刻删掉，只有该闸门报错——说明少了它，
    后面那些可见性断言完全可能在错误前提下"通过"。
 
 两个与上游一致、但读代码时容易误判的细节：
@@ -212,7 +224,7 @@ C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造�
 `/problems` 链接，正反例都查。改 `lib/data.js` 里那几处 `d(-1, 18)` 之类的时间偏移量，
 等于改断言本身。这条闸门查的是**入口链接**，不等于"数据没下发"——见下一节。
 
-### UiContextNew 里的赛前题号：入口藏住了，数据没藏住
+### UiContextNew 里的赛前题号：入口藏住了，数据曾经没藏住（已关闭）
 
 `checkContestDataLeak` 解码每个比赛详情页产物末尾的 `window.UiContextNew`。
 这条链在上游 5.0.7 里是这样的：
@@ -226,7 +238,7 @@ C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造�
    `Tdoc` 里的 `pids`、`privateFiles`、`assign`、`content` 都是普通字段
    （`hydrooj/src/interface.ts:260-283`），所以全部落地到浏览器。
 
-实测（沙箱产物 `out/contest-upcoming-student.html`，学生身份、开赛前六天）：
+修复前实测（沙箱产物 `out/contest-upcoming-student.html`，学生身份、开赛前六天）：
 
 ```
 "pids":[1001,1003,1005]                        ← 精确题号
@@ -239,10 +251,19 @@ C 级页面不覆盖模板，所以 `render.js` 必须能替上游 handler 造�
 它出现在 `UiContextNew` 里就是报名门槛没了。
 
 因此"比赛数据不得提前泄露"这条红线的准确表述是：**未开赛时，非 owner 学生拿不到题号与私有附件**。
-按现在的上游代码这个判据不成立，而它不是我们改出来的，也不属于 C 级 CSS 能修的范围——
-要么覆盖 `contest_detail.html`（动 §49 的 C 级边界），要么在 addon 里挂 handler 钩子做脱敏
-（动线上后端）。两条都是需要拍板的决定，所以这一步先落闸门：
-`UICTX_LEAK_BASELINE` 记 2（两个字段 × 两个未开赛场景），只许降不许升，清零后升级为 HARD。
+按上游 5.0.7 的代码这个判据不成立，而它不属于 C 级 CSS 能修的范围——拍板的处理方式是
+**最小 Addon 模板覆盖**：`addons/sylu-brand/templates/` 下的 `contest_detail.html` 与
+`homework_detail.html` 整份照抄上游，只把 `set(UiContext,'tdoc',…)` 的入参换成六字段白名单副本，
+判据与豁免条件抄后端（`handler/contest.ts:179`、`handler/homework.ts:116-121`）。
+Core 一行没改，路由与权限模型没动。代价与约束记录在三处：`checkOverrideDrift`（漂移即红）、
+`ALLOWED_OVERRIDES`（例外要登记）、`docs/UI-FUNCTION-BASELINE.md`（含 nunjucks 3.2.4 的写法坑：
+带括号的字典字面量、call 参数位上条件是括号的三元，都会把解析器打翻且报错位置漂移）。
+
+清零后 `checkContestDataLeak` 从 RATCHET 升级为 HARD，两个方向各自证伪过一次：
+把脱敏分支关掉 → 只有这一项红（4 条 fail）；模板里注入一个段外的 class → 只有漂移闸门红。
+闸门说的是"题号清单与私有附件元数据不下发"，**不是**"赛前信息一点都不出现"：
+侧栏的「题目 N」由上游服务端渲染（`partials/contest_sidebar.html:191` 的 `tdoc.pids.length`），
+沙箱截图里它照样是 3。这一层要藏得住得扩大覆盖范围，属另一个决定，见基线文档同一节。
 
 夹具为此带了一条形状完整的 `PRIVATE_FILE`（`common/types.ts:68-77` 的 FileInfo），
 而不是留空数组——留空数组的话，这条闸门只能证明"文件名列表恰好是空的"，证明不了"没下发"。

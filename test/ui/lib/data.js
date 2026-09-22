@@ -619,6 +619,42 @@ function contestDetailBody(state, { udoc = null, attend = state === 'live' } = {
     };
 }
 
+/** 未发布的作业。私有附件故意给满：作业详情页的题目表格此时是空的（见 homeworkDetailBody），
+ *  但 tdoc 整份进 UiContextNew，pids 与附件元数据照样落到浏览器。 */
+const HOMEWORK_DOCS = {
+    upcoming: contestDoc('h00000000000000000000003', '数据结构 · 第五次作业（尚未开放）', 'homework', d(3, 8), d(9, 23), {
+        attend: 6,
+        // 侧栏第 6 行直接对 penaltySince 调 .getTime()，留 null 会在模板里抛错。
+        // 线上作业都由出题老师填这一项，夹具照填，别让它变成沙箱才有的问题。
+        penaltySince: d(12, 23),
+        content: '本次作业覆盖二叉树与图，开放领取后请在截止前提交。',
+        privateFiles: [{
+            _id: 'system/t/h00000000000000000000003/file/private/skeleton.cpp',
+            name: 'skeleton.cpp', size: 1840, etag: '3ad7b52c9e10f46b',
+            lastModified: new Date('2026-09-18T06:30:00.000Z'),
+        }],
+    }),
+};
+
+/** 作业详情 body（homework.ts:93-133）。
+ *  handler 在 :116-121 有一道闸门：未开始、或"没领取且未结束"，且不是 owner
+ *  也没有 PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD 时直接 return，pdict/psdict/rdict
+ *  三个键因此不存在，模板第 21 行的 {% if pdict %} 走不到，页面只显示"请领取作业"。
+ *  这份 body 就是这个对照组：主体什么都没有，tdoc 里却带着题目清单。 */
+function homeworkDetailBody(state = 'upcoming', { attend = false } = {}) {
+    const tdoc = HOMEWORK_DOCS[state];
+    if (!tdoc) throw new Error(`没有 ${state} 号作业夹具，可用：${Object.keys(HOMEWORK_DOCS).join(', ')}`);
+    return {
+        tdoc,
+        tsdoc: contestStatus(tdoc, attend),
+        udict: { [tdoc.owner]: Udict[tdoc.owner] || user(tdoc.owner, `user${tdoc.owner}`) },
+        ddocs: [],
+        page: 1,
+        dpcount: 0,
+        dcount: 0,
+    };
+}
+
 /** 作业列表 body（homework.ts:58-77）。calendar 的构造规则同 :61-67。 */
 function homeworkListBody() {
     const htdocs = [
@@ -680,9 +716,9 @@ function loginBody() {
 module.exports = {
     oid, user, homepageContents, BULLETIN, HERO_BULLETIN, Udict,
     STUDENT, TEACHER, recentProblems, contests, homeworks, trainings, discussions, ranking,
-    PROBLEMS, RICH_RECORD, CONTEST_DOCS,
+    PROBLEMS, RICH_RECORD, CONTEST_DOCS, HOMEWORK_DOCS,
     problemList, problemDetailBody, recordListBody, recordDetailBody,
-    contestListBody, contestDetailBody, homeworkListBody, trainingListBody,
+    contestListBody, contestDetailBody, homeworkListBody, homeworkDetailBody, trainingListBody,
     discussionListBody, rankingBody, loginBody,
 };
 

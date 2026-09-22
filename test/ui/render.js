@@ -248,6 +248,7 @@ const PAGE_BODIES = {
     'record_detail.html': () => D.recordDetailBody(),
     'contest_main.html': (role, udoc) => D.contestListBody({ udoc }),
     'contest_detail.html': (role, udoc, sc) => D.contestDetailBody(sc.arg, { udoc, attend: sc.attend }),
+    'homework_detail.html': (role, udoc, sc) => D.homeworkDetailBody(sc.arg, { attend: sc.attend }),
     'homework_main.html': () => D.homeworkListBody(),
     'training_main.html': (role) => D.trainingListBody({ role }),
     'discussion_main_or_node.html': () => D.discussionListBody(),
@@ -321,6 +322,9 @@ const SCENARIOS = {
     'contest-ended-hidden-admin': { role: 'admin', addon: true, page: 'contest_detail.html', arg: 'endedHidden' },
     'contest-ended-open-student': { role: 'student', addon: true, page: 'contest_detail.html', arg: 'endedOpen' },
     'homework-student': { role: 'student', addon: true, page: 'homework_main.html' },
+    // 未开放的作业详情：与 contest-upcoming 同一类问题（页面主体空着，UiContextNew 却带着 pids），
+    // 因此也由 checkContestDataLeak 覆盖。attend 缺省 false，对应"还没领取"。
+    'homework-upcoming-student': { role: 'student', addon: true, page: 'homework_detail.html', arg: 'upcoming' },
     'training-student': { role: 'student', addon: true, page: 'training_main.html' },
     'training-guest': { role: 'guest', addon: true, page: 'training_main.html' },
     'discuss-student': { role: 'student', addon: true, page: 'discussion_main_or_node.html' },

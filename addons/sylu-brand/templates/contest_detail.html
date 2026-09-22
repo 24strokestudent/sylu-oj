@@ -1,0 +1,71 @@
+{% extends "layout/basic.html" %}
+{% import "components/contest.html" as contest with context %}
+{% import "components/record.html" as record with context %}
+{% import "components/problem.html" as problem with context %}
+{% block content %}
+{#- SYLU OVERRIDE：本文件除下面这段外与上游 contest_detail.html 逐字一致，
+    这段把未开赛时下发给浏览器的题目清单清空。原委与写法限制见 docs/UI-FUNCTION-BASELINE.md。 -#}
+{% set notStarted = model.contest.isNotStarted(tdoc) %}
+{% set privileged = handler.user.own(tdoc) or handler.user.hasPerm(perm.PERM_EDIT_CONTEST) %}
+{% set tdocClient = tdoc %}
+{% if notStarted and not privileged %}
+  {% set tdocClient = {
+      'docId': tdoc.docId,
+      'title': tdoc.title,
+      'rule': tdoc.rule,
+      'beginAt': tdoc.beginAt,
+      'endAt': tdoc.endAt,
+      'duration': tdoc.duration
+  } %}
+{% endif %}
+{{ set(UiContext, 'tdoc', tdocClient) }}
+{{ set(UiContext, 'tsdoc', tsdoc) }}
+<div class="row">
+  <div class="medium-9 columns">
+    <div class="section">
+      <div class="section__header" style="align: center">
+        <h1 class="section__title">{{ tdoc.title }}</h1>
+      </div>
+      <div class="section__body">
+        <span class="problem__tag-item">{{ _(model.contest.statusText(tdoc, tsdoc)) }}</span>
+        <span class="problem__tag-item icon icon-award">{{ _(model.contest.RULES[tdoc.rule].TEXT) }}</span>
+        <span class="problem__tag-item">{{ _('Start at') }}: {{ contest.render_time(tsdoc.startAt or tdoc.beginAt) }}</span>
+        <span class="problem__tag-item icon icon-schedule">{{ contest.render_duration(tdoc) }} {{ _('hour(s)') }}</span>
+        <span class="problem__tag-item">{{ _('Host') }}: {{ user.render_inline(udict[tdoc.owner], badge=false) }}</span>
+        <span class="problem__tag-item icon icon-user--multiple">{{ tdoc['attend']|default(0) }}</span>
+        {% if tsdoc.attend %}
+          <span class="problem__tag-item icon icon-check">{{ _('Attended') }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section__body typo richmedia">
+        {{ tdoc['content']|markdown|safe }}
+      {% if model.contest.isOngoing(tdoc, tsdoc) %}
+        <blockquote class="warn">
+          <p>{{ _('We will check code similarity after this contest.') }}</p>
+        </blockquote>
+      {% endif %}
+      {% if tdoc.duration %}
+        <blockquote class="note">
+          <p>{{ _('The contest is a flexible time contest. You need to complete the contest within a specified time after you attended.') }}</p>
+        </blockquote>
+      {% endif %}
+      </div>
+    </div>
+    {% if files.length %}
+      <div class="section">
+        <div class="section__header">
+          <h1 class="section__title">{{ _('Files') }}</h1>
+        </div>
+        {% set filetype = 'private' %}
+        {% include "partials/files.html" %}
+      </div>
+    {% endif %}
+  </div>
+  <div class="medium-3 columns">
+  {% set owner_udoc = udict[tdoc.owner] %}
+  {% include "partials/contest_sidebar.html" %}
+  </div>
+</div>
+{% endblock %}

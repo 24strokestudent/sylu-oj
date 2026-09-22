@@ -27,8 +27,8 @@
 | 登录 | `/login` | 未登录 | 账号口令登录 | 沙箱已验证（`login-guest`，仅静态结构） | 版式是 `layout/immersive.html`（无导航那套），本轮只把背景从 Hydro 风景照换成墨色令牌；模板覆盖与输入框配色留 P1 |
 | 注册 | `/register` | 未登录 | 新建账号 | 未覆盖 | P1：注册表单要 captcha 服务产物才能渲染，沙箱不造假验证码 |
 | 训练 | `/training` | `PERM_VIEW_TRAINING` | 训练列表与进入 | 沙箱已验证（`training-student/guest`） | C 级 CSS：进度条换成站内"通过"色；题单详情页未覆盖 |
-| 比赛 | `/contest`、`/contest/:tid` | `PERM_VIEW_CONTEST`；隐藏题/分组题另需 `PERM_VIEW_HIDDEN_CONTEST`；榜单需 `PERM_VIEW_CONTEST_SCOREBOARD`，未放榜时另需 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`（`model/contest.ts:1051-1073`） | 列表、详情、题目列表、榜单、我的提交 | 沙箱已验证（`contests-student/admin` + `contest-live/upcoming/upcoming-attended/ended-hidden/ended-open` 五种时间状态） | C 级 CSS（横幅与按钮换品牌色）；**侧栏入口按时间状态分叉已做成 `checkContestGates`**，**赛前数据层是未关闭的 P0（`checkContestDataLeak` 记账中，见上）**；榜单页本身需 handler 复刻，留 P1 |
-| 作业 | `/homework` | `PERM_VIEW_HOMEWORK` | 列表、日历视图 | 沙箱已验证（`homework-student`，列表态） | 只允许 CSS；日历视图需要 `calendar` 字段，已按 `handler/homework.ts:61-67` 复刻但未出图核对，P1 |
+| 比赛 | `/contest`、`/contest/:tid` | `PERM_VIEW_CONTEST`；隐藏题/分组题另需 `PERM_VIEW_HIDDEN_CONTEST`；榜单需 `PERM_VIEW_CONTEST_SCOREBOARD`，未放榜时另需 `PERM_VIEW_CONTEST_HIDDEN_SCOREBOARD`（`model/contest.ts:1051-1073`） | 列表、详情、题目列表、榜单、我的提交 | 详情页沙箱已验证（`contests-student/admin` + `contest-live/upcoming/upcoming-attended/ended-hidden/ended-open` 五种时间状态） | C 级 CSS（横幅与按钮换品牌色）；**侧栏入口按时间状态分叉已做成 `checkContestGates`**，**赛前数据层已由 Addon 模板覆盖脱敏（`checkContestDataLeak` 为 HARD，见下；这两页因此是 C 级"只准 CSS"的签核例外）**；榜单页本身需 handler 复刻，留 P1 |
+| 作业 | `/homework` | `PERM_VIEW_HOMEWORK` | 列表、日历视图 | 列表沙箱已验证（`homework-student`）；详情页沙箱已验证（`homework-upcoming-student`） | 列表页只允许 CSS；日历视图需要 `calendar` 字段，已按 `handler/homework.ts:61-67` 复刻但未出图核对，P1；详情页为赛前脱敏覆盖（与比赛详情页同一例外） |
 | 讨论 | `/discuss` | `PERM_VIEW_DISCUSSION` | 版块、帖子、回复 | 沙箱已验证（`discuss-student/guest`，列表页） | 只允许 CSS；帖子详情与回复树未覆盖 |
 | 排名 | `/ranking` | `PERM_VIEW_RANKING` | RP 榜单 | 沙箱已验证（`ranking-student/guest`） | 只允许 CSS。`pagination.ranking` 已补进设置默认值，否则名次列渲染成 NaN |
 | 用户中心 | `/home/*` | `PRIV_USER_PROFILE` | 设置、通知、域名加入 | `user/settings.html` 在白名单内未使用 | P1 |
@@ -74,37 +74,79 @@
 原因见 `test/ui/README.md`「比赛可见性」一节——上一版沙箱在这点上与线上不一致，
 而失真方向恰好是"权限判定恒为 false"，会让上面这些"无"变成自我确认。
 
-### 未开赛的数据层：入口藏住了，数据没藏住（P0 未关闭）
+### 未开赛的数据层：链接藏住了，数据曾经没藏住（已关闭，待真机复验）
 
-上表只描述链接。**数据层不满足"不得提前出现"**：`contest_detail.html:6-7` 把整份 `tdoc`
+上表只描述链接。**数据层曾经不满足"不得提前出现"**：`contest_detail.html:6-7` 把整份 `tdoc`
 塞进 `UiContext`，`layout/html5.html:66-69` 又把它序列化到 `window.UiContextNew`，
 而序列化的 replacer（`backendlib/template.ts:21-26`）只丢 `_` 前缀的键。
-沙箱实测（学生身份、开赛前六天）产物里含：
+修复前沙箱实测（学生身份、开赛前六天）产物里含：
 
 | 字段 | 值 | 是否该在开赛前下发给非 owner 学生 |
 | --- | --- | --- |
 | `pids` | `[1001,1003,1005]` | 否——精确题号 |
 | `privateFiles` | 附件名 / size / etag | 否——handler 已把 `body.files` 判成空（`handler/contest.ts:178`），tdoc 里这份却没判 |
-| `_code`（报名口令） | 不出现 | 由 `_` 前缀被 replacer 剥掉，闸门单独盯住它 |
+| `_code`（报名口令） | 不出现 | 由 `_` 前缀被 replacer 剥掉，闸门仍然盯住它 |
 
-这是上游 5.0.7 的既有行为（源码链已逐段核对，非本站改出），修它要动模板或动 handler 输出，
-两条路都超出一轮 UI 重构能自主拍板的范围，已列为待决（见 `ACCEPTANCE.md` 的未关闭项）。
-`checkContestDataLeak` 先把它记成 RATCHET：当前 2 个字段 × 2 个未开赛场景，只许降不许升，
-清零后升级为 HARD。**在方案定案前，任何"比赛数据不会提前泄露"的表述都只适用于链接层。**
+这是上游 5.0.7 的既有行为（源码链已逐段核对，非本站改出）。**处理方式是 Addon 模板覆盖**
+（用户签核的方案 A），不是改 Core：`addons/sylu-brand/templates/` 下新增
+`contest_detail.html`、`homework_detail.html`，整份逐字照抄上游，只在
+`{{ set(UiContext, 'tdoc', …) }}` 之前插一段脱敏。约束与代价：
 
-而"直接敲 URL"这一层是有后端闸门的：`ContestProblemListHandler` 抛
+- **这两页是 C 级"只准 CSS"的例外**，例外本身要能被机器查：`ALLOWED_OVERRIDES` 登记 +
+  `checkOverrideDrift` 逐行比对（去掉我们那一段之后，与上游剩下的行必须行数相同、逐字相同）。
+  上游模板一改，闸门立刻红，
+  升级 Hydro 时就得手动重新对齐——这是选这条路的已知代价，不是可以忽略的细节。
+- **判据抄后端，不自己发明**：脱敏条件分别是 `handler/contest.ts:179` 与
+  `handler/homework.ts:116-121` 里那两条判断的模板写法（作业多一条"未参加且未结束"），
+  豁免权限也照抄（`own(tdoc)` / `PERM_EDIT_CONTEST` / `PERM_VIEW_HOMEWORK_HIDDEN_SCOREBOARD`）。
+  客户端看到的与页面渲染出来的因此不会互相矛盾。
+- **用白名单而不是黑名单**：只下发 `docId / title / rule / beginAt / endAt / duration` 六个字段。
+  一来 `assign` 是 `Object.assign`（`backendlib/template.ts`），拿它做"删字段"会把 `tdoc` 本身改掉，
+  `homework_detail.html:43` 之后还要循环 `tdoc.pids`；二来上游以后加的新字段不会默认漏出去。
+  六个字段是客户端真实依赖的并集（`pages/contest.page.ts:10-11`、`contest_scoreboard.page.ts:64-65`、
+  `problem_detail.page.tsx:149,280`），少一个倒计时就坏。
+- **闸门是双向的**：`checkContestDataLeak` 既断言三个未开赛场景的 `UiContextNew.tdoc`
+  键集 ⊆ 白名单且不含 `pids/privateFiles/_code`，也断言进行中场景**仍带非空 `pids`**——
+  只查前者的话，把脱敏改成"永远清空"也能通过，那就不是在测安全，是在测自己。
+  基线已清零，所以这一项是 HARD 而不是 RATCHET，并且两个方向都各自证伪过一次。
+
+**在真机 smoke test 之前，"比赛数据不会提前泄露"仍然只对沙箱渲染产物负责。**
+这一轮关掉的是**题号清单与私有附件元数据**，不是"赛前信息一点都不出现"：
+侧栏的「题目 N」是上游服务端渲染的题数（`partials/contest_sidebar.html:191` 的
+`tdoc.pids.length`、`partials/homework_sidebar.html:87` 的 `tdoc['pids']|length`），
+脱敏只换 `UiContext` 的入参，管不到这一行。要连题数一起藏，就得把覆盖段落扩大到侧栏、
+并把它加进 `checkOverrideDrift` 的 `require` 名单——那是又一次扩大例外范围的决定，
+不在本轮范围内，先记在这里。
+
+"直接敲 URL"那一层另有后端闸门：`ContestProblemListHandler` 抛
 `ContestNotLiveError` / `ContestNotAttendedError`，`ContestScoreboardHandler` 重跑
-`canShowScoreboard` 并检查 `isNotStarted`。这一条的 provenance 要写清楚：
-**后端源码闸门：已确认（读 `.ref/Hydro` 的 5.0.7 源码）；真实部署链路：仍需真机 smoke test。**
+`canShowScoreboard` 并检查 `isNotStarted`。两条链路的 provenance 一起写清楚：
+**后端源码闸门：已确认（读 `.ref/Hydro` 的 5.0.7 源码）；Addon 模板层：沙箱已验证；
+真实部署链路：仍需真机 smoke test。**
+
+#### 这段模板为什么写成那样（nunjucks 3.2.4 的两个坑）
+
+沙箱与上游用的是同一个 nunjucks 3.2.4，下面这些写法在别处看着正常，在这里直接把解析器打翻，
+报错还甩到远处的下一个 `,` 或 `?` 上（`parseSignature` / `parseAggregate: expected comma after expression`），
+从错误信息根本倒推不回原因，实测踩过：
+
+- `{% set x = ({...}) %}`——**带括号的字典字面量**当 set 的值，解析失败。要用 `{% set x = {...} %}`。
+- `{{ f(a, (b and c) ? d : e) }}`——**call 参数位上、条件是括号的三元**，解析失败。
+  `{{ f(a, b ? c : d) }}` 和 `{{ f(a, (b ? c : d)) }}` 都没问题，所以别在最外层套括号。
+- `and` / `or` / `?` 之前换行会解析失败；多行字典字面量内部换行可以。
+- `{% if %}` 里的 `{% set %}` 在块结束后**仍然可见**（这点与直觉相反，已用渲染验证），
+  所以上面的 `tdocClient` 能在 `endif` 之后直接用。
+- 探测脚本必须放在 `test/ui/` 下跑：`nunjucks` 在那里才解析得到，且 `UiContext` / `model` /
+  `handler` / `perm` 是环境 **globals**，用原生环境做探针会得到与线上不同的结论。
 
 ## 截图基线与复现
 
 ```bash
 cd test/ui && npm install
 node fetch-assets.js            # 拉上游编译产物 theme.css + iconfont 到 out/vendor
-node render.js --all            # 32 个场景 → out/*.html
+node render.js --all            # 33 个场景 → out/*.html
 node shot.js --widths 1440,1024,768,390   # 全断点出图，溢出即 exit 1
-node check.js                   # 17 项闸门（其中 4 项是只降不升的计数）
+node check.js                   # 19 项闸门通过（另有 3 项是只降不升的计数）
 node compare.js HEAD            # 与上一版逐像素比（tier C 的差异是本轮刻意改出来的）
 ```
 
@@ -121,3 +163,5 @@ node compare.js HEAD            # 与上一版逐像素比（tier C 的差异是
 "只看我的"、CE/TLE/MLE 逐状态配色），逐条原因见 `test/ui/README.md`
 「计划里靠 CSS 落不了地的条目」。共同点：C 级不许覆盖模板，
 而用伪元素 `content` 塞文案或写死假统计数字来"看起来像"，分别违反 §8.2 和 §29。
+（C 级目前只有两个签核例外：`contest_detail.html`、`homework_detail.html` 的赛前脱敏，
+理由与代价见「未开赛的数据层」一节；这两条例外**不**构成"其它 C 页也能覆盖"的先例。）

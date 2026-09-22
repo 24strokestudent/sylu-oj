@@ -78,15 +78,22 @@ node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出�
 - [ ] 学生提交后作业里能看到自己的成绩 / 通过状态
 - [ ] 能创建比赛，比赛题目在学生视角正常显示
 - [ ] 比赛期间榜单正常刷新；比赛结束后榜单冻结 / 排名正确
-- [ ] 未开赛比赛：学生侧栏没有题目列表与榜单入口（沙箱 `checkContestGates` 已断言链接层，这里查真机）
+- [ ] 未开赛比赛：侧栏入口按上游规则分叉（沙箱 `checkContestGates` 已断言，这里查真机）。
+      注意**这一项不是安全断言**：未开赛且未报名时两个入口都不出现，但**已报名的学生会看到题目列表入口**
+      （`contest_sidebar.html:44` 的 else 分支只看 `tsdoc.attend`，不看 `beginAt`）——
+      那是"点进去会被后端拦"的 UX 死路，不是数据泄露。真正的安全断言是下面两条：拿不到题面/榜单数据。
 - [ ] 未开赛比赛直接敲 `/contest/:tid/problems`、`/scoreboard` 被后端拦：
       预期 `ContestNotLiveError` / `ContestNotAttendedError`（`ContestScoreboardHandler` 重跑
       `canShowScoreboard` 并查 `isNotStarted`）。**后端源码闸门：已确认（5.0.7）；真实部署链路：仍需真机 smoke test**
-- [ ] **未关闭（P0 安全完整性）**：未开赛比赛的详情页 HTML 里不应出现赛前题号与私有附件名。
+- [ ] 未开赛比赛的详情页 HTML 里不应出现赛前题号与私有附件名。
       判据：`curl -s <详情页> | grep -o '"pids":\[[^]]*\]'` 应为空。
-      沙箱 `checkContestDataLeak` 实测 `window.UiContextNew` 当前含 `pids` 与 `privateFiles`
-      两个字段（上游 5.0.7 既有行为，链路见 `docs/UI-FUNCTION-BASELINE.md`），
-      脱敏方式（最小 Addon 模板覆盖 / Handler 钩子）待拍板，本项在此之前不得勾选。
+      沙箱 `checkContestDataLeak`（HARD）已实测脱敏后的 `window.UiContextNew.tdoc`
+      只剩 `docId / title / rule / beginAt / endAt / duration` 六个字段，
+      `contest-upcoming-*` 与 `homework-upcoming-student` 三个场景都不含 `pids`、`privateFiles`、`_code`，
+      且进行中的 `contest-live-student` 仍带非空 `pids`（防止"一律清空"式的假通过）。
+      实现是最小 Addon 模板覆盖 + `checkOverrideDrift` 漂移闸门，
+      链路见 `docs/UI-FUNCTION-BASELINE.md`「未开赛的数据层」一节。
+      **沙箱已验证 ≠ 真机已验证**：本项在下面的 curl 于真实部署跑过之前不勾选。
 
 ### A5 讨论与其它
 
