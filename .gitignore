@@ -9,3 +9,8 @@ dist
 *.iml
 .DS_Store
 *.local
+
+# 环境变量与密钥（保留示例文件）
+.env
+.env.*
+!.env.example
