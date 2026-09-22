@@ -21,12 +21,12 @@
 
 ## 可以贡献什么
 
-| 方向 | 现状 | 适合入手 |
-|---|---|---|
-| 前端页面 | 首页、注册、登录、排行榜、讨论区已完成 | 题库列表、题目详情、比赛列表、个人主页 |
+| 方向 | 现状                                            | 适合入手 |
+|---|-----------------------------------------------|---|
+| 前端页面 | 首页、题库、注册、登录、排行榜、比赛、讨论区已完成 | 题目详情、个人主页、提交记录 |
 | 后端 API | `server/` 目前只有 `package.json`，还没有 `server.js` | 按[接口契约](#后端接口契约)实现接口 |
-| 数据落库 | 未开始 | 用户、题目、提交记录、话题等表结构 |
-| 文档与题解 | 持续需要 | 使用帮助、常见问题、题解内容 |
+| 数据落库 | 未开始                                           | 用户、题目、提交记录、话题等表结构 |
+| 文档与题解 | 持续需要                                          | 使用帮助、常见问题、题解内容 |
 
 前端目前是**纯静态页面**：无框架、无构建步骤，双击 `frontend/index.html` 就能跑。
 
@@ -145,13 +145,15 @@ sylu-oj/
 
 ## 后端接口契约
 
-四个页面的接口调用已经写好，只差后端。前端在 `demoMode: true` 时使用占位数据；后端实现后把对应脚本的 `demoMode` 改成 `false` 即可联调，也支持在控制台热切换：
+六个页面的接口调用已经写好，只差后端。前端在 `demoMode: true` 时使用占位数据；后端实现后把对应脚本的 `demoMode` 改成 `false` 即可联调，也支持在控制台热切换：
 
 ```js
 SYLU_AUTH_CONFIG.demoMode  = false;                                  // 注册
 SYLU_LOGIN_CONFIG.demoMode = false;                                  // 登录
 SYLU_LEVEL_CONFIG.demoMode = false; SYLU_LEVEL_CONFIG.reload();      // 排行榜
 SYLU_TALK_CONFIG.demoMode  = false; SYLU_TALK_CONFIG.reload();       // 讨论区
+SYLU_COMP_CONFIG.demoMode  = false; SYLU_COMP_CONFIG.reload();       // 比赛
+SYLU_BANK_CONFIG.demoMode  = false; SYLU_BANK_CONFIG.reload();       // 题库
 ```
 
 | 页面 | 方法 | 路径 | 请求体 | 成功返回 |
@@ -160,12 +162,18 @@ SYLU_TALK_CONFIG.demoMode  = false; SYLU_TALK_CONFIG.reload();       // 讨论�
 | 登录 | `POST` | `/api/auth/login` | `{ loginId, password, remember }` | 任意 JSON（如 `{ token }`） |
 | 排行榜 | `GET` | `/api/rank` | 无 | `[...]` 或 `{ list: [...] }` |
 | 讨论区 | `GET` | `/api/topics` | 无 | `[...]` 或 `{ topics: [...] }` |
+| 比赛 | `GET` | `/api/contests` | 无 | `[...]` 或 `{ contests: [...] }` |
+| 题库 | `GET` | `/api/problems` | 无 | `[...]` 或 `{ problems: [...] }` |
 
 **列表接口的字段**（以各脚本 `normalize()` 为准，缺失字段有默认值，不会白屏）：
 
 - 排行榜：`username`（或 `loginId`）、`nickname`、`college`、`solved`、`submissions`、`accepted`
 - 讨论区：`id`、`title`、`category`（`题解` / `求助` / `公告` / `闲聊`）、`author`、`college`、`problem`、`replies`、`views`、`likes`、`createdAgo`、`lastReplyAgo`
   - 后两个字段是**「多少分钟前」的数值**，前端据此渲染相对时间；若后端改为返回绝对时间戳，需要同步调整 `talk.js` 的 `normalize()` 与 `relativeTime()`
+- 比赛：`title`、`format`（`ACM` / `OI` / `IOI`）、`desc`、`problems`、`participants`、`startOffset`、`durationMinutes`
+  - 可选 `status`（`ongoing` / `upcoming` / `ended`）；缺省时前端按 `startOffset` 与 `durationMinutes` 推导状态
+- 题库：`code`、`title`、`difficulty`（`简单` / `中等` / `困难`）、`tags`（数组，也接受逗号分隔字符串）、`submissions`、`accepted`、`status`
+  - `status`（`solved` / `attempted` / `none`）依赖登录态，未登录时应返回 `none`
 
 **错误约定**：统一返回 `{ "message": "给用户看的中文提示" }`，前端会优先显示它；没有 `message` 时按状态码兜底（`401` → 用户名或密码错误、`403` → 账号不可用、`429` → 尝试过于频繁、`5xx` → 服务器异常）。
 

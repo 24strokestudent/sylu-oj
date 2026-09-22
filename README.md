@@ -16,7 +16,10 @@ sylu-oj/
 │   ├──login.html      #登录页面
 │   ├──register.html   #注册页面
 │   ├──level.html    #排名页面
+│   ├──competition.html #比赛页面
+│   ├──bank.html      #题库页面
 │   └──talk.html     #讨论页面
+│
 └── server/            # 后端（开发中）
 ```
 
