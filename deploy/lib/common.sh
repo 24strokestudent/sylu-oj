@@ -246,11 +246,18 @@ hydro_release_specs() {
         printf '%s\n' $packages
         return 0
     fi
+    [[ "$target" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || return 4
     [ -n "$manifest" ] && [ -f "$manifest" ] || return 2
     local package version
     for package in $packages; do
         version="$(awk -F= -v p="$package" '$1 == p {print $2; exit}' "$manifest" | tr -d '\r[:space:]')"
         [ -n "$version" ] || return 3
+        [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || return 5
+        # --to 表示 Hydro 核心目标版本；清单若核心版本不同，整组安装会
+        # 形成“参数与实际发行集合不一致”的假回滚，必须在下载前拒绝。
+        if [ "$package" = hydrooj ] && [ "$version" != "$target" ]; then
+            return 6
+        fi
         printf '%s@%s\n' "$package" "$version"
     done
 }
@@ -392,6 +399,37 @@ hydro_stop() {
         return $?
     fi
     return 1
+}
+
+# 返回服务的托管与运行状态：pm2:running、systemd:stopped、absent 等。
+# 恢复流程需要区分“本机没有独立 Judge 服务”和“Judge 原本在运行但没停下来”。
+hydro_service_state() {
+    local name="${1:-hydrooj}" status
+    ensure_nix_path
+    if pm2_has "$name"; then
+        status="$(pm2 jlist 2>/dev/null | node -e '
+            let s = "";
+            process.stdin.on("data", d => { s += d; }).on("end", () => {
+                try {
+                    const a = JSON.parse(s);
+                    const p = a.find(x => x.name === process.argv[1]);
+                    process.stdout.write(p && p.pm2_env ? String(p.pm2_env.status || "unknown") : "unknown");
+                } catch (_) { process.stdout.write("unknown"); }
+            });
+        ' "$name" 2>/dev/null || true)"
+        printf 'pm2:%s\n' "${status:-unknown}"
+        return 0
+    fi
+    if command -v systemctl >/dev/null 2>&1 \
+        && systemctl list-unit-files 2>/dev/null | grep -q "^${name}\.service"; then
+        if systemctl is-active --quiet "$name"; then
+            printf 'systemd:running\n'
+        else
+            printf 'systemd:stopped\n'
+        fi
+        return 0
+    fi
+    printf 'absent\n'
 }
 
 # ---------- yarn global（官方用 yarn global add 安装 Hydro） ----------

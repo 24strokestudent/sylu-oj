@@ -278,6 +278,26 @@ test('非法题号被规范化并告警', () => {
     assert.ok(hasWarn(r, /规范化/));
 });
 
+test('高级判题与附加字段必须拒绝', () => {
+    for (const key of ['type', 'filename', 'cases', 'user_extra_files', 'judge_extra_files',
+        'manager', 'validator', 'time_limit_rate', 'memory_limit_rate']) {
+        const r = analyze([
+            ['x/problem.json', JSON.stringify({ pid: 'px', title: 'X', [key]: true })],
+            ['x/1.in', '1\n'], ['x/1.out', '1\n'],
+        ]);
+        assert.ok(hasError(r, new RegExp(`暂不支持字段 ${key}`)), `${key} 未被拒绝`);
+    }
+});
+
+test('实际附加文件必须拒绝而不能静默丢弃', () => {
+    const r = analyze([
+        ['x/problem.json', JSON.stringify({ pid: 'px', title: 'X' })],
+        ['x/1.in', '1\n'], ['x/1.out', '1\n'],
+        ['x/additional_file/diagram.png', Buffer.from([0x89, 0x50, 0x4e, 0x47])],
+    ]);
+    assert.ok(hasError(r, /暂不支持附加文件/), `未拒绝附件：${allMsgs(r).join(' | ')}`);
+});
+
 console.log('\n=== 5. 单位解析 ===');
 
 test('parseTimeToMs', () => {

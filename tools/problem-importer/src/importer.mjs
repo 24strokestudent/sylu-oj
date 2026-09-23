@@ -375,6 +375,10 @@ const UNSUPPORTED_FIELDS = new Set([
     'checker', 'checker_type', 'judge', 'judge_type', 'interactor', 'interactor_type',
     'subtasks', 'subtask', 'score', 'scoring', 'depends', 'dependencies',
     'additional_file', 'additional_files', 'attachments', 'attachment', 'files',
+    'type', 'filename', 'cases', 'user_extra_files', 'judge_extra_files',
+    'manager', 'validator', 'time_limit_rate', 'memory_limit_rate',
+    'data', 'testdata', 'test_data', 'special_judge', 'spj', 'interactive',
+    'interaction', 'output_only', 'input_file', 'output_file', 'extra_files',
 ]);
 
 function rejectUnsupportedFields(problem, source) {
@@ -406,13 +410,23 @@ function buildProblem(key, files, diag, opts = {}) {
 
     const meta = {};          // 从 problem.* 读到的元数据
     let metaDoc = null;
+    const recognizedFiles = new Set();
 
     for (const f of files) {
         const base = path.posix.basename(f.rel).toLowerCase();
         const isTestDir = /(^|\/)testdata\//.test(f.rel);
         const lowerRel = f.rel.toLowerCase();
 
+        // 这些目录中的文件不能降级成普通测试数据；即使没有元数据字段，
+        // 也必须明确拒绝，避免把用户/判题机附件静默丢掉。
+        if (/(^|\/)(additional_files?|user_extra_files|judge_extra_files|attachments?)(\/|$)/i.test(f.rel)) {
+            problem.problems.error(`暂不支持附加文件：${f.rel}`);
+            recognizedFiles.add(f);
+            continue;
+        }
+
         if (['problem.json', 'problem.yaml', 'problem.yml', 'config.yaml', 'config.yml'].includes(base)) {
+            recognizedFiles.add(f);
             try {
                 const text = decodeText(f.buf);
                 const value = base.endsWith('.json') ? JSON.parse(text) : parseSimpleYaml(text);
@@ -423,9 +437,20 @@ function buildProblem(key, files, diag, opts = {}) {
                 problem.problems.error(`${base} 不是合法 JSON/YAML 或 UTF-8 元数据：${e.message}`, f.rel);
             }
         } else if (/\.(in|out|ans|txt)$/i.test(base) && !lowerRel.includes('/source') && !lowerRel.includes('/solution')) {
+            recognizedFiles.add(f);
             problem.tests.push(f);
         } else if (/^solution\.(cpp|cc|cxx|c|py|java|pas)$/i.test(base)) {
+            recognizedFiles.add(f);
             problem.solutions.push(f);
+        } else if (lowerRel.includes('/source/') || lowerRel.includes('/solution/')) {
+            // 源程序目录不是本转换器的输出内容，但不能被误报成附件。
+            recognizedFiles.add(f);
+        }
+    }
+
+    for (const f of files) {
+        if (!recognizedFiles.has(f)) {
+            problem.problems.error(`暂不支持的附加文件：${f.rel}`);
         }
     }
 

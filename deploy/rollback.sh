@@ -270,7 +270,13 @@ fi
 if [ "$MODE" = "backup" ]; then
     banner "从备份恢复（§46 §49）" "会用备份**覆盖**当前数据库"
 
-    [ -f "$BACKUP_FILE" ] || die "找不到备份文件：${BACKUP_FILE}"
+    # 新备份以同名目录保存完整恢复集合；仍兼容旧的单独 ZIP。
+    BACKUP_SET_DIR=""
+    if [ -d "$BACKUP_FILE" ]; then
+        BACKUP_SET_DIR="$(cd "$BACKUP_FILE" && pwd)"
+        BACKUP_FILE="${BACKUP_SET_DIR}/data.zip"
+    fi
+    [ -f "$BACKUP_FILE" ] || die "找不到备份文件或恢复集合：${BACKUP_FILE}"
     ensure_cmd unzip unzip "恢复前要校验备份完整性"
 
     log_step "1. 校验备份文件"
@@ -283,8 +289,11 @@ if [ "$MODE" = "backup" ]; then
         log_warn "备份里没有找到 dump/hydro —— 这可能不是 hydrooj backup 生成的包，恢复会失败。"
     fi
     BACKUP_STEM="$(basename "$BACKUP_FILE" .zip)"
-    BACKUP_FILE_DIR="$(cd "$(dirname "$BACKUP_FILE")" && pwd)"
+    BACKUP_FILE_DIR="${BACKUP_SET_DIR:-$(cd "$(dirname "$BACKUP_FILE")" && pwd)}"
+    BACKUP_ID="${BACKUP_STEM#sylu-oj-}"
+    [ -n "$BACKUP_SET_DIR" ] && BACKUP_ID="$(basename "$BACKUP_SET_DIR" | sed 's/^sylu-oj-//')"
     if [ ! -f "${BACKUP_FILE_DIR}/manifest-${BACKUP_STEM#sylu-oj-}.txt" ] \
+        && [ ! -f "${BACKUP_FILE_DIR}/manifest.txt" ] \
         && ! unzip -l "$BACKUP_FILE" 2>/dev/null | grep -q 'sylu-recovery/versions.env'; then
         log_warn "备份缺少恢复清单，只能按数据恢复，不能确认对应代码发行集合。"
     fi
@@ -304,10 +313,9 @@ if [ "$MODE" = "backup" ]; then
   覆盖当前数据库${C_OFF}（hydrooj restore ... --drop）。
   当前数据将不可恢复（除非上一步刚做了备份）。
 
-  版本提示：备份只包含数据，不含代码。
+  版本提示：新恢复集合会先按逐包快照安装对应代码；旧 ZIP 若没有快照，
+    只能恢复数据，不能宣称代码与数据库属于同一发行集合。
     当前代码版本 : ${CUR_VER}
-    若备份来自更早的版本，恢复后 Hydro 会自动重新跑迁移；这通常没问题，
-    但如果之后仍要回退代码，请配合 --code <备份时代的版本> 一起做。
 EOF
 
     if [ "$DRY_RUN" = 1 ]; then
@@ -327,7 +335,83 @@ EOF
     if ! hydro_stop hydrooj; then
         die "无法停止 hydrooj，已拒绝在仍可写入时执行恢复。维护标记：${MAINTENANCE_MARKER}"
     fi
-    hydro_stop hydrojudge || true
+    JUDGE_STATE="$(hydro_service_state hydrojudge)"
+    JUDGE_WAS_RUNNING=0
+    TARGET_JUDGE_ENABLED=1
+    case "$JUDGE_STATE" in
+        pm2:running|pm2:online|systemd:running)
+            JUDGE_WAS_RUNNING=1
+            if ! hydro_stop hydrojudge; then
+                die "无法停止正在运行的 hydrojudge，已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}"
+            fi
+            ;;
+        pm2:stopped|pm2:stopping|systemd:stopped|absent) ;;
+        *) die "无法判定 hydrojudge 状态（${JUDGE_STATE}），已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}" ;;
+    esac
+
+    restore_abort() {
+        local message="$1"
+        if [ "${RESTORE_WEB_STARTED:-0}" = 1 ]; then
+            hydro_stop hydrooj || log_warn "失败收敛时无法停止 hydrooj，请保持维护标记并人工确认"
+        fi
+        if [ "${JUDGE_WAS_RUNNING:-0}" = 1 ]; then
+            hydro_stop hydrojudge || log_warn "失败收敛时无法停止 hydrojudge，请保持维护标记并人工确认"
+        fi
+        die "$message；维护标记仍保留：${MAINTENANCE_MARKER}"
+    }
+
+    # 新备份带有逐包版本快照。存在完整快照时先恢复同一组全局包，
+    # 这样数据库与代码来自同一恢复集合；旧备份没有快照时明确降级为数据恢复。
+    RECOVERY_SNAPSHOT=""
+    if [ -f "${BACKUP_FILE_DIR}/versions.env" ]; then
+        RECOVERY_SNAPSHOT="${BACKUP_FILE_DIR}/versions.env"
+    elif [ -f "${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env" ]; then
+        RECOVERY_SNAPSHOT="${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env"
+    fi
+    RECOVERY_SPECS_TMP=""
+    if [ -n "$RECOVERY_SNAPSHOT" ]; then
+        RECOVERY_SPECS_TMP="$(mktemp "${SYLU_STATE_DIR}/restore-specs.XXXXXX")"
+        for SPEC in \
+            'hydrooj HYDROOJ' \
+            '@hydrooj/ui-default HYDRO_UI' \
+            '@hydrooj/hydrojudge HYDRO_JUDGE' \
+            '@hydrooj/fps-importer HYDRO_FPS_IMPORTER' \
+            '@hydrooj/a11y HYDRO_A11Y'; do
+            PKG="${SPEC% *}"; KEY="${SPEC##* }"
+            VERSION="$(awk -F= -v k="$KEY" '$1 == k {print $2; exit}' "$RECOVERY_SNAPSHOT" | tr -d '\r[:space:]')"
+            if [ "$PKG" = '@hydrooj/hydrojudge' ]; then
+                if [ -n "$VERSION" ]; then
+                    [ "$VERSION" != none ] && TARGET_JUDGE_ENABLED=1 || TARGET_JUDGE_ENABLED=0
+                fi
+            fi
+            if [ -n "$VERSION" ] && [ "$VERSION" != none ]; then
+                printf '%s@%s\n' "$PKG" "$VERSION" >>"$RECOVERY_SPECS_TMP"
+            fi
+        done
+        if ! grep -q '^hydrooj@' "$RECOVERY_SPECS_TMP"; then
+            rm -f -- "$RECOVERY_SPECS_TMP"
+            RECOVERY_SPECS_TMP=""
+            log_warn "恢复快照缺少 hydrooj 版本，只能执行数据恢复，不宣称完整代码回滚。"
+        fi
+    else
+        log_warn "备份缺少逐包版本快照，只能执行数据恢复，不宣称完整代码回滚。"
+    fi
+
+    if [ -n "$RECOVERY_SPECS_TMP" ]; then
+        mapfile -t RECOVERY_SPECS <"$RECOVERY_SPECS_TMP"
+        rm -f -- "$RECOVERY_SPECS_TMP"
+        REG_SAVED="$(yarn config get registry 2>/dev/null | tr -d '\r' || echo https://registry.yarnpkg.com)"
+        yarn config set registry "${SYLU_YARN_MIRROR:-https://registry.npmmirror.com}" >/dev/null 2>&1 || true
+        if ! yarn global add "${RECOVERY_SPECS[@]}"; then
+            yarn config set registry https://registry.yarnpkg.com >/dev/null 2>&1 || true
+            yarn global add "${RECOVERY_SPECS[@]}" || {
+                yarn config set registry "${REG_SAVED:-https://registry.yarnpkg.com}" >/dev/null 2>&1 || true
+                restore_abort "无法安装备份对应的逐包版本集合"
+            }
+        fi
+        yarn config set registry "${REG_SAVED:-https://registry.yarnpkg.com}" >/dev/null 2>&1 || true
+        log_ok "已安装备份记录的逐包版本集合：${RECOVERY_SPECS[*]}"
+    fi
 
     # hydrooj restore 会把 zip 解包后 mongorestore --drop
     # 注意：-y 用于跳过它自己的交互确认（我们已经确认过了）
@@ -338,11 +422,29 @@ EOF
 
     # 外部品牌插件不在 Hydro 官方 backup 的 addons 目录中，按同一时间戳的
     # 配套归档恢复到代码目录；没有归档时明确告警，不伪装成完整版本回滚。
-    PLUGIN_ARCHIVE="${BACKUP_FILE_DIR}/sylu-brand-${BACKUP_STEM#sylu-oj-}.tar.gz"
+    PLUGIN_ARCHIVE="${BACKUP_FILE_DIR}/sylu-brand-${BACKUP_ID}.tar.gz"
+    if [ ! -f "$PLUGIN_ARCHIVE" ] && [ -f "${BACKUP_FILE_DIR}/sylu-brand.tar.gz" ]; then
+        PLUGIN_ARCHIVE="${BACKUP_FILE_DIR}/sylu-brand.tar.gz"
+    fi
     if [ -f "$PLUGIN_ARCHIVE" ]; then
         tar -tzf "$PLUGIN_ARCHIVE" >/dev/null 2>&1 || die "品牌插件归档损坏：${PLUGIN_ARCHIVE}"
-        tar -xzf "$PLUGIN_ARCHIVE" -C "$SYLU_OJ_ROOT" \
-            || die "品牌插件归档恢复失败：${PLUGIN_ARCHIVE}"
+        if tar -tzf "$PLUGIN_ARCHIVE" | grep -Eq '(^/|(^|/)\.\.?(/|$))'; then
+            die "品牌插件归档含非法路径：${PLUGIN_ARCHIVE}"
+        fi
+        PLUGIN_TMP="$(mktemp -d "${SYLU_STATE_DIR}/restore-plugin.XXXXXX")"
+        if ! tar -xzf "$PLUGIN_ARCHIVE" -C "$PLUGIN_TMP"; then
+            rm -rf -- "$PLUGIN_TMP"
+            die "品牌插件归档恢复失败：${PLUGIN_ARCHIVE}"
+        fi
+        [ -d "${PLUGIN_TMP}/addons/sylu-brand" ] || {
+            rm -rf -- "$PLUGIN_TMP"
+            die "品牌插件归档缺少 addons/sylu-brand：${PLUGIN_ARCHIVE}"
+        }
+        rm -rf -- "${SYLU_OJ_ROOT}/addons/sylu-brand"
+        mkdir -p "${SYLU_OJ_ROOT}/addons"
+        mv "${PLUGIN_TMP}/addons/sylu-brand" "${SYLU_OJ_ROOT}/addons/sylu-brand" \
+            || { rm -rf -- "$PLUGIN_TMP"; die "品牌插件归档恢复失败：${PLUGIN_ARCHIVE}"; }
+        rm -rf -- "$PLUGIN_TMP"
         log_ok "已恢复 sylu-brand 外部插件源码"
     else
         log_warn "找不到配套品牌插件归档：${PLUGIN_ARCHIVE}；当前恢复不包含外部插件源码"
@@ -360,7 +462,8 @@ EOF
     log_info "当前 addon.json 内容："
     hydrooj addon list 2>/dev/null || log_warn "hydrooj addon list 执行失败，请手动查看 ~/.hydro/addon.json"
 
-    hydro_restart hydrooj || die "恢复完成但 hydrooj 无法启动；维护标记仍保留：${MAINTENANCE_MARKER}"
+    RESTORE_WEB_STARTED=1
+    hydro_restart hydrooj || restore_abort "恢复完成但 hydrooj 无法启动"
 
     log_step "4. 等待服务就绪"
     CODE="000"
@@ -371,11 +474,16 @@ EOF
     done
     case "$CODE" in
         200 | 301 | 302 | 303) log_ok "服务已恢复（HTTP ${CODE}）" ;;
-        *) die "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj；维护标记仍保留：${MAINTENANCE_MARKER}" ;;
+        *) restore_abort "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj" ;;
     esac
 
-    record_note "rollback.sh(backup) 完成 file=${BACKUP_FILE} code=${CODE}"
-    bash "${SCRIPT_DIR}/healthcheck.sh" || die "恢复后健康检查失败"
+    if ! bash "${SCRIPT_DIR}/healthcheck.sh"; then
+        restore_abort "恢复后健康检查失败"
+    fi
+    if [ "$JUDGE_WAS_RUNNING" = 1 ] && [ "$TARGET_JUDGE_ENABLED" = 1 ]; then
+        hydro_restart hydrojudge || restore_abort "恢复后无法恢复原先运行的 hydrojudge"
+    fi
+    record_note "rollback.sh(backup) 完成 file=${BACKUP_FILE} code=${CODE} judge_was_running=${JUDGE_WAS_RUNNING}"
     rm -f -- "$MAINTENANCE_MARKER"
 
     cat <<'EOF'

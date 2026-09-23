@@ -159,11 +159,22 @@ if [ -d "${SYLU_OJ_ROOT:-}/addons/sylu-brand" ] && command -v tar >/dev/null 2>&
 else
     log_warn "未找到 sylu-brand 源码或 tar，恢复集合不含外部品牌插件归档"
 fi
+# 把 ZIP、版本、清单、配置和插件归档放进同名恢复集合。异地只上传这个
+# 目录，避免恢复时 ZIP 已存在但配套材料仍留在另一处或命名不一致。
+RECOVERY_SET_DIR="${BACKUP_DIR}/sylu-oj-${STAMP}"
+mkdir -p "$RECOVERY_SET_DIR"
+cp "$TARGET" "$RECOVERY_SET_DIR/data.zip"
+cp "${BACKUP_DIR}/versions-${STAMP}.env" "$RECOVERY_SET_DIR/versions.env"
+cp "${BACKUP_DIR}/manifest-${STAMP}.txt" "$RECOVERY_SET_DIR/manifest.txt"
+[ -f "${BACKUP_DIR}/versions-${STAMP}.sha256" ] && cp "${BACKUP_DIR}/versions-${STAMP}.sha256" "$RECOVERY_SET_DIR/versions.sha256"
+[ -f "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" ] && cp "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" "$RECOVERY_SET_DIR/sylu-brand.tar.gz"
+[ -d "$CONFIG_DIR" ] && cp -a "$CONFIG_DIR" "$RECOVERY_SET_DIR/config"
+chmod -R go-rwx "$RECOVERY_SET_DIR"
 log_ok "本地备份校验通过：$(basename "$TARGET")"
 
 if [ "$OFFSITE" = 1 ]; then
     RESTIC_REPOSITORY="$RESTIC_REPO" RESTIC_PASSWORD="$RESTIC_PASS" \
-        restic backup "$TARGET" "${BACKUP_DIR}/versions-${STAMP}.env" --tag sylu-oj \
+        restic backup "$RECOVERY_SET_DIR" --tag sylu-oj --tag "backup-id=${STAMP}" \
         || die "异地上传失败，本地备份已保留：$TARGET"
     RESTIC_REPOSITORY="$RESTIC_REPO" RESTIC_PASSWORD="$RESTIC_PASS" \
         restic forget --tag sylu-oj --group-by host,tags --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
@@ -172,12 +183,15 @@ if [ "$OFFSITE" = 1 ]; then
 fi
 
 if [ "$(date '+%u')" = "7" ]; then
+    WEEK_ID="$(date '+%G-W%V')"
     mkdir -p "${BACKUP_DIR}/weekly"
-    cp "$TARGET" "${BACKUP_DIR}/weekly/sylu-oj-week-$(date '+%G-W%V').zip"
-    cp "${BACKUP_DIR}/versions-${STAMP}.env" "${BACKUP_DIR}/weekly/versions-$(date '+%G-W%V').env"
-    cp "${BACKUP_DIR}/manifest-${STAMP}.txt" "${BACKUP_DIR}/weekly/manifest-$(date '+%G-W%V').txt"
-    [ -f "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" ] && cp "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" "${BACKUP_DIR}/weekly/sylu-brand-$(date '+%G-W%V').tar.gz"
-    [ -d "${BACKUP_DIR}/config-${STAMP}" ] && cp -a "${BACKUP_DIR}/config-${STAMP}" "${BACKUP_DIR}/weekly/config-$(date '+%G-W%V')"
+    cp "$TARGET" "${BACKUP_DIR}/weekly/sylu-oj-week-${WEEK_ID}.zip"
+    cp "${BACKUP_DIR}/versions-${STAMP}.env" "${BACKUP_DIR}/weekly/versions-week-${WEEK_ID}.env"
+    cp "${BACKUP_DIR}/manifest-${STAMP}.txt" "${BACKUP_DIR}/weekly/manifest-week-${WEEK_ID}.txt"
+    [ -f "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" ] && cp "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" "${BACKUP_DIR}/weekly/sylu-brand-week-${WEEK_ID}.tar.gz"
+    [ -d "${BACKUP_DIR}/config-${STAMP}" ] && cp -a "${BACKUP_DIR}/config-${STAMP}" "${BACKUP_DIR}/weekly/config-week-${WEEK_ID}"
+    rm -rf "${BACKUP_DIR}/weekly/sylu-oj-week-${WEEK_ID}"
+    cp -a "$RECOVERY_SET_DIR" "${BACKUP_DIR}/weekly/sylu-oj-week-${WEEK_ID}"
 fi
 
 # ============================================================
@@ -202,6 +216,13 @@ keep_newest() { # $1=目录 $2=保留数 $3=glob
                 rm -f -- "${dir}/manifest-${stamp%.zip}.txt" "${dir}/versions-${stamp%.zip}.sha256"
                 rm -f -- "${dir}/sylu-brand-${stamp%.zip}.tar.gz"
                 rm -rf -- "${dir}/config-${stamp%.zip}"
+                rm -rf -- "${dir}/sylu-oj-${stamp%.zip}"
+            fi
+            if [[ "$(basename "$f")" == sylu-oj-week-*.zip ]]; then
+                local week_id="${f##*/sylu-oj-week-}"
+                rm -f -- "${dir}/versions-week-${week_id%.zip}.env" "${dir}/manifest-week-${week_id%.zip}.txt"
+                rm -f -- "${dir}/sylu-brand-week-${week_id%.zip}.tar.gz"
+                rm -rf -- "${dir}/config-week-${week_id%.zip}" "${dir}/sylu-oj-week-${week_id%.zip}"
             fi
             log_info "清理旧备份：$(basename "$f")"
         fi

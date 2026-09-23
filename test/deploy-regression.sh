@@ -84,6 +84,8 @@ expect() {
     echo "PASS: $name"
 }
 expect 0 '本地备份成功' bash "$TMP/deploy/backup.sh"
+[ "$(find "$TMP/backups" -path '*/sylu-oj-*/data.zip' | wc -l)" -eq 1 ] || { echo 'FAIL: 未生成完整恢复集合'; exit 1; }
+[ "$(find "$TMP/backups" -path '*/sylu-oj-*/versions.env' -o -path '*/sylu-oj-*/manifest.txt' | wc -l)" -eq 2 ] || { echo 'FAIL: 恢复集合缺少版本或清单'; exit 1; }
 expect 1 '旧 ZIP 不得冒充新备份' env NO_ARCHIVE=1 bash "$TMP/deploy/backup.sh"
 # 避免秒级文件名碰撞，前一份已经过校验，移到隔离测试目录中另存。
 mv "$TMP/backups/"*.zip "$TMP/saved.zip"
