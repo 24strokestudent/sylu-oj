@@ -58,6 +58,11 @@ done
 BACKUP_DIR="${SYLU_BACKUP_DIR:-/var/backups/sylu-oj}"
 require_root
 if [ "$DRY_RUN" != 1 ] && [ "$MODE" != list ]; then ensure_state_dir; fi
+if [ "$MODE" = backup ] && [ "$DRY_RUN" != 1 ]; then
+    require_cmd flock "恢复与备份轮转必须共用互斥锁"
+    exec 8>"${SYLU_STATE_DIR}/backup.lock"
+    flock -n 8 || die "已有备份或恢复任务运行，拒绝并发操作"
+fi
 
 # ============================================================
 # --list：把所有可用的回滚点列出来
@@ -271,6 +276,7 @@ if [ "$MODE" = "backup" ]; then
     banner "从备份恢复（§46 §49）" "会用备份**覆盖**当前数据库"
 
     # 新备份以同名目录保存完整恢复集合；仍兼容旧的单独 ZIP。
+    ORIGINAL_BACKUP_SOURCE="$BACKUP_FILE"
     BACKUP_SET_DIR=""
     if [ -d "$BACKUP_FILE" ]; then
         BACKUP_SET_DIR="$(cd "$BACKUP_FILE" && pwd)"
@@ -298,12 +304,67 @@ if [ "$MODE" = "backup" ]; then
         log_warn "备份缺少恢复清单，只能按数据恢复，不能确认对应代码发行集合。"
     fi
 
+    # 新恢复集合的版本清单在停服前严格校验；旧 ZIP 继续支持数据恢复，
+    # 但不把缺失组件或 latest 误称为完整代码回滚。
+    RECOVERY_COMPLETE=0
+    RECOVERY_SNAPSHOT=""
+    if [ -n "$BACKUP_SET_DIR" ]; then
+        [ -f "${BACKUP_SET_DIR}/versions.env" ] || die "恢复集合缺少 versions.env，拒绝进入停服阶段"
+        [ -f "${BACKUP_SET_DIR}/manifest.txt" ] || die "恢复集合缺少 manifest.txt，拒绝进入停服阶段"
+        [ -d "${BACKUP_SET_DIR}/config" ] || die "恢复集合缺少 config 目录，拒绝进入停服阶段"
+        if grep -q '^HYDRO_SNAPSHOT_FORMAT=1$' "${BACKUP_SET_DIR}/versions.env"; then
+            RECOVERY_SNAPSHOT="${BACKUP_SET_DIR}/versions.env"
+        else
+            log_warn "恢复集合是旧格式，只执行数据恢复，不宣称完整代码回滚。"
+        fi
+    elif [ -f "${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env" ] \
+        && grep -q '^HYDRO_SNAPSHOT_FORMAT=1$' "${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env"; then
+        [ -f "${BACKUP_FILE_DIR}/manifest-${BACKUP_ID}.txt" ] ||
+            die "新格式备份缺少 manifest 清单，拒绝进入停服阶段"
+        [ -d "${BACKUP_FILE_DIR}/config-${BACKUP_ID}" ] ||
+            die "新格式备份缺少 config 目录，拒绝进入停服阶段"
+        RECOVERY_SNAPSHOT="${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env"
+    fi
+    RECOVERY_SPECS_TMP=""
+    if [ -n "$RECOVERY_SNAPSHOT" ]; then
+        RECOVERY_SPECS_TMP="$(mktemp "${SYLU_STATE_DIR}/restore-specs.XXXXXX")"
+        if ! hydro_release_specs_from_backup_snapshot "$RECOVERY_SNAPSHOT" >"$RECOVERY_SPECS_TMP"; then
+            rm -f -- "$RECOVERY_SPECS_TMP"
+            die "恢复集合的逐包版本快照不完整或不是固定版本，拒绝进入停服阶段"
+        fi
+        RECOVERY_COMPLETE=1
+    elif [ -n "$BACKUP_SET_DIR" ]; then
+        die "恢复集合缺少可验证的逐包版本快照，拒绝进入停服阶段"
+    else
+        log_warn "旧格式 ZIP 没有严格恢复集合，只执行数据恢复，不宣称完整代码回滚。"
+    fi
+
+    # 将选中的恢复源复制到状态目录之外的轮转目录，随后整个恢复期间持有
+    # backup.lock。即使安全备份触发轮转，也不会删除本次明确选择的源。
+    if [ "$DRY_RUN" != 1 ]; then
+        RESTORE_SOURCE_STAGE="$(mktemp -d "${SYLU_STATE_DIR}/restore-source.XXXXXX")"
+        trap 'rm -rf -- "${RESTORE_SOURCE_STAGE:-}"' EXIT
+        if [ -n "$BACKUP_SET_DIR" ]; then
+            cp -a "${BACKUP_SET_DIR}/." "$RESTORE_SOURCE_STAGE/"
+        else
+            cp -- "$BACKUP_FILE" "$RESTORE_SOURCE_STAGE/data.zip"
+            for SIDE_FILE in \
+                "manifest-${BACKUP_ID}.txt" "versions-${BACKUP_ID}.env" \
+                "versions-${BACKUP_ID}.sha256" "sylu-brand-${BACKUP_ID}.tar.gz"; do
+                [ -f "${BACKUP_FILE_DIR}/${SIDE_FILE}" ] && cp -- "${BACKUP_FILE_DIR}/${SIDE_FILE}" "$RESTORE_SOURCE_STAGE/"
+            done
+            [ -d "${BACKUP_FILE_DIR}/config-${BACKUP_ID}" ] && cp -a "${BACKUP_FILE_DIR}/config-${BACKUP_ID}" "$RESTORE_SOURCE_STAGE/config"
+        fi
+        BACKUP_FILE="${RESTORE_SOURCE_STAGE}/data.zip"
+        BACKUP_FILE_DIR="$RESTORE_SOURCE_STAGE"
+    fi
+
     log_step "2. 当前数据先留一份退路"
     log_warn "恢复会 --drop 现有集合。为了避免「恢复失败又回不来」，"
     log_warn "建议先跑一次 deploy/backup.sh 把当前状态存下来。"
     if [ "$DRY_RUN" != 1 ]; then
         if confirm "先给当前状态做一次备份？"; then
-            bash "${SCRIPT_DIR}/backup.sh" || die "当前状态备份失败，已中止恢复。"
+            SYLU_BACKUP_LOCK_HELD=1 bash "${SCRIPT_DIR}/backup.sh" || die "当前状态备份失败，已中止恢复。"
         fi
     fi
 
@@ -331,23 +392,47 @@ EOF
     # 恢复必须先阻断 Web、判题消费者和后台写入。失败时保留维护标记，
     # 不自动重新开放一个可能只恢复了一半的数据集。
     MAINTENANCE_MARKER="${SYLU_STATE_DIR}/maintenance"
-    printf 'started_at=%s\nbackup=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$BACKUP_FILE" >"$MAINTENANCE_MARKER"
+    if [ -f "$MAINTENANCE_MARKER" ]; then
+        SAVED_SOURCE="$(awk -F= '$1 == "source" {print substr($0, index($0, "=")+1); exit}' "$MAINTENANCE_MARKER")"
+        [ "$SAVED_SOURCE" = "$ORIGINAL_BACKUP_SOURCE" ] ||
+            die "已有另一份恢复任务的维护标记：${MAINTENANCE_MARKER}"
+        INITIAL_JUDGE_STATE="$(awk -F= '$1 == "judge_initial_state" {print $2; exit}' "$MAINTENANCE_MARKER")"
+        [ -n "$INITIAL_JUDGE_STATE" ] || die "维护标记缺少 Judge 原始状态，拒绝覆盖并重试"
+        printf 'phase=retry\n' >>"$MAINTENANCE_MARKER"
+    else
+        INITIAL_JUDGE_STATE="$(hydro_service_state hydrojudge)"
+        printf 'started_at=%s\nsource=%s\nbackup=%s\njudge_initial_state=%s\nphase=entered\n' \
+            "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$ORIGINAL_BACKUP_SOURCE" "$BACKUP_FILE" "$INITIAL_JUDGE_STATE" >"$MAINTENANCE_MARKER"
+    fi
     if ! hydro_stop hydrooj; then
         die "无法停止 hydrooj，已拒绝在仍可写入时执行恢复。维护标记：${MAINTENANCE_MARKER}"
     fi
-    JUDGE_STATE="$(hydro_service_state hydrojudge)"
     JUDGE_WAS_RUNNING=0
-    TARGET_JUDGE_ENABLED=1
-    case "$JUDGE_STATE" in
-        pm2:running|pm2:online|systemd:running)
-            JUDGE_WAS_RUNNING=1
-            if ! hydro_stop hydrojudge; then
-                die "无法停止正在运行的 hydrojudge，已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}"
-            fi
-            ;;
-        pm2:stopped|pm2:stopping|systemd:stopped|absent) ;;
-        *) die "无法判定 hydrojudge 状态（${JUDGE_STATE}），已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}" ;;
+    case "$INITIAL_JUDGE_STATE" in
+        pm2:running|pm2:online|systemd:running) JUDGE_WAS_RUNNING=1 ;;
+        pm2:stopped|systemd:stopped|absent) ;;
+        pm2:stopping|systemd:stopping) ;;
+        *) die "无法判定维护前 hydrojudge 状态（${INITIAL_JUDGE_STATE}），已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}" ;;
     esac
+    wait_judge_stopped() {
+        local state
+        for _ in $(seq 1 "${SYLU_SERVICE_STOP_TIMEOUT:-30}"); do
+            state="$(hydro_service_state hydrojudge)"
+            case "$state" in
+                pm2:stopped|systemd:stopped|absent) return 0 ;;
+                pm2:stopping|systemd:stopping) sleep 1 ;;
+                pm2:running|pm2:online|systemd:running)
+                    hydro_stop hydrojudge || return 1
+                    sleep 1
+                    ;;
+                *) return 1 ;;
+            esac
+        done
+        return 1
+    }
+    if ! wait_judge_stopped; then
+        die "hydrojudge 未在超时时间内进入明确停止状态，已拒绝执行恢复。维护标记：${MAINTENANCE_MARKER}"
+    fi
 
     restore_abort() {
         local message="$1"
@@ -362,39 +447,10 @@ EOF
 
     # 新备份带有逐包版本快照。存在完整快照时先恢复同一组全局包，
     # 这样数据库与代码来自同一恢复集合；旧备份没有快照时明确降级为数据恢复。
-    RECOVERY_SNAPSHOT=""
-    if [ -f "${BACKUP_FILE_DIR}/versions.env" ]; then
-        RECOVERY_SNAPSHOT="${BACKUP_FILE_DIR}/versions.env"
-    elif [ -f "${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env" ]; then
-        RECOVERY_SNAPSHOT="${BACKUP_FILE_DIR}/versions-${BACKUP_ID}.env"
-    fi
-    RECOVERY_SPECS_TMP=""
-    if [ -n "$RECOVERY_SNAPSHOT" ]; then
-        RECOVERY_SPECS_TMP="$(mktemp "${SYLU_STATE_DIR}/restore-specs.XXXXXX")"
-        for SPEC in \
-            'hydrooj HYDROOJ' \
-            '@hydrooj/ui-default HYDRO_UI' \
-            '@hydrooj/hydrojudge HYDRO_JUDGE' \
-            '@hydrooj/fps-importer HYDRO_FPS_IMPORTER' \
-            '@hydrooj/a11y HYDRO_A11Y'; do
-            PKG="${SPEC% *}"; KEY="${SPEC##* }"
-            VERSION="$(awk -F= -v k="$KEY" '$1 == k {print $2; exit}' "$RECOVERY_SNAPSHOT" | tr -d '\r[:space:]')"
-            if [ "$PKG" = '@hydrooj/hydrojudge' ]; then
-                if [ -n "$VERSION" ]; then
-                    [ "$VERSION" != none ] && TARGET_JUDGE_ENABLED=1 || TARGET_JUDGE_ENABLED=0
-                fi
-            fi
-            if [ -n "$VERSION" ] && [ "$VERSION" != none ]; then
-                printf '%s@%s\n' "$PKG" "$VERSION" >>"$RECOVERY_SPECS_TMP"
-            fi
-        done
-        if ! grep -q '^hydrooj@' "$RECOVERY_SPECS_TMP"; then
-            rm -f -- "$RECOVERY_SPECS_TMP"
-            RECOVERY_SPECS_TMP=""
-            log_warn "恢复快照缺少 hydrooj 版本，只能执行数据恢复，不宣称完整代码回滚。"
-        fi
-    else
-        log_warn "备份缺少逐包版本快照，只能执行数据恢复，不宣称完整代码回滚。"
+    TARGET_JUDGE_ENABLED=1
+    if [ "$RECOVERY_COMPLETE" = 1 ]; then
+        TARGET_JUDGE_ENABLED=0
+        grep -q '^@hydrooj/hydrojudge@' "$RECOVERY_SPECS_TMP" && TARGET_JUDGE_ENABLED=1
     fi
 
     if [ -n "$RECOVERY_SPECS_TMP" ]; then
@@ -420,6 +476,39 @@ EOF
     fi
     log_ok "数据库已恢复"
 
+    # 配置默认只做完整性核对，不自动覆盖目标机配置；需要迁移到同构机器时
+    # 可显式设置 SYLU_RESTORE_CONFIG=1，按备份中的原始绝对路径逐项恢复。
+    RECOVERY_CONFIG_DIR="${BACKUP_FILE_DIR}/config"
+    if [ ! -d "$RECOVERY_CONFIG_DIR" ] && [ -d "${BACKUP_FILE_DIR}/config-${BACKUP_ID}" ]; then
+        RECOVERY_CONFIG_DIR="${BACKUP_FILE_DIR}/config-${BACKUP_ID}"
+    fi
+    if [ -d "$RECOVERY_CONFIG_DIR" ]; then
+        CONFIG_MAP="${RECOVERY_CONFIG_DIR}/files.tsv"
+        if [ ! -f "$CONFIG_MAP" ]; then
+            if [ "$RECOVERY_COMPLETE" = 1 ]; then
+                restore_abort "恢复集合配置目录缺少 files.tsv"
+            fi
+            log_warn "旧格式配置目录缺少 files.tsv，只保留现有目标机配置"
+        else
+            while IFS=$'\t' read -r ORIGINAL_CONFIG STORED_CONFIG; do
+                [ -n "${ORIGINAL_CONFIG:-}" ] || continue
+                case "$STORED_CONFIG" in
+                    ''|/*|*'..'*|*'/'*) restore_abort "恢复集合配置映射含非法文件名" ;;
+                esac
+                [ -f "${RECOVERY_CONFIG_DIR}/${STORED_CONFIG}" ] ||
+                    restore_abort "恢复集合缺少配置文件：${STORED_CONFIG}"
+                log_info "已核对备份配置：${ORIGINAL_CONFIG} <- ${STORED_CONFIG}"
+                if [ "${SYLU_RESTORE_CONFIG:-0}" = 1 ]; then
+                    mkdir -p "$(dirname "$ORIGINAL_CONFIG")"
+                    cp -- "${RECOVERY_CONFIG_DIR}/${STORED_CONFIG}" "$ORIGINAL_CONFIG" ||
+                        restore_abort "恢复配置失败：${ORIGINAL_CONFIG}"
+                fi
+            done <"$CONFIG_MAP"
+        fi
+    elif [ "$RECOVERY_COMPLETE" = 1 ]; then
+        restore_abort "恢复集合缺少配置目录"
+    fi
+
     # 外部品牌插件不在 Hydro 官方 backup 的 addons 目录中，按同一时间戳的
     # 配套归档恢复到代码目录；没有归档时明确告警，不伪装成完整版本回滚。
     PLUGIN_ARCHIVE="${BACKUP_FILE_DIR}/sylu-brand-${BACKUP_ID}.tar.gz"
@@ -431,12 +520,16 @@ EOF
         if tar -tzf "$PLUGIN_ARCHIVE" | grep -Eq '(^/|(^|/)\.\.?(/|$))'; then
             die "品牌插件归档含非法路径：${PLUGIN_ARCHIVE}"
         fi
+        if tar -tvzf "$PLUGIN_ARCHIVE" | awk 'substr($0,1,1) != "-" && substr($0,1,1) != "d" {bad=1} END {exit bad}'; then :; else
+            die "品牌插件归档含符号链接或特殊文件：${PLUGIN_ARCHIVE}"
+        fi
         PLUGIN_TMP="$(mktemp -d "${SYLU_STATE_DIR}/restore-plugin.XXXXXX")"
         if ! tar -xzf "$PLUGIN_ARCHIVE" -C "$PLUGIN_TMP"; then
             rm -rf -- "$PLUGIN_TMP"
             die "品牌插件归档恢复失败：${PLUGIN_ARCHIVE}"
         fi
-        [ -d "${PLUGIN_TMP}/addons/sylu-brand" ] || {
+        [ -d "${PLUGIN_TMP}/addons" ] && [ ! -L "${PLUGIN_TMP}/addons" ] \
+            && [ -d "${PLUGIN_TMP}/addons/sylu-brand" ] && [ ! -L "${PLUGIN_TMP}/addons/sylu-brand" ] || {
             rm -rf -- "$PLUGIN_TMP"
             die "品牌插件归档缺少 addons/sylu-brand：${PLUGIN_ARCHIVE}"
         }
@@ -477,11 +570,11 @@ EOF
         *) restore_abort "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj" ;;
     esac
 
-    if ! bash "${SCRIPT_DIR}/healthcheck.sh"; then
-        restore_abort "恢复后健康检查失败"
-    fi
     if [ "$JUDGE_WAS_RUNNING" = 1 ] && [ "$TARGET_JUDGE_ENABLED" = 1 ]; then
         hydro_restart hydrojudge || restore_abort "恢复后无法恢复原先运行的 hydrojudge"
+    fi
+    if ! bash "${SCRIPT_DIR}/healthcheck.sh"; then
+        restore_abort "恢复后健康检查失败"
     fi
     record_note "rollback.sh(backup) 完成 file=${BACKUP_FILE} code=${CODE} judge_was_running=${JUDGE_WAS_RUNNING}"
     rm -f -- "$MAINTENANCE_MARKER"

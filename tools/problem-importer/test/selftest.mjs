@@ -298,6 +298,32 @@ test('实际附加文件必须拒绝而不能静默丢弃', () => {
     assert.ok(hasError(r, /暂不支持附加文件/), `未拒绝附件：${allMsgs(r).join(' | ')}`);
 });
 
+test('判题反馈与重定向配置必须拒绝', () => {
+    for (const key of ['detail', 'langs', 'redirect']) {
+        const r = analyze([
+            ['x/problem.json', JSON.stringify({ pid: 'px', title: 'X', [key]: 'none' })],
+            ['x/1.in', '1\n'], ['x/1.out', '1\n'],
+        ]);
+        assert.ok(hasError(r, new RegExp(`暂不支持字段 ${key}`)), `${key} 未被拒绝`);
+    }
+});
+
+test('题面引用的普通文本附件不能静默丢失', () => {
+    const r = analyze([
+        ['x/problem.json', JSON.stringify({ pid: 'px', title: 'X', content: '[说明](file://manual.txt)' })],
+        ['x/1.in', '1\n'], ['x/1.out', '1\n'], ['x/manual.txt', '说明'],
+    ]);
+    assert.ok(hasError(r, /附加文件|未被转换的本地文件/), `未拒绝题面附件：${allMsgs(r).join(' | ')}`);
+});
+
+test('题面引用孤立测试扩展名也必须拒绝', () => {
+    const r = analyze([
+        ['x/problem.json', JSON.stringify({ pid: 'px', title: 'X', content: '[说明](file://manual.out)' })],
+        ['x/1.in', '1\n'], ['x/1.out', '1\n'], ['x/manual.out', '说明'],
+    ]);
+    assert.ok(hasError(r, /未被转换的本地文件/), `未拒绝孤立输出：${allMsgs(r).join(' | ')}`);
+});
+
 console.log('\n=== 5. 单位解析 ===');
 
 test('parseTimeToMs', () => {

@@ -53,8 +53,10 @@ mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 [[ "$KEEP_DAILY" =~ ^[1-9][0-9]*$ && "$KEEP_WEEKLY" =~ ^[1-9][0-9]*$ ]] || die "备份保留数必须为正整数"
 require_cmd flock "防止并发备份共用 Hydro 临时目录"
-exec 9>"${SYLU_STATE_DIR}/backup.lock"
-flock -n 9 || die "已有备份任务运行"
+if [ "${SYLU_BACKUP_LOCK_HELD:-0}" != 1 ]; then
+    exec 9>"${SYLU_STATE_DIR}/backup.lock"
+    flock -n 9 || die "已有备份任务运行"
+fi
 
 # ============================================================
 log_step "0. 磁盘余量（§52 先看空间，别把盘写满）"
@@ -122,19 +124,35 @@ mkdir -p "$RECOVERY_DIR"
 cp "$SNAP" "${RECOVERY_DIR}/versions.env"
 CONFIG_DIR="${BACKUP_DIR}/config-${STAMP}"
 mkdir -p "$CONFIG_DIR"
+CONFIG_MAP="${CONFIG_DIR}/files.tsv"
+: >"$CONFIG_MAP"
 CONFIG_SAVED=()
 for CONFIG_PATH in "$HYDRO_CONFIG" /etc/caddy/Caddyfile /etc/hydro/mount.yaml; do
     if [ -f "$CONFIG_PATH" ]; then
-        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
-        chmod 600 "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        if command -v sha256sum >/dev/null 2>&1; then
+            CONFIG_KEY="$(printf '%s' "$CONFIG_PATH" | sha256sum | awk '{print substr($1,1,16)}')"
+        else
+            CONFIG_KEY="$(printf '%s' "$CONFIG_PATH" | cksum | awk '{print $1}')"
+        fi
+        CONFIG_NAME="${CONFIG_KEY}-$(basename "$CONFIG_PATH")"
+        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$CONFIG_NAME"
+        chmod 600 "$CONFIG_DIR/$CONFIG_NAME"
+        printf '%s\t%s\n' "$CONFIG_PATH" "$CONFIG_NAME" >>"$CONFIG_MAP"
         CONFIG_SAVED+=("$CONFIG_PATH")
     fi
 done
 if [ -n "${SYLU_BACKUP_CONFIG_PATHS:-}" ]; then
     for CONFIG_PATH in $SYLU_BACKUP_CONFIG_PATHS; do
         [ -f "$CONFIG_PATH" ] || continue
-        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
-        chmod 600 "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        if command -v sha256sum >/dev/null 2>&1; then
+            CONFIG_KEY="$(printf '%s' "$CONFIG_PATH" | sha256sum | awk '{print substr($1,1,16)}')"
+        else
+            CONFIG_KEY="$(printf '%s' "$CONFIG_PATH" | cksum | awk '{print $1}')"
+        fi
+        CONFIG_NAME="${CONFIG_KEY}-$(basename "$CONFIG_PATH")"
+        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$CONFIG_NAME"
+        chmod 600 "$CONFIG_DIR/$CONFIG_NAME"
+        printf '%s\t%s\n' "$CONFIG_PATH" "$CONFIG_NAME" >>"$CONFIG_MAP"
         CONFIG_SAVED+=("$CONFIG_PATH")
     done
 fi
@@ -145,6 +163,7 @@ fi
     printf 'config_paths='
     (IFS=,; printf '%s' "${CONFIG_SAVED[*]:-未找到}")
     echo
+    echo "config_map=files.tsv"
 } >"${RECOVERY_DIR}/manifest.txt"
 if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$SNAP" >"${RECOVERY_DIR}/versions.sha256"
@@ -177,7 +196,7 @@ if [ "$OFFSITE" = 1 ]; then
         restic backup "$RECOVERY_SET_DIR" --tag sylu-oj --tag "backup-id=${STAMP}" \
         || die "异地上传失败，本地备份已保留：$TARGET"
     RESTIC_REPOSITORY="$RESTIC_REPO" RESTIC_PASSWORD="$RESTIC_PASS" \
-        restic forget --tag sylu-oj --group-by host,tags --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
+        restic forget --tag sylu-oj --group-by host --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
         || die "异地保留策略执行失败"
     log_ok "异地副本已上传"
 fi

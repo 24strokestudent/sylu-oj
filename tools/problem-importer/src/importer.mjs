@@ -379,6 +379,7 @@ const UNSUPPORTED_FIELDS = new Set([
     'manager', 'validator', 'time_limit_rate', 'memory_limit_rate',
     'data', 'testdata', 'test_data', 'special_judge', 'spj', 'interactive',
     'interaction', 'output_only', 'input_file', 'output_file', 'extra_files',
+    'detail', 'langs', 'redirect',
 ]);
 
 function rejectUnsupportedFields(problem, source) {
@@ -436,7 +437,9 @@ function buildProblem(key, files, diag, opts = {}) {
             } catch (e) {
                 problem.problems.error(`${base} 不是合法 JSON/YAML 或 UTF-8 元数据：${e.message}`, f.rel);
             }
-        } else if (/\.(in|out|ans|txt)$/i.test(base) && !lowerRel.includes('/source') && !lowerRel.includes('/solution')) {
+        } else if ((isOutputFile(base) || (isInputFile(base)
+            && (!base.endsWith('.txt') || base.endsWith('.in.txt') || /\d/.test(stemOf(base)))))
+            && !lowerRel.includes('/source') && !lowerRel.includes('/solution')) {
             recognizedFiles.add(f);
             problem.tests.push(f);
         } else if (/^solution\.(cpp|cc|cxx|c|py|java|pas)$/i.test(base)) {
@@ -495,6 +498,17 @@ function buildProblem(key, files, diag, opts = {}) {
     if (!problem.title) problem.title = problem.pid || problem.sourceKey;
     if (!problem.content) problem.content = `# ${problem.title}\n\n（源文件未提供题面，请在 Hydro 中补充完整题面后再发布）`;
 
+    // 题面中的本地文件引用不能指向转换器会丢弃的附件；至少先对明确的
+    // file:// 引用做存在性和可消费性检查，避免发布后出现失效题面链接。
+    for (const match of String(problem.content).matchAll(/file:\/\/([^\s)\]}>"']+)/gi)) {
+        let ref;
+        try { ref = decodeURIComponent(match[1]).replace(/^\/+/, ''); } catch (_) { ref = match[1]; }
+        const target = files.find((f) => f.rel === ref || path.posix.basename(f.rel) === path.posix.basename(ref));
+        if (!target || !recognizedFiles.has(target)) {
+            problem.problems.error(`题面引用了未被转换的本地文件：${match[1]}`);
+        }
+    }
+
     // 显式填写的非法限制不能悄悄退回默认值。
     for (const source of [metaDoc, metaDoc?.limits, meta]) {
         if (!source) continue;
@@ -539,6 +553,22 @@ function buildProblem(key, files, diag, opts = {}) {
 
     for (const name of missingOut) problem.problems.error('输入文件缺少配对的 .out/.ans', name);
     for (const name of orphanOut) problem.warnings.warn('输出文件没有对应输入（将被忽略）', name);
+
+    // 扫描阶段识别为测试文件不等于最终会写入输出；题面引用孤立的
+    // .out/.txt 等文件时必须报错，避免配对阶段静默丢失附件。
+    const consumedFiles = new Set([
+        ...pairs.flatMap((pair) => [pair.input, pair.output]),
+        ...problem.solutions,
+        ...files.filter((f) => META_FILES.includes(path.posix.basename(f.rel).toLowerCase())),
+    ]);
+    for (const match of String(problem.content).matchAll(/file:\/\/([^\s)\]}>"']+)/gi)) {
+        let ref;
+        try { ref = decodeURIComponent(match[1]).replace(/^\/+/, ''); } catch (_) { ref = match[1]; }
+        const target = files.find((f) => f.rel === ref || path.posix.basename(f.rel) === path.posix.basename(ref));
+        if (target && recognizedFiles.has(target) && !consumedFiles.has(target)) {
+            problem.problems.error(`题面引用了未被转换的本地文件：${match[1]}`);
+        }
+    }
 
     if (pairs.length === 0) problem.problems.error('没有任何可用的输入/输出测试点对');
     if (pairs.length > LIMITS.maxTestsPerProblem) {

@@ -140,7 +140,14 @@ snapshot_versions() {
     ensure_state_dir
     ensure_nix_path
     local f="${SYLU_STATE_DIR}/versions-$(date '+%Y%m%d-%H%M%S').env"
+    local v_hydro v_ui v_judge v_fps v_a11y
+    v_hydro="$(hydro_version 2>/dev/null || echo none)"
+    v_ui="$(hydro_pkg_version @hydrooj/ui-default 2>/dev/null || echo none)"
+    v_judge="$(hydro_pkg_version @hydrooj/hydrojudge 2>/dev/null || echo none)"
+    v_fps="$(hydro_pkg_version @hydrooj/fps-importer 2>/dev/null || echo none)"
+    v_a11y="$(hydro_pkg_version @hydrooj/a11y 2>/dev/null || echo none)"
     {
+        echo "HYDRO_SNAPSHOT_FORMAT=1"
         echo "RECORDED_AT=$(date '+%Y-%m-%dT%H:%M:%S%z')"
         echo "OS=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
         echo "KERNEL=$(uname -r)"
@@ -148,11 +155,15 @@ snapshot_versions() {
         echo "NODE=$(timeout 10 node -v 2>/dev/null || echo none)"
         echo "NPM=$(timeout 10 npm -v 2>/dev/null || echo none)"
         echo "YARN=$(timeout 10 yarn --version 2>/dev/null || echo none)"
-        echo "HYDROOJ=$(hydro_version 2>/dev/null || echo none)"
-        echo "HYDRO_UI=$(hydro_pkg_version @hydrooj/ui-default 2>/dev/null || echo none)"
-        echo "HYDRO_JUDGE=$(hydro_pkg_version @hydrooj/hydrojudge 2>/dev/null || echo none)"
-        echo "HYDRO_FPS_IMPORTER=$(hydro_pkg_version @hydrooj/fps-importer 2>/dev/null || echo none)"
-        echo "HYDRO_A11Y=$(hydro_pkg_version @hydrooj/a11y 2>/dev/null || echo none)"
+        echo "HYDROOJ=$v_hydro"
+        echo "HYDRO_UI=$v_ui"
+        echo "HYDRO_JUDGE=$v_judge"
+        echo "HYDRO_FPS_IMPORTER=$v_fps"
+        echo "HYDRO_A11Y=$v_a11y"
+        echo "HYDRO_UI_ENABLED=$([ "$v_ui" != none ] && echo 1 || echo 0)"
+        echo "HYDRO_JUDGE_ENABLED=$([ "$v_judge" != none ] && echo 1 || echo 0)"
+        echo "HYDRO_FPS_IMPORTER_ENABLED=$([ "$v_fps" != none ] && echo 1 || echo 0)"
+        echo "HYDRO_A11Y_ENABLED=$([ "$v_a11y" != none ] && echo 1 || echo 0)"
         echo "MONGOD=$(timeout 20 mongod --version 2>/dev/null | head -1 || echo none)"
         echo "MONGOSH=$(timeout 20 mongosh --version 2>/dev/null | head -1 || echo none)"
         echo "HYDRO_SANDBOX=$(timeout 10 go-judge --version 2>/dev/null | head -1 || echo none)"
@@ -279,6 +290,33 @@ hydro_release_specs_from_snapshot() {
         version="$(awk -F= -v k="$key" '$1 == k {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')"
         [ -n "$version" ] && [ "$version" != none ] || return 2
         printf '%s@%s\n' "$package" "$version"
+    done
+}
+
+# 读取备份恢复集合中的严格版本快照。新格式必须声明所有组件及启用状态，
+# 禁止把缺失字段或 latest 当成“可用的完整发行集合”。
+hydro_release_specs_from_backup_snapshot() {
+    local snapshot="$1" key enabled version package SPEC SPEC_REST
+    [ -f "$snapshot" ] || return 1
+    [ "$(awk -F= '$1 == "HYDRO_SNAPSHOT_FORMAT" {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')" = 1 ] || return 2
+    version="$(awk -F= '$1 == "HYDROOJ" {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')"
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || return 3
+    printf 'hydrooj@%s\n' "$version"
+    for SPEC in \
+        '@hydrooj/ui-default HYDRO_UI HYDRO_UI_ENABLED' \
+        '@hydrooj/fps-importer HYDRO_FPS_IMPORTER HYDRO_FPS_IMPORTER_ENABLED' \
+        '@hydrooj/a11y HYDRO_A11Y HYDRO_A11Y_ENABLED' \
+        '@hydrooj/hydrojudge HYDRO_JUDGE HYDRO_JUDGE_ENABLED'; do
+        package="${SPEC%% *}"; SPEC_REST="${SPEC#* }"; key="${SPEC_REST%% *}"; enabled="${SPEC_REST##* }"
+        version="$(awk -F= -v k="$key" '$1 == k {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')"
+        case "$(awk -F= -v k="$enabled" '$1 == k {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')" in
+            0) [ "$version" = none ] || return 4 ;;
+            1)
+                [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]] || return 5
+                printf '%s@%s\n' "$package" "$version"
+                ;;
+            *) return 6 ;;
+        esac
     done
 }
 
@@ -422,11 +460,13 @@ hydro_service_state() {
     fi
     if command -v systemctl >/dev/null 2>&1 \
         && systemctl list-unit-files 2>/dev/null | grep -q "^${name}\.service"; then
-        if systemctl is-active --quiet "$name"; then
-            printf 'systemd:running\n'
-        else
-            printf 'systemd:stopped\n'
-        fi
+        status="$(systemctl show -p ActiveState --value "$name" 2>/dev/null || true)"
+        case "$status" in
+            active|activating) printf 'systemd:running\n' ;;
+            deactivating) printf 'systemd:stopping\n' ;;
+            inactive|failed|degraded|'') printf 'systemd:stopped\n' ;;
+            *) printf 'systemd:unknown\n' ;;
+        esac
         return 0
     fi
     printf 'absent\n'

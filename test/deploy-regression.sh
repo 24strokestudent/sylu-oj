@@ -44,6 +44,7 @@ MOCK
 cat >"$TMP/bin/restic" <<'MOCK'
 #!/usr/bin/env bash
 echo "$1" >>"$TEST_ROOT/restic.calls"
+echo "$*" >>"$TEST_ROOT/restic.args"
 [ "${RESTIC_FAIL:-0}" = 0 ]
 MOCK
 cat >"$TMP/bin/mongorestore" <<'MOCK'
@@ -76,6 +77,10 @@ cat >"$TMP/bin/df" <<'MOCK'
 printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/mock 1000000 100000 900000 10%% /\n'
 MOCK
 chmod +x "$TMP/bin/"*
+mkdir -p "$TMP/cfg/a" "$TMP/cfg/b"
+printf 'a\n' >"$TMP/cfg/a/config.json"
+printf 'b\n' >"$TMP/cfg/b/config.json"
+export SYLU_BACKUP_CONFIG_PATHS="$TMP/cfg/a/config.json $TMP/cfg/b/config.json"
 expect() {
     local expected="$1" name="$2" rc=0
     shift 2
@@ -86,11 +91,14 @@ expect() {
 expect 0 '本地备份成功' bash "$TMP/deploy/backup.sh"
 [ "$(find "$TMP/backups" -path '*/sylu-oj-*/data.zip' | wc -l)" -eq 1 ] || { echo 'FAIL: 未生成完整恢复集合'; exit 1; }
 [ "$(find "$TMP/backups" -path '*/sylu-oj-*/versions.env' -o -path '*/sylu-oj-*/manifest.txt' | wc -l)" -eq 2 ] || { echo 'FAIL: 恢复集合缺少版本或清单'; exit 1; }
+[ "$(find "$TMP/backups" -path '*/sylu-oj-*/config/*-config.json' | wc -l)" -eq 2 ] || { echo 'FAIL: 同名配置文件发生覆盖'; exit 1; }
 expect 1 '旧 ZIP 不得冒充新备份' env NO_ARCHIVE=1 bash "$TMP/deploy/backup.sh"
 # 避免秒级文件名碰撞，前一份已经过校验，移到隔离测试目录中另存。
 mv "$TMP/backups/"*.zip "$TMP/saved.zip"
 expect 1 '异地上传失败必须返回失败' env SYLU_RESTIC_REPO=mock SYLU_RESTIC_PASS=testing RESTIC_FAIL=1 bash "$TMP/deploy/backup.sh" --offsite
+expect 0 '异地上传成功执行保留策略' env SYLU_RESTIC_REPO=mock SYLU_RESTIC_PASS=testing RESTIC_FAIL=0 bash "$TMP/deploy/backup.sh" --offsite
 grep -qx backup "$TMP/restic.calls"
+grep -q 'forget .*--group-by host ' "$TMP/restic.args" || { echo 'FAIL: 异地保留策略按唯一标签分组'; exit 1; }
 expect 1 '恢复失败返回失败' env RESTORE_FAIL=1 bash "$TMP/deploy/restore-check.sh" --file "$TMP/saved.zip"
 [ -x "$TMP/bin/mongorestore" ] || { echo 'FAIL: 工具被误删'; exit 1; }
 [ -s "$TMP/cleanup.calls" ] || { echo 'FAIL: 未清理临时库'; exit 1; }
