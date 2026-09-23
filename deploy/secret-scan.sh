@@ -6,7 +6,7 @@
 #   2) 有没有「本该被 .gitignore 挡住、却已经被 git 跟踪」的敏感文件；
 #   3) 有没有踩到 §69 明令禁止的写法（自己写评测机、child_process 跑用户代码、MongoDB 暴露公网）。
 #
-# 设计原则：**只报告 file:line 和打码后的片段**，绝不把密钥原文再打印一遍。
+# 设计原则：**只报告 file:line 和整改建议**，绝不把命中行正文写入日志。
 #
 # 用法：
 #   bash deploy/secret-scan.sh                 # 扫仓库
@@ -57,9 +57,6 @@ fi
 
 # grep 基础参数：-r 递归 -I 跳过二进制 -n 行号 -E 扩展正则
 GREP_OPTS=(-rInE --binary-files=without-match "${EXCLUDES[@]}")
-
-# 把疑似密钥打码：长度 >= 8 的字母数字串一律替换掉
-mask() { sed -E 's/[A-Za-z0-9_./+-]{8,}/****/g'; }
 
 PAT_NAME=(); PAT_SEV=(); PAT_RE=(); PAT_NOTE=(); PAT_EXCL=()
 
@@ -161,7 +158,9 @@ while [ "$i" -lt "${#PAT_RE[@]}" ]; do
         fi
 
         printf '        %s:%s  [已跟踪:%s]\n' "$REL" "$LN" "$TRACKED"
-        printf '          %s\n' "$(printf '%s' "$BODY" | mask | cut -c1-140)"
+        # 命中行可能包含标点分隔的短口令，启发式打码无法保证不泄露。
+        # 只输出位置和整改建议，避免扫描器把敏感值二次写入 CI/归档日志。
+        printf '          命中内容已隐藏；请在受控环境检查该位置。\n'
 
         TOTAL=$((TOTAL + 1))
         if [ "$SEV" = HIGH ] && [ "$TRACKED" = "是" ]; then

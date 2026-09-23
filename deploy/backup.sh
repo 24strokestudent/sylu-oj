@@ -116,6 +116,49 @@ TARGET="${BACKUP_DIR}/sylu-oj-${STAMP}.zip"
 [ ! -e "$TARGET" ] || die "同名备份已存在：$TARGET"
 mv "$NEW_ZIP" "$TARGET"
 cp "$SNAP" "${BACKUP_DIR}/versions-${STAMP}.env"
+# 版本快照与 ZIP 绑定保存，恢复时可在没有原工作目录的环境识别组件集合。
+RECOVERY_DIR="${WORK_DIR}/sylu-recovery"
+mkdir -p "$RECOVERY_DIR"
+cp "$SNAP" "${RECOVERY_DIR}/versions.env"
+CONFIG_DIR="${BACKUP_DIR}/config-${STAMP}"
+mkdir -p "$CONFIG_DIR"
+CONFIG_SAVED=()
+for CONFIG_PATH in "$HYDRO_CONFIG" /etc/caddy/Caddyfile /etc/hydro/mount.yaml; do
+    if [ -f "$CONFIG_PATH" ]; then
+        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        chmod 600 "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        CONFIG_SAVED+=("$CONFIG_PATH")
+    fi
+done
+if [ -n "${SYLU_BACKUP_CONFIG_PATHS:-}" ]; then
+    for CONFIG_PATH in $SYLU_BACKUP_CONFIG_PATHS; do
+        [ -f "$CONFIG_PATH" ] || continue
+        cp -- "$CONFIG_PATH" "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        chmod 600 "$CONFIG_DIR/$(basename "$CONFIG_PATH")"
+        CONFIG_SAVED+=("$CONFIG_PATH")
+    done
+fi
+{
+    echo "created_at=$(date '+%Y-%m-%dT%H:%M:%S%z')"
+    echo "repository=${SYLU_OJ_ROOT:-unknown}"
+    echo "brand_addon=${SYLU_OJ_ROOT:+${SYLU_OJ_ROOT}/addons/sylu-brand}"
+    printf 'config_paths='
+    (IFS=,; printf '%s' "${CONFIG_SAVED[*]:-未找到}")
+    echo
+} >"${RECOVERY_DIR}/manifest.txt"
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$SNAP" >"${RECOVERY_DIR}/versions.sha256"
+fi
+cp "${RECOVERY_DIR}/manifest.txt" "${BACKUP_DIR}/manifest-${STAMP}.txt"
+cp "${RECOVERY_DIR}/versions.sha256" "${BACKUP_DIR}/versions-${STAMP}.sha256" 2>/dev/null || true
+if [ "${#CONFIG_SAVED[@]}" -gt 0 ]; then
+    log_info "已保存受限配置：${CONFIG_SAVED[*]}"
+fi
+if [ -d "${SYLU_OJ_ROOT:-}/addons/sylu-brand" ] && command -v tar >/dev/null 2>&1; then
+    tar -czf "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" -C "$SYLU_OJ_ROOT" addons/sylu-brand
+else
+    log_warn "未找到 sylu-brand 源码或 tar，恢复集合不含外部品牌插件归档"
+fi
 log_ok "本地备份校验通过：$(basename "$TARGET")"
 
 if [ "$OFFSITE" = 1 ]; then
@@ -131,6 +174,10 @@ fi
 if [ "$(date '+%u')" = "7" ]; then
     mkdir -p "${BACKUP_DIR}/weekly"
     cp "$TARGET" "${BACKUP_DIR}/weekly/sylu-oj-week-$(date '+%G-W%V').zip"
+    cp "${BACKUP_DIR}/versions-${STAMP}.env" "${BACKUP_DIR}/weekly/versions-$(date '+%G-W%V').env"
+    cp "${BACKUP_DIR}/manifest-${STAMP}.txt" "${BACKUP_DIR}/weekly/manifest-$(date '+%G-W%V').txt"
+    [ -f "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" ] && cp "${BACKUP_DIR}/sylu-brand-${STAMP}.tar.gz" "${BACKUP_DIR}/weekly/sylu-brand-$(date '+%G-W%V').tar.gz"
+    [ -d "${BACKUP_DIR}/config-${STAMP}" ] && cp -a "${BACKUP_DIR}/config-${STAMP}" "${BACKUP_DIR}/weekly/config-$(date '+%G-W%V')"
 fi
 
 # ============================================================
@@ -152,6 +199,9 @@ keep_newest() { # $1=目录 $2=保留数 $3=glob
             if [[ "$(basename "$f")" == sylu-oj-[0-9]*.zip ]]; then
                 local stamp="${f##*/sylu-oj-}"
                 rm -f -- "${dir}/versions-${stamp%.zip}.env"
+                rm -f -- "${dir}/manifest-${stamp%.zip}.txt" "${dir}/versions-${stamp%.zip}.sha256"
+                rm -f -- "${dir}/sylu-brand-${stamp%.zip}.tar.gz"
+                rm -rf -- "${dir}/config-${stamp%.zip}"
             fi
             log_info "清理旧备份：$(basename "$f")"
         fi

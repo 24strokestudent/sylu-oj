@@ -151,6 +151,8 @@ snapshot_versions() {
         echo "HYDROOJ=$(hydro_version 2>/dev/null || echo none)"
         echo "HYDRO_UI=$(hydro_pkg_version @hydrooj/ui-default 2>/dev/null || echo none)"
         echo "HYDRO_JUDGE=$(hydro_pkg_version @hydrooj/hydrojudge 2>/dev/null || echo none)"
+        echo "HYDRO_FPS_IMPORTER=$(hydro_pkg_version @hydrooj/fps-importer 2>/dev/null || echo none)"
+        echo "HYDRO_A11Y=$(hydro_pkg_version @hydrooj/a11y 2>/dev/null || echo none)"
         echo "MONGOD=$(timeout 20 mongod --version 2>/dev/null | head -1 || echo none)"
         echo "MONGOSH=$(timeout 20 mongosh --version 2>/dev/null | head -1 || echo none)"
         echo "HYDRO_SANDBOX=$(timeout 10 go-judge --version 2>/dev/null | head -1 || echo none)"
@@ -233,6 +235,46 @@ hydro_http_probe() {
 # 升级必须整组一起动，只升 hydrooj 会出现 ui/judge 版本错配。
 SYLU_HYDRO_PKGS="hydrooj @hydrooj/ui-default @hydrooj/hydrojudge @hydrooj/fps-importer @hydrooj/a11y"
 
+# 发行版本按包管理。latest 使用包管理器解析一组最新版本；指定版本必须提供
+# `SYLU_RELEASE_MANIFEST`，每行形如 `包名=版本`，禁止把核心版本广播给所有组件。
+hydro_release_specs() {
+    local target="$1" with_judge="${2:-0}" core_only="${3:-0}" manifest="${SYLU_RELEASE_MANIFEST:-}"
+    local packages="hydrooj @hydrooj/ui-default @hydrooj/fps-importer @hydrooj/a11y"
+    [ "$core_only" = 1 ] && packages="hydrooj"
+    [ "$with_judge" = 1 ] && packages="$packages @hydrooj/hydrojudge"
+    if [ "$target" = latest ]; then
+        printf '%s\n' $packages
+        return 0
+    fi
+    [ -n "$manifest" ] && [ -f "$manifest" ] || return 2
+    local package version
+    for package in $packages; do
+        version="$(awk -F= -v p="$package" '$1 == p {print $2; exit}' "$manifest" | tr -d '\r[:space:]')"
+        [ -n "$version" ] || return 3
+        printf '%s@%s\n' "$package" "$version"
+    done
+}
+
+hydro_release_specs_from_snapshot() {
+    local snapshot="$1" with_judge="${2:-0}" core_only="${3:-0}" package key version
+    local packages="hydrooj @hydrooj/ui-default @hydrooj/fps-importer @hydrooj/a11y"
+    [ "$core_only" = 1 ] && packages="hydrooj"
+    [ "$with_judge" = 1 ] && packages="$packages @hydrooj/hydrojudge"
+    [ -f "$snapshot" ] || return 1
+    for package in $packages; do
+        case "$package" in
+            hydrooj) key=HYDROOJ ;;
+            @hydrooj/ui-default) key=HYDRO_UI ;;
+            @hydrooj/hydrojudge) key=HYDRO_JUDGE ;;
+            @hydrooj/fps-importer) key=HYDRO_FPS_IMPORTER ;;
+            @hydrooj/a11y) key=HYDRO_A11Y ;;
+        esac
+        version="$(awk -F= -v k="$key" '$1 == k {print $2; exit}' "$snapshot" | tr -d '\r[:space:]')"
+        [ -n "$version" ] && [ "$version" != none ] || return 2
+        printf '%s@%s\n' "$package" "$version"
+    done
+}
+
 # 读取某个 yarn global 包的版本号。
 # 为什么不用 `hydrooj --version`：hydrooj CLI **没有** --version 这个选项，
 # 传进去会被当成子命令解析失败，随后掉进交互式 REPL 等 stdin；
@@ -295,17 +337,18 @@ hydro_db_ver() {
 # 这条路与控制面板「系统设置」是同一条代码路径 —— 属于官方接口（§56），
 # 比直接改 MongoDB 的 system 文档安全，也不会被后续迁移覆盖。
 #
-# 输出解析的坑：CLI 会把日志混在 stdout 里，且每行日志带 "<序号> <时间>" 前缀，
-# 真正的返回值是**最后一行非日志行**（例如 db.ver 查询会先吐一堆 loader 日志）。
+# 输出解析的坑：CLI 会把日志混在 stdout 里，且每行日志带 "<序号> <时间>" 前缀。
+# 系统设置允许多行 Markdown/YAML，不能只取最后一行，否则中间行变化会被静默跳过。
 HYDRO_LOG_NOISE='^([0-9]+ [0-9]{2}:[0-9]{2}:[0-9]{2}|Process [0-9]+ running as master|Using mongodb external event bus|Module require)'
 
 hydro_sys_get() {
     has_hydro_cli || return 1
     local key="$1" out
     out="$(timeout 60 hydrooj cli system get "$key" 2>/dev/null | tr -d '\r' \
-        | grep -vE "$HYDRO_LOG_NOISE" | tail -1 || true)"
+        | grep -vE "$HYDRO_LOG_NOISE" || true)"
+    # 命令替换会去掉末尾换行，但保留设置正文的全部行。
     [ -n "$out" ] || return 1
-    printf '%s\n' "$out"
+    printf '%s' "$out"
 }
 
 hydro_sys_set() {
@@ -331,6 +374,22 @@ hydro_restart() {
     if command -v systemctl >/dev/null 2>&1 \
         && systemctl list-unit-files 2>/dev/null | grep -q "^${name}\.service"; then
         systemctl restart "$name" && return 0
+    fi
+    return 1
+}
+
+# 进入恢复/升级维护态时停止服务，防止恢复数据库期间继续写入。
+hydro_stop() {
+    local name="${1:-hydrooj}"
+    ensure_nix_path
+    if pm2_has "$name"; then
+        pm2 stop "$name" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v systemctl >/dev/null 2>&1 \
+        && systemctl list-unit-files 2>/dev/null | grep -q "^${name}\.service"; then
+        systemctl stop "$name"
+        return $?
     fi
     return 1
 }

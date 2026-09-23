@@ -177,10 +177,30 @@ EOF
         log_ok "db.ver 未变（${CUR_DBVER}）—— 没有迁移过，回滚代码是安全的。"
     fi
 
+    TARGET_SNAPSHOT=""
+    TARGET_WITH_JUDGE=0
+    TARGET_CORE_ONLY=0
+    for F in $(ls -1t "${SYLU_STATE_DIR}"/upgrade-*.env 2>/dev/null || true); do
+        VB="$(awk -F= '/^HYDRO_VERSION_BEFORE=/{print $2}' "$F")"
+        if [ "$VB" = "$TARGET_VER" ]; then
+            TARGET_SNAPSHOT="$(awk -F= '/^SNAPSHOT=/{sub(/^SNAPSHOT=/, ""); print}' "$F")"
+            TARGET_WITH_JUDGE="$(awk -F= '/^WITH_JUDGE=/{print $2}' "$F")"
+            TARGET_CORE_ONLY="$(awk -F= '/^CORE_ONLY=/{print $2}' "$F")"
+            break
+        fi
+    done
+    RELEASE_SPECS_TMP="$(mktemp)"
+    if ! hydro_release_specs_from_snapshot "$TARGET_SNAPSHOT" "${TARGET_WITH_JUDGE:-0}" "${TARGET_CORE_ONLY:-0}" >"$RELEASE_SPECS_TMP"; then
+        rm -f -- "$RELEASE_SPECS_TMP"
+        die "找不到目标发行的逐包版本清单，拒绝只回滚代码。请使用 --from-backup。"
+    fi
+    mapfile -t RELEASE_SPECS <"$RELEASE_SPECS_TMP"
+    rm -f -- "$RELEASE_SPECS_TMP"
+
     log_step "待回滚内容"
     cat <<EOF
     版本      : ${CUR_VER} -> ${TARGET_VER}
-    包        : ${SYLU_HYDRO_PKGS}@${TARGET_VER}
+    包        : ${RELEASE_SPECS[*]}
     yarn 目录 : $(yarn_global_dir 2>/dev/null || echo 未找到)
 EOF
 
@@ -197,9 +217,7 @@ EOF
     esbuild_resolutions_on "$YGD" || true
 
     REG_SAVED="$(yarn config get registry 2>/dev/null | tr -d '\r' || echo https://registry.yarnpkg.com)"
-    PINS=""
-    for P in $SYLU_HYDRO_PKGS; do PINS="${PINS} ${P}@${TARGET_VER}"; done
-    PINS="${PINS# }"
+    PINS="${RELEASE_SPECS[*]}"
 
     OK=0
     yarn config set registry "${SYLU_YARN_MIRROR:-https://registry.npmmirror.com}" >/dev/null 2>&1 || true
@@ -218,7 +236,9 @@ EOF
     [ "$OK" = 1 ] || die "yarn global add 失败，代码回滚未完成。系统当前仍可能是新版本。"
 
     hydro_restart hydrooj || log_warn "未能自动重启 hydrooj，请检查 pm2"
-    hydro_restart hydrojudge || true
+    if [ "${TARGET_WITH_JUDGE:-0}" = 1 ]; then
+        hydro_restart hydrojudge || true
+    fi
 
     log_step "等待服务就绪"
     CODE="000"
@@ -262,6 +282,12 @@ if [ "$MODE" = "backup" ]; then
     if ! unzip -l "$BACKUP_FILE" 2>/dev/null | grep -q 'dump/hydro'; then
         log_warn "备份里没有找到 dump/hydro —— 这可能不是 hydrooj backup 生成的包，恢复会失败。"
     fi
+    BACKUP_STEM="$(basename "$BACKUP_FILE" .zip)"
+    BACKUP_FILE_DIR="$(cd "$(dirname "$BACKUP_FILE")" && pwd)"
+    if [ ! -f "${BACKUP_FILE_DIR}/manifest-${BACKUP_STEM#sylu-oj-}.txt" ] \
+        && ! unzip -l "$BACKUP_FILE" 2>/dev/null | grep -q 'sylu-recovery/versions.env'; then
+        log_warn "备份缺少恢复清单，只能按数据恢复，不能确认对应代码发行集合。"
+    fi
 
     log_step "2. 当前数据先留一份退路"
     log_warn "恢复会 --drop 现有集合。为了避免「恢复失败又回不来」，"
@@ -294,12 +320,33 @@ EOF
     log_info "恢复前版本快照：${SNAP}"
     record_note "rollback.sh(backup) 开始 file=${BACKUP_FILE}"
 
+    # 恢复必须先阻断 Web、判题消费者和后台写入。失败时保留维护标记，
+    # 不自动重新开放一个可能只恢复了一半的数据集。
+    MAINTENANCE_MARKER="${SYLU_STATE_DIR}/maintenance"
+    printf 'started_at=%s\nbackup=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$BACKUP_FILE" >"$MAINTENANCE_MARKER"
+    if ! hydro_stop hydrooj; then
+        die "无法停止 hydrooj，已拒绝在仍可写入时执行恢复。维护标记：${MAINTENANCE_MARKER}"
+    fi
+    hydro_stop hydrojudge || true
+
     # hydrooj restore 会把 zip 解包后 mongorestore --drop
     # 注意：-y 用于跳过它自己的交互确认（我们已经确认过了）
     if ! hydrooj restore "$BACKUP_FILE" -y --withAddons; then
         die "hydrooj restore 失败。数据库可能处于不完整状态，请用刚做的当前状态备份再恢复一次。"
     fi
     log_ok "数据库已恢复"
+
+    # 外部品牌插件不在 Hydro 官方 backup 的 addons 目录中，按同一时间戳的
+    # 配套归档恢复到代码目录；没有归档时明确告警，不伪装成完整版本回滚。
+    PLUGIN_ARCHIVE="${BACKUP_FILE_DIR}/sylu-brand-${BACKUP_STEM#sylu-oj-}.tar.gz"
+    if [ -f "$PLUGIN_ARCHIVE" ]; then
+        tar -tzf "$PLUGIN_ARCHIVE" >/dev/null 2>&1 || die "品牌插件归档损坏：${PLUGIN_ARCHIVE}"
+        tar -xzf "$PLUGIN_ARCHIVE" -C "$SYLU_OJ_ROOT" \
+            || die "品牌插件归档恢复失败：${PLUGIN_ARCHIVE}"
+        log_ok "已恢复 sylu-brand 外部插件源码"
+    else
+        log_warn "找不到配套品牌插件归档：${PLUGIN_ARCHIVE}；当前恢复不包含外部插件源码"
+    fi
 
     log_step "3. 恢复后核对（有已知坑，务必人工确认）"
     cat <<'EOF'
@@ -313,7 +360,7 @@ EOF
     log_info "当前 addon.json 内容："
     hydrooj addon list 2>/dev/null || log_warn "hydrooj addon list 执行失败，请手动查看 ~/.hydro/addon.json"
 
-    hydro_restart hydrooj || log_warn "未能自动重启 hydrooj，请检查 pm2"
+    hydro_restart hydrooj || die "恢复完成但 hydrooj 无法启动；维护标记仍保留：${MAINTENANCE_MARKER}"
 
     log_step "4. 等待服务就绪"
     CODE="000"
@@ -324,11 +371,12 @@ EOF
     done
     case "$CODE" in
         200 | 301 | 302 | 303) log_ok "服务已恢复（HTTP ${CODE}）" ;;
-        *) die "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj" ;;
+        *) die "服务未就绪（最后状态 ${CODE}）—— 检查 pm2 logs hydrooj；维护标记仍保留：${MAINTENANCE_MARKER}" ;;
     esac
 
     record_note "rollback.sh(backup) 完成 file=${BACKUP_FILE} code=${CODE}"
     bash "${SCRIPT_DIR}/healthcheck.sh" || die "恢复后健康检查失败"
+    rm -f -- "$MAINTENANCE_MARKER"
 
     cat <<'EOF'
 

@@ -172,43 +172,43 @@ SYLU OJ 是一个面向程序设计学习与算法训练的在线评测平台，
 ABOUT
 )"
 
-    # 写入 = 读原值 -> 写 -> 读回校验。单条失败不影响后续条目。
+    # 写入 = 读原值 -> 完整值比较 -> 写 -> 完整值读回校验。
+    # CLI 失败必须进入最终失败汇总，不能被后续 verify 或重启掩盖。
+    APPLY_FAILED=0
     apply_setting() {
         local key="$1" value="$2" before want after
         before="$(hydro_sys_get "$key" 2>/dev/null || true)"
-        want="$(printf '%s\n' "$value" | tail -1)"
+        want="$value"
         if [ "$before" = "$want" ]; then
             pk_pass "${key} 已是目标值，跳过"
             return 0
         fi
         if ! hydro_sys_set "$key" "$value"; then
             pk_fail "写入失败：${key}"
-            return 0
+            return 1
         fi
         after="$(hydro_sys_get "$key" 2>/dev/null || true)"
-        if [ "$after" = "$before" ]; then
-            pk_warn "${key} 写入后读回值未变化（原值：${before:-（空）}）"
-        else
+        if [ "$after" = "$want" ]; then
             pk_pass "${key} 已写入"
-            if [ -n "$before" ]; then
-                log_info "    原值：$(printf '%s' "$before" | head -c 80)"
-            fi
+        else
+            pk_fail "${key} 写入后读回值与目标不一致"
+            return 1
         fi
         return 0
     }
 
     PK_PASS=0; PK_WARN=0; PK_FAIL=0
-    apply_setting server.name "$SYLU_SITE_NAME"
-    apply_setting server.url "$SITE_URL"
-    apply_setting server.language zh_CN
-    apply_setting ui-default.footer_extra_html "$FOOTER_HTML"
-    apply_setting ui-default.about "$ABOUT_MD"
+    apply_setting server.name "$SYLU_SITE_NAME" || APPLY_FAILED=1
+    apply_setting server.url "$SITE_URL" || APPLY_FAILED=1
+    apply_setting server.language zh_CN || APPLY_FAILED=1
+    apply_setting ui-default.footer_extra_html "$FOOTER_HTML" || APPLY_FAILED=1
+    apply_setting ui-default.about "$ABOUT_MD" || APPLY_FAILED=1
 
     # 首页模块编排：homepage.yaml 是唯一出处，脚本不再抄一份。
     # hydrooj.homepage 是 type: yaml 的系统设置，存的正是这份 YAML 文本本身。
     HOMEPAGE_YAML="${SYLU_OJ_ROOT}/addons/sylu-brand/homepage.yaml"
     if [ -f "$HOMEPAGE_YAML" ]; then
-        apply_setting hydrooj.homepage "$(cat "$HOMEPAGE_YAML")"
+        apply_setting hydrooj.homepage "$(cat "$HOMEPAGE_YAML")" || APPLY_FAILED=1
     else
         pk_warn "找不到 ${HOMEPAGE_YAML}，首页模块编排保持站点当前值"
     fi
@@ -234,8 +234,13 @@ BULLETIN
         pk_pass "system 域名称与首页公告已更新"
     else
         pk_fail "system 域名称与首页公告更新失败"
+        APPLY_FAILED=1
     fi
     pk_summary
+
+    if [ "$APPLY_FAILED" -ne 0 ]; then
+        die "配置写入未全部生效，已拒绝重启并返回失败。"
+    fi
 
     # server.url 会被部分组件在启动时读入并缓存，改完重启一次最稳
     log_info "重启 hydrooj 使 server.url 生效 ..."

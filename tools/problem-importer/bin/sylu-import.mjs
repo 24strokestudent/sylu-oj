@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    analyzeArchive, buildHydroPackage, renderPreview, renderVerify,
+    analyzeArchive, buildHydroPackage, renderPreview, renderVerify, LIMITS,
     verifySolutions, LEVEL,
 } from '../src/importer.mjs';
 
@@ -55,6 +55,11 @@ if (!command || !input) {
 if (!fs.existsSync(input)) {
     console.error(`找不到文件：${input}`);
     process.exit(2);
+}
+const inputStat = fs.statSync(input);
+if (inputStat.size > LIMITS.maxArchiveBytes) {
+    console.error(`压缩包过大：${inputStat.size} 字节，超过 ${LIMITS.maxArchiveBytes} 字节上限`);
+    process.exit(1);
 }
 
 const c = options.color
@@ -207,7 +212,11 @@ function runConvert() {
     console.log(c.bold('转换完成'));
     console.log(`  输出：${options.out}`);
     console.log(`  大小：${(outBuf.length / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`  题目：${targets.map((p) => `${p.pid}(${p.pairs.length} 点)`).join('、')}`);
+    const mapping = outBuf.pidPlan || [];
+    console.log(`  题目：${targets.map((p, i) => {
+        const finalPid = mapping[i]?.pid || p.pid;
+        return `${p.pid} -> ${finalPid}(${p.pairs.length} 点)`;
+    }).join('、')}`);
     console.log('');
     console.log(c.bold('下一步（按 §19 题目发布流程，不要跳过）：'));
     console.log('  1. 浏览器进入题库页，点「Import From Hydro」，上传上面这个 zip');

@@ -74,10 +74,16 @@ if [ "$VER_BEFORE" = "unknown" ]; then
 fi
 
 PKGS="$SYLU_HYDRO_PKGS"
-if [ "$CORE_ONLY" = 1 ]; then
-    PKGS="hydrooj"
-    log_warn "--core-only：只升级 hydrooj 本体，前后端可能版本错配，仅用于排查问题"
+[ "$CORE_ONLY" = 1 ] && log_warn "--core-only：只升级 hydrooj 本体，前后端可能版本错配，仅用于排查问题"
+
+RELEASE_TMP="$(mktemp)"
+trap 'rm -f -- "$RELEASE_TMP"' EXIT
+if ! hydro_release_specs "$TARGET_VERSION" "$WITH_JUDGE" "$CORE_ONLY" >"$RELEASE_TMP"; then
+    die "无法解析发行清单：指定版本必须通过 SYLU_RELEASE_MANIFEST 提供逐包版本（每行 包名=版本），拒绝继续。"
 fi
+mapfile -t RELEASE_SPECS <"$RELEASE_TMP"
+TARGET_PKGS="${RELEASE_SPECS[*]}"
+PKGS="$TARGET_PKGS"
 
 # ------------------------------------------------------------
 log_step "2. 磁盘余量（§52 备份 + 解包都要空间）"
@@ -121,7 +127,7 @@ log_step "4. 待升级内容确认"
 # ------------------------------------------------------------
 cat <<EOF
     目标版本    : ${TARGET_VERSION}
-    升级包      : ${PKGS}
+    升级包      : ${TARGET_PKGS}
     评测机      : $( [ "$WITH_JUDGE" = 1 ] && echo "一起升级（hydrojudge）" || echo "不升级" )
     核心补丁    : $( [ -d "$PATCH_DIR" ] && ls -1 "${PATCH_DIR}"/*.patch 2>/dev/null | wc -l || echo 0 ) 个（目录 ${PATCH_DIR}）
     工作目录    : $(yarn_global_dir 2>/dev/null || echo "未找到 yarn global dir")
@@ -153,15 +159,6 @@ fi
 # ------------------------------------------------------------
 log_step "6. 执行 yarn global add"
 # ------------------------------------------------------------
-TARGET_PKGS=""
-for P in $PKGS; do
-    TARGET_PKGS="${TARGET_PKGS} ${P}@${TARGET_VERSION}"
-done
-TARGET_PKGS="${TARGET_PKGS# }"
-if [ "$WITH_JUDGE" = 1 ]; then
-    TARGET_PKGS="${TARGET_PKGS} @hydrooj/hydrojudge@${TARGET_VERSION}"
-fi
-
 REG_SAVED="$(yarn config get registry 2>/dev/null | tr -d '\r' || echo https://registry.yarnpkg.com)"
 
 yarn_try() { # $1 = registry
@@ -256,7 +253,11 @@ log_info "db.ver：${DBVER_BEFORE} -> ${DBVER_AFTER}"
     echo "DB_VER_BEFORE=${DBVER_BEFORE}"
     echo "DB_VER_AFTER=${DBVER_AFTER}"
     echo "TARGET_VERSION=${TARGET_VERSION}"
-    echo "PKGS=${PKGS}"
+    printf 'PKGS='
+    printf '%s ' "${RELEASE_SPECS[@]}"
+    echo
+    echo "WITH_JUDGE=${WITH_JUDGE}"
+    echo "CORE_ONLY=${CORE_ONLY}"
     echo "SNAPSHOT=${SNAP_BEFORE}"
 } >"$STATE_FILE"
 ln -sfn "$STATE_FILE" "${SYLU_STATE_DIR}/upgrade-latest.env"

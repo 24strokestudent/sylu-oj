@@ -27,6 +27,7 @@ import { readCentralDirectory, extractEntry, writeZip } from './zip.mjs';
 // ---------------- 常量与限制 ----------------
 
 export const LIMITS = {
+    maxArchiveBytes: 512 * 1024 * 1024,       // 先限制压缩包本身，避免 CLI 全量读入造成峰值失控
     maxEntries: 20000,
     maxSingleFile: 256 * 1024 * 1024,      // 单文件 256 MB
     maxTotalUncompressed: 2 * 1024 * 1024 * 1024, // 解压后总量 2 GB
@@ -95,10 +96,10 @@ const HUMAN = (n) => {
 
 export function parseTimeToMs(v) {
     if (v === undefined || v === null || v === '') return null;
+    // 数值和无单位字符串都按秒处理；单位必须由输入形式决定，不能按数值大小猜测。
     if (typeof v === 'number') {
         if (!Number.isFinite(v) || v <= 0) return null;
-        // 纯数字按秒处理（沿用多数 OJ 的 time_limit 习惯）
-        return v > 0 && v < 1000 ? Math.round(v * 1000) : Math.round(v);
+        return Math.round(v * 1000);
     }
     const s = String(v).trim().toLowerCase();
     const m = s.match(/^(\d+(?:\.\d+)?)\s*(ms|s|sec|second|秒)?$/);
@@ -112,12 +113,9 @@ export function parseTimeToMs(v) {
 
 export function parseMemoryToMB(v) {
     if (v === undefined || v === null || v === '') return null;
+    // 数值和无单位字符串统一按 MB 处理；KB 必须显式写 k/kb，避免 1024 被猜成 1MB。
     if (typeof v === 'number') {
         if (!Number.isFinite(v) || v <= 0) return null;
-        // 数值型内存限制存在 MB / KB 两种习惯：
-        // 262144 → 256MB（KB），256 → 256MB（MB）。
-        // 只在"是 1024 的整数倍且换算后不超过上限"时才当作 KB，避免误判。
-        if (v >= 1024 && v % 1024 === 0 && v / 1024 <= LIMITS.maxMemoryMB) return Math.round(v / 1024);
         return Math.round(v);
     }
     const s = String(v).trim().toLowerCase();
@@ -169,11 +167,17 @@ const stemOf = (name) => {
     return base.slice(0, base.lastIndexOf('.'));
 };
 
+/** 配对键必须包含题目内相对目录，避免 A/1.in 与 B/1.out 交叉配对。 */
+const pairKeyOf = (name) => {
+    const normalized = normName(name).replaceAll('\\', '/');
+    return sortKey(path.posix.join(path.posix.dirname(normalized), stemOf(normalized)));
+};
+
 function pairTests(fileEntries) {
     const byStem = new Map();
     for (const e of fileEntries) {
         if (!isOutputFile(e.name)) continue;
-        const key = sortKey(stemOf(e.name));
+        const key = pairKeyOf(e.name);
         if (!byStem.has(key)) byStem.set(key, []);
         byStem.get(key).push(e);
     }
@@ -188,7 +192,7 @@ function pairTests(fileEntries) {
         const lower = path.posix.basename(e.name).toLowerCase();
         if (lower.endsWith('.txt') && !lower.endsWith('.in.txt') && !/\d/.test(stemOf(e.name))) continue;
 
-        const key = sortKey(stemOf(e.name));
+        const key = pairKeyOf(e.name);
         const hit = (byStem.get(key) || []).find((o) => !usedOutputs.has(o.name));
         if (hit) {
             usedOutputs.add(hit.name);
@@ -222,6 +226,11 @@ const META_FILES = ['problem.yaml', 'problem.yml', 'problem.json', 'config.yaml'
  */
 export function analyzeArchive(buf, { archiveName = 'archive.zip', pidPrefix = '' } = {}) {
     const diag = new Diag();
+    if (!Buffer.isBuffer(buf)) throw new TypeError('输入必须是 Buffer');
+    if (buf.length > LIMITS.maxArchiveBytes) {
+        diag.error(`压缩包大小 ${HUMAN(buf.length)} 超过上限 ${HUMAN(LIMITS.maxArchiveBytes)}`);
+        return { problems: [], diag, stats: { entries: 0, totalComp: buf.length, totalUncomp: 0 } };
+    }
     const { entries, comment } = readCentralDirectory(buf);
     if (comment) diag.info(`ZIP 注释：${comment.slice(0, 80)}`);
 
@@ -360,6 +369,23 @@ function groupIntoProblems(files, archiveName, diag, opts = {}) {
 
 const baseName = (p) => path.posix.basename(p).replace(/\.zip$/i, '');
 
+// 当前转换器只保证普通标准输入输出题的语义。发现高级判题字段时必须拒绝，
+// 不能把 SPJ、交互、子任务或附件静默降级成普通题。
+const UNSUPPORTED_FIELDS = new Set([
+    'checker', 'checker_type', 'judge', 'judge_type', 'interactor', 'interactor_type',
+    'subtasks', 'subtask', 'score', 'scoring', 'depends', 'dependencies',
+    'additional_file', 'additional_files', 'attachments', 'attachment', 'files',
+]);
+
+function rejectUnsupportedFields(problem, source) {
+    if (!source || typeof source !== 'object') return;
+    for (const key of Object.keys(source)) {
+        if (UNSUPPORTED_FIELDS.has(key.toLowerCase())) {
+            problem.problems.error(`暂不支持字段 ${key}，为避免改变题目语义已拒绝转换`);
+        }
+    }
+}
+
 function buildProblem(key, files, diag, opts = {}) {
     const problem = {
         sourceKey: key,
@@ -418,6 +444,7 @@ function buildProblem(key, files, diag, opts = {}) {
     }
 
     if (metaDoc) {
+        rejectUnsupportedFields(problem, metaDoc);
         problem.pid = metaDoc.pid || metaDoc.problem_id || metaDoc.id || problem.pid || null;
         problem.title = metaDoc.title || metaDoc.name || null;
         problem.content = metaDoc.content || null;
@@ -432,6 +459,8 @@ function buildProblem(key, files, diag, opts = {}) {
             problem.memoryMB = problem.memoryMB || parseMemoryToMB(metaDoc.limits.memory_limit);
         }
     }
+
+    rejectUnsupportedFields(problem, meta);
 
     if (!problem.timeMs) problem.timeMs = parseTimeToMs(meta.time ?? meta.time_limit);
     if (!problem.memoryMB) problem.memoryMB = parseMemoryToMB(meta.memory ?? meta.memory_limit);
@@ -595,13 +624,21 @@ function composeContent(m) {
 
 // ---------------- 生成 Hydro 可导入 ZIP ----------------
 
-export function buildHydroPackage(problems, { includeSolutions = false } = {}) {
-    const files = [];
+export function resolveOutputPids(problems) {
     const usedPids = new Set();
-
-    for (const p of problems) {
+    return problems.map((p) => {
         const pid = uniquePid(p.pid, usedPids);
         usedPids.add(pid);
+        return { sourceKey: p.sourceKey, inputPid: p.pid, pid };
+    });
+}
+
+export function buildHydroPackage(problems, { includeSolutions = false } = {}) {
+    const files = [];
+    const pidPlan = resolveOutputPids(problems);
+
+    for (const [problemIndex, p] of problems.entries()) {
+        const pid = pidPlan[problemIndex].pid;
         const metadata = { pid, title: String(p.title), content: String(p.content || ''), tag: p.tags };
         if (p.difficulty) metadata.difficulty = p.difficulty;
         files.push([`${pid}/problem.yaml`, stringifyYaml(metadata)]);
@@ -620,7 +657,10 @@ export function buildHydroPackage(problems, { includeSolutions = false } = {}) {
             }
         }
     }
-    return writeZip(files);
+    const archive = writeZip(files);
+    // Buffer 允许附加非枚举属性，保持既有调用方的 Buffer API，同时给 CLI 暴露最终映射。
+    archive.pidPlan = pidPlan;
+    return archive;
 }
 
 // ---------------- 预览（§24） ----------------
