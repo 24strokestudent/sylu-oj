@@ -2943,3 +2943,76 @@ img {
     gap: 0;
   }
 }
+
+/* ============================================================
+   讨论区发帖弹窗（talk.html）
+   ============================================================ */
+.topic-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  background: rgba(35, 24, 21, 0.5);
+}
+
+.topic-modal.show {
+  display: flex;
+}
+
+.topic-modal-box {
+  width: 90%;
+  max-width: 520px;
+  padding: 24px;
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+.topic-modal-title {
+  margin: 0 0 16px;
+  color: var(--brown);
+}
+
+.topic-modal-field {
+  margin-bottom: 12px;
+}
+
+.topic-modal-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.topic-modal-input,
+.topic-modal-select,
+.topic-modal-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--white);
+}
+
+.topic-modal-textarea {
+  resize: vertical;
+}
+
+.topic-modal-actions {
+  margin-top: 16px;
+  text-align: right;
+}
+
+.topic-modal-actions .btn + .btn {
+  margin-left: 8px;
+}
+
+@media (max-width: 620px) {
+  .topic-modal-box {
+    padding: 18px;
+  }
+}

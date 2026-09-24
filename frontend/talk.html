@@ -170,6 +170,34 @@
     </div>
   </footer>
 
+  <div class="topic-modal" id="topicModal" aria-hidden="true">
+    <div class="topic-modal-box" role="dialog" aria-modal="true" aria-labelledby="topicModalTitle">
+      <h3 class="topic-modal-title" id="topicModalTitle">发布新帖</h3>
+      <div class="topic-modal-field">
+        <label for="newTopicTitle">标题</label>
+        <input class="topic-modal-input" id="newTopicTitle" type="text" maxlength="100">
+      </div>
+      <div class="topic-modal-field">
+        <label for="newTopicCategory">分类</label>
+        <select class="topic-modal-select" id="newTopicCategory">
+          <option value="题解">题解</option>
+          <option value="求助">求助</option>
+          <option value="公告">公告</option>
+          <option value="闲聊" selected>闲聊</option>
+        </select>
+      </div>
+      <div class="topic-modal-field">
+        <label for="newTopicContent">正文</label>
+        <textarea class="topic-modal-textarea" id="newTopicContent" rows="6"></textarea>
+      </div>
+      <p class="form-alert" id="newTopicAlert"></p>
+      <div class="topic-modal-actions">
+        <button type="button" class="btn btn-ghost" id="newTopicCancel">取消</button>
+        <button type="button" class="btn btn-primary" id="newTopicSubmit">发布</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/vendor/modernizr-3.11.2.min.js"></script>
   <script src="js/plugins.js"></script>
   <script src="js/loader.js"></script>
@@ -177,65 +205,6 @@
   <script src="js/users-data.js"></script>
   <script src="js/topics-data.js"></script>
   <script src="js/talk.js"></script>
-  <div id="topicModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center;">
-    <div style="background:#fff; border-radius:12px; padding:24px; width:90%; max-width:520px;">
-      <h3 style="margin:0 0 16px;">发布新帖</h3>
-      <p><label class="visually-hidden" for="newTopicTitle">标题</label><input id="newTopicTitle" type="text" placeholder="标题" maxlength="100" aria-label="标题" style="width:100%; padding:10px; box-sizing:border-box;"></p>
-      <p><label class="visually-hidden" for="newTopicCategory">分类</label><select id="newTopicCategory" aria-label="分类" style="width:100%; padding:10px;">
-        <option value="题解">题解</option>
-        <option value="求助">求助</option>
-        <option value="公告">公告</option>
-        <option value="闲聊" selected>闲聊</option>
-      </select></p>
-      <p><label class="visually-hidden" for="newTopicContent">正文</label><textarea id="newTopicContent" rows="6" placeholder="正文" aria-label="正文" style="width:100%; padding:10px; box-sizing:border-box;"></textarea></p>
-      <p id="newTopicAlert" style="color:#c00; margin:8px 0;"></p>
-      <div style="text-align:right;">
-        <button type="button" id="newTopicCancel" class="btn btn-ghost">取消</button>
-        <button type="button" id="newTopicSubmit" class="btn btn-primary">发布</button>
-      </div>
-    </div>
-  </div>
-  <script>
-    (function () {
-      var modal = document.getElementById('topicModal');
-      var openBtn = document.getElementById('openTopicModal');
-      if (!modal || !openBtn) return;
-
-      function token() { try { return localStorage.getItem('sylu_token'); } catch (e) { return null; } }
-
-      openBtn.addEventListener('click', function (e) {
-        if (!token()) return;
-        e.preventDefault();
-        modal.style.display = 'flex';
-      });
-
-      document.getElementById('newTopicCancel').addEventListener('click', function () {
-        modal.style.display = 'none';
-      });
-
-      document.getElementById('newTopicSubmit').addEventListener('click', function () {
-        var alertEl = document.getElementById('newTopicAlert');
-        var title = document.getElementById('newTopicTitle').value.trim();
-        var body = document.getElementById('newTopicContent').value.trim();
-        if (!title) { alertEl.textContent = '请填写标题'; return; }
-
-        fetch('http://localhost:3000/api/topics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() },
-          body: JSON.stringify({
-            title: title,
-            category: document.getElementById('newTopicCategory').value,
-            content: body
-          })
-        }).then(function (r) {
-          return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
-        }).then(function (res) {
-          if (res.ok) { location.reload(); }
-          else { alertEl.textContent = res.data.error || '发帖失败'; }
-        }).catch(function () { alertEl.textContent = '网络错误'; });
-      });
-    })();
-  </script>
 </body>
 
 </html>

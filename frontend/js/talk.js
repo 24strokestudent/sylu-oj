@@ -404,5 +404,75 @@
   CONFIG.reload = load;
   window.SYLU_TALK_CONFIG = CONFIG;
 
+  /* ---------- 发帖弹窗 ---------- */
+
+  var topicModal = document.getElementById('topicModal');
+  var openTopicModal = document.getElementById('openTopicModal');
+
+  function authToken() {
+    try { return window.localStorage.getItem('sylu_token'); } catch (e) { return null; }
+  }
+
+  if (topicModal && openTopicModal) {
+    openTopicModal.addEventListener('click', function (e) {
+      // 未登录时沿用 href 跳转到登录页
+      if (!authToken()) return;
+      e.preventDefault();
+      topicModal.classList.add('show');
+      topicModal.setAttribute('aria-hidden', 'false');
+    });
+
+    var topicCancel = document.getElementById('newTopicCancel');
+    if (topicCancel) {
+      topicCancel.addEventListener('click', function () {
+        topicModal.classList.remove('show');
+        topicModal.setAttribute('aria-hidden', 'true');
+      });
+    }
+
+    var topicSubmit = document.getElementById('newTopicSubmit');
+    if (topicSubmit) {
+      topicSubmit.addEventListener('click', function () {
+        var alertEl = document.getElementById('newTopicAlert');
+        var titleEl = document.getElementById('newTopicTitle');
+        var contentEl = document.getElementById('newTopicContent');
+        var title = titleEl ? titleEl.value.trim() : '';
+        var body = contentEl ? contentEl.value.trim() : '';
+
+        function fail(message) {
+          alertEl.className = 'form-alert show error';
+          alertEl.textContent = message;
+        }
+
+        if (!title) { fail('请填写标题'); return; }
+
+        fetch(CONFIG.endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + authToken()
+          },
+          body: JSON.stringify({
+            title: title,
+            category: document.getElementById('newTopicCategory').value,
+            content: body
+          })
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            return { ok: res.ok, data: data };
+          });
+        }).then(function (result) {
+          if (result.ok) {
+            window.location.reload();
+          } else {
+            fail(result.data.message || result.data.error || '发帖失败');
+          }
+        }).catch(function () {
+          fail('网络错误，请确认后端已启动');
+        });
+      });
+    }
+  }
+
   load();
 })();
