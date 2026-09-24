@@ -18,6 +18,8 @@ sylu-oj/
 │   ├──level.html    #排名页面
 │   ├──competition.html #比赛页面
 │   ├──bank.html      #题库页面
+│   ├──problem.html   #题目详情页
+│   ├──user.html      #个人主页
 │   └──talk.html     #讨论页面
 │
 └── server/            # 后端（开发中）

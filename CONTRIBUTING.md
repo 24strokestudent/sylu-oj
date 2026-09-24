@@ -23,7 +23,7 @@
 
 | 方向 | 现状                                            | 适合入手 |
 |---|-----------------------------------------------|---|
-| 前端页面 | 首页、题库、注册、登录、排行榜、比赛、讨论区已完成 | 题目详情、个人主页、提交记录 |
+| 前端页面 | 首页、题库、题目详情、注册、登录、排行榜、个人主页、比赛、讨论区已完成 | 提交与判题、题单训练、静态文案页 |
 | 后端 API | `server/` 目前只有 `package.json`，还没有 `server.js` | 按[接口契约](#后端接口契约)实现接口 |
 | 数据落库 | 未开始                                           | 用户、题目、提交记录、话题等表结构 |
 | 文档与题解 | 持续需要                                          | 使用帮助、常见问题、题解内容 |
@@ -145,7 +145,7 @@ sylu-oj/
 
 ## 后端接口契约
 
-六个页面的接口调用已经写好，只差后端。前端在 `demoMode: true` 时使用占位数据；后端实现后把对应脚本的 `demoMode` 改成 `false` 即可联调，也支持在控制台热切换：
+九个页面的接口调用已经写好，只差后端。前端在 `demoMode: true` 时使用占位数据；后端实现后把对应脚本的 `demoMode` 改成 `false` 即可联调，也支持在控制台热切换：
 
 ```js
 SYLU_AUTH_CONFIG.demoMode  = false;                                  // 注册
@@ -154,6 +154,8 @@ SYLU_LEVEL_CONFIG.demoMode = false; SYLU_LEVEL_CONFIG.reload();      // 排行�
 SYLU_TALK_CONFIG.demoMode  = false; SYLU_TALK_CONFIG.reload();       // 讨论区
 SYLU_COMP_CONFIG.demoMode  = false; SYLU_COMP_CONFIG.reload();       // 比赛
 SYLU_BANK_CONFIG.demoMode  = false; SYLU_BANK_CONFIG.reload();       // 题库
+SYLU_PROBLEM_CONFIG.demoMode = false; SYLU_PROBLEM_CONFIG.reload();   // 题目详情
+SYLU_USER_CONFIG.demoMode    = false; SYLU_USER_CONFIG.reload();      // 个人主页
 ```
 
 | 页面 | 方法 | 路径 | 请求体 | 成功返回 |
@@ -164,6 +166,11 @@ SYLU_BANK_CONFIG.demoMode  = false; SYLU_BANK_CONFIG.reload();       // 题库
 | 讨论区 | `GET` | `/api/topics` | 无 | `[...]` 或 `{ topics: [...] }` |
 | 比赛 | `GET` | `/api/contests` | 无 | `[...]` 或 `{ contests: [...] }` |
 | 题库 | `GET` | `/api/problems` | 无 | `[...]` 或 `{ problems: [...] }` |
+| 题目详情 | `GET` | `/api/problems?code=CS001-01-001` | 无 | 单题对象或 `[...]` |
+| 个人主页 | `GET` | `/api/users/:username` | 无 | 单用户对象 |
+| 提交记录 | `GET` | `/api/users/:username/submissions` | `?page=1` | `[...]` 或 `{ list: [...] }` |
+| 比赛记录 | `GET` | `/api/users/:username/contests` | 无 | `[...]` |
+| 提交代码 | `POST` | `/api/submissions` | `{ problemCode, language, sourceCode }` | 任意 JSON（`201`） |
 
 **列表接口的字段**（以各脚本 `normalize()` 为准，缺失字段有默认值，不会白屏）：
 
@@ -174,6 +181,9 @@ SYLU_BANK_CONFIG.demoMode  = false; SYLU_BANK_CONFIG.reload();       // 题库
   - 可选 `status`（`ongoing` / `upcoming` / `ended`）；缺省时前端按 `startOffset` 与 `durationMinutes` 推导状态
 - 题库：`code`、`title`、`difficulty`（`简单` / `中等` / `困难`）、`tags`（数组，也接受逗号分隔字符串）、`submissions`、`accepted`、`status`
   - `status`（`solved` / `attempted` / `none`）依赖登录态，未登录时应返回 `none`
+- 个人主页 / 用户：`username`、`nickname`、`college`、`role`（`user` / `admin`）、`joinedAt`、`solved`、`submissions`、`accepted`、`recent`（最近提交）、`contests`（参赛记录）
+  - 提交记录字段：`code`、`verdict`（`AC` / `WA` / `TLE` / `MLE` / `RE` / `CE` / `PE` / `OLE` / `SE` / `PD` / `JD`）、`language`、`timeUsedMs`、`memoryUsedKb`、`minutesAgo`
+  - 个人主页以 `?username=` 定位；**源码只有本人可见**，取源码的接口必须鉴权
 
 **错误约定**：统一返回 `{ "message": "给用户看的中文提示" }`，前端会优先显示它；没有 `message` 时按状态码兜底（`401` → 用户名或密码错误、`403` → 账号不可用、`429` → 尝试过于频繁、`5xx` → 服务器异常）。
 
