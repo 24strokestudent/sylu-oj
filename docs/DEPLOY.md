@@ -148,11 +148,10 @@ Gate 用真实 HTTP 请求跑通（`curl` 打 `http://127.0.0.1:8888`），结�
    hydrooj cli script cleanUserEffect '{"uid":2}'        # 停用（priv 置 0，登录 403）
    ```
 
-2. **注册是「两步 token」流程，默认不发信也能走完。**
-   本机 `smtp.verify=true` 但 `smtp.user` 未配置，于是第一步 POST 会**直接 302 到
-   `/register/<code>`**，把 token 放在 URL 里 —— 不需要邮箱就能注册。
-   代价：`/register` 有 `limitRate('send_mail', 60, 1, mail)`，
-   **同一邮箱 60 秒内只能申请一次 token**，自动化脚本连续注册要用不同邮箱。
+2. **注册是「两步 token」流程，测试期免邮箱验证。**
+   运行 `deploy/configure.sh --test-registration --site-url http://<IP>/` 后，
+   `smtp.verify=false`，第一步 POST 会**直接 302 到 `/register/<code>`**，
+   不发送邮箱验证码。恢复正式验证时，再开启 `smtp.verify` 并配置 SMTP。
 
 管理员账号：`system-admin`（uid 3）。首次部署生成的密码写在服务器
 `/root/.sylu-oj/admin-credentials.txt`（权限 600，仅 root 可读）。
