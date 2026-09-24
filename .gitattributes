@@ -192,3 +192,43 @@ Procfile    text
 ## EXECUTABLES
 *.exe binary
 *.pyc binary
+
+######################################################################
+## SYLU OJ 追加规则（本节放在最后，同属性后出现者优先）
+##
+## 背景：部署目标是 Linux（Debian 12），但仓库也常在 Windows 上检出。
+## 换行符不锁定的话，.sh 到 Linux 会直接因 CRLF 报错；
+## 评测数据被转换换行则会和期望输出对不上，造成误判。
+######################################################################
+
+## 脚本必须 LF（含 Node ESM）
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+
+## 源码
+*.c   text eol=lf
+*.cc  text eol=lf
+*.cpp text eol=lf
+*.h   text eol=lf
+*.hpp text eol=lf
+*.py  text eol=lf
+*.ts  text eol=lf
+*.js  text eol=lf
+
+## 核心补丁：必须逐字节一致，否则打不上
+*.patch text eol=lf
+
+## 评测数据：逐字节一致，禁止任何换行转换
+*.in  -text
+*.out -text
+*.ans -text
+
+## 文档与配置：统一 LF，免得在 Windows 上反复冒出 "LF will be replaced by CRLF" 噪音
+*.md   text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.txt  text eol=lf
+

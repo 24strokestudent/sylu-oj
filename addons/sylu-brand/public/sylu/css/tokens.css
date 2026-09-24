@@ -1,0 +1,65 @@
+/* 设计令牌：颜色的唯一出处。组件样式里不应再出现新的十六进制色值。
+   旧名（--sylu-red 等）保留为别名，便于增量迁移期两套引用同时生效。 */
+:root {
+  --sylu-primary: #b12d28;
+  --sylu-primary-hover: #8f201c;
+  --sylu-ink: #231815;
+  --sylu-success: #485742;
+  --sylu-success-soft: #eef3ec;
+  --sylu-bg: #f6f8f5;
+  --sylu-surface: #fff;
+  --sylu-text: #2b2f2a;
+  --sylu-muted: #6b7268;
+  --sylu-border: #e3e8e0;
+  --sylu-border-strong: #d4dbd1;
+  --sylu-link: #2f6f9f;
+
+  /* 导航实际占据的可视高度。Hydro 的 .nav 是 position:fixed 且带
+     margin-bottom:-2.8125rem（theme.css 顶层规则），不占文档流，
+     所以需要让出导航高度的地方一律引用这个变量，不要各写各的像素数。
+     值必须与 theme.css 的 `.nav{height:2.8125rem}` 保持一致。 */
+  --sylu-nav-h: 2.8125rem;
+
+  --sylu-radius-container: 12px;
+  --sylu-radius-card: 14px;
+  --sylu-radius-button: 10px;
+  --sylu-radius-input: 8px;
+  --sylu-radius-pill: 999px;
+
+  --sylu-shadow-nav: 0 2px 14px rgba(38, 50, 31, .08);
+  --sylu-shadow-card: 0 6px 22px rgba(38, 50, 31, .07);
+  --sylu-shadow-raised: 0 12px 36px rgba(38, 50, 31, .10);
+  --sylu-shadow-code: 0 14px 30px rgba(38, 50, 31, .16);
+
+  /* 主行动按钮悬停光晕。上游把 .button.primary 的 hover 阴影写死成蓝色 #35a2ff4d，
+     换成品牌红后必须连光晕一起换，否则红按钮会带一圈蓝光。 */
+  --sylu-glow-primary: 0 4px 15px rgba(177, 45, 40, .3);
+
+  --sylu-font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --sylu-font-code: "SFMono-Regular", Consolas, monospace;
+
+  /* 判题状态色。theme.css 把 .record-status--text.pass 这类规则写成了 !important，
+     所以 oj.css 覆盖它们时必须同样带 !important（见 oj.css 的状态段）。
+     档位只有五档（pass/fail/progress/pending/ignored），来自 model.builtin.STATUS_CODES：
+     模板只输出档位类名、不输出状态码，也没有可读的 data-* 属性，
+     所以"CE 橙红、TLE 橙色、MLE 橙色"这种逐状态配色在只改 CSS 的前提下做不到，
+     这里按档位取色：progress 是"进行中"（Judging/Compiling/Fetched），用蓝而不是上游的橙，
+     橙色留给告警语义；pending 用灰蓝表示排队。 */
+  --sylu-status-pass: #2f7d46;
+  --sylu-status-pass-soft: #eef5ef;
+  --sylu-status-fail: #c0392b;
+  --sylu-status-fail-soft: #fceceb;
+  --sylu-status-progress: var(--sylu-link);
+  --sylu-status-progress-soft: #eaf1f7;
+  --sylu-status-pending: #7c8794;
+  --sylu-status-pending-soft: #f0f2f4;
+  --sylu-status-ignored: #9aa39a;
+  --sylu-status-ignored-soft: #f3f4f2;
+
+  /* 兼容旧引用 */
+  --sylu-red: var(--sylu-primary);
+  --sylu-red-dark: var(--sylu-primary-hover);
+  --sylu-brown: var(--sylu-ink);
+  --sylu-green: var(--sylu-success);
+  --sylu-green-light: var(--sylu-success-soft);
+}

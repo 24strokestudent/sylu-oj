@@ -1,0 +1,6 @@
+{# 上游版本只按权限把关，域内没有任何讨论版块时会留一个空壳卡片，
+   旧实现用 :has(.group-list:empty) 从 CSS 里藏掉它。这里改成渲染前就判断。 #}
+{% if handler.user.hasPerm(perm.PERM_VIEW_DISCUSSION) and payload.length %}
+  {% set vnodes = payload %}
+  {% include 'partials/discussion_nodes_widget.html' %}
+{% endif %}

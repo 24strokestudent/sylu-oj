@@ -1,114 +1,96 @@
-# SYLU OJ · 沈阳理工大学在线评测系统
+# SYLU OJ
 
-沈阳理工大学在线评测系统（SYLU OJ）——面向全校师生的在线编程评测平台。
+**在线程序设计与评测平台**
 
-> 前端为纯静态页面（HTML/CSS/JS，无框架依赖，可直接部署）；后端为 Node.js + Express + MySQL，已实现 12 个接口，判题机待开发。
+面向校内编程学习与训练的在线评测系统。核心评测引擎基于 [Hydro](https://github.com/hydro-dev/Hydro) 二次开发，
+本仓库负责 **部署、品牌定制、题库迁移工具与运维**，不重新实现 OJ 核心。
 
-## 项目结构
+> **本站为学生维护的非官方编程学习与在线评测平台，非学校官方信息系统。**
+> 请勿上传个人隐私数据；请勿提交恶意代码。
+
+---
+
+## 这个仓库是什么
+
+我们不做"再写一个 OJ"，而是把成熟的 Hydro 用起来，只维护 Hydro 之外的那部分：
+
+| 目录 | 职责 | 状态 |
+|---|---|---|
+| `deploy/` | 部署前检查、安装、配置、备份、恢复演练、升级、回滚、密钥扫描 | 已交付（需在 Debian 12 服务器执行） |
+| `addons/sylu-brand/` | 顶栏「关于本站」入口、平台须知聚合页、SYLU Logo 与 Hydro 原生界面视觉适配 | 已部署并验证 |
+| `addons/sylu-campus/` | 学号绑定与身份验证（**V1 不启用**） | 仅设计说明 |
+| `tools/problem-importer/` | 题库 ZIP 预检、预览、转换为 Hydro 可导入格式 | 已交付并本地自测 |
+| `test/` | Judge 验收集（AC/WA/CE/RE/TLE/MLE/OLE）与沙箱安全用例 | 已交付 |
+| `docs/` | `DEPLOY.md` 部署与运维、`ACCEPTANCE.md` 验收清单 | 已交付 |
+| `legacy-homepage/` | 改造前的静态首页（视觉参考） | 归档 |
+| `legacy-server/` | 改造前的 Express 后端骨架（**停止发展**） | 归档 |
+
+Hydro 本体、MongoDB、Judge、Sandbox 全部来自官方安装，**不在本仓库内**。
+
+## 技术栈与边界
 
 ```
-sylu-oj/
-├── frontend/                    # 前端（纯静态，可直接部署）
-│   ├── index.html               # 首页
-│   ├── bank.html                # 题库
-│   ├── problem.html             # 题目详情
-│   ├── competition.html         # 比赛
-│   ├── talk.html                # 讨论区
-│   ├── topic.html               # 话题详情
-│   ├── level.html               # 排行榜
-│   ├── user.html                # 个人主页
-│   ├── login.html               # 登录
-│   ├── register.html            # 注册
-│   ├── css/                     # normalize.css + main.css（全站样式，按页分节注释）
-│   ├── js/
-│   │   ├── main.js              # 全站交互：页脚年份 / 导航 / 登录态 / 数字滚动
-│   │   ├── loader.js            # 玫瑰曲线加载动画
-│   │   ├── auth.js login.js     # 注册 / 登录
-│   │   ├── bank.js problem.js   # 题库 / 题目详情
-│   │   ├── competition.js       # 比赛
-│   │   ├── talk.js topic.js     # 讨论区 / 话题详情
-│   │   ├── level.js user.js     # 排行榜 / 个人主页
-│   │   └── *-data.js            # problems / users / topics 占位数据（接后端后可删）
-│   └── 沈阳理工大学-logo.svg
-└── server/                      # 后端（Node.js + Express + MySQL）
-    ├── server.js                # 路由入口
-    ├── db.js                    # mysql2 连接池
-    ├── middleware/auth.js       # JWT 登录态校验
-    ├── routes/auth.js           # 注册 / 登录
-    ├── .env.example             # 环境变量模板（复制为 .env 后填值）
-    └── package.json
+Internet → HTTPS → Caddy/Nginx → Hydro (127.0.0.1:8888) → MongoDB(仅本机)
+                                                          └ Judge/Sandbox（容器隔离）
 ```
 
-## 前端本地运行
+三条硬边界（改动前请先读）：
 
-方式一（最简单）：直接双击 `frontend/index.html` 用浏览器打开。
+1. **不重新造 OJ。** 用户、权限、题库、评测、比赛、作业、讨论、后台全部走 Hydro 原生能力。
+2. **不魔改 Hydro Core。** 优先级固定为：Hydro 原生配置 → 原生插件/Addon → CSS/模板扩展 → 最后才考虑最小 Core Patch（必须单独记录以便升级重放）。
+3. **Judge 与数据安全优先于 UI。** 先能用，再定制。
 
-方式二（parcel 开发服务器，支持热更新）：
+## 快速开始
+
+本地跑一遍题库导入工具的预检与预览：
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd tools/problem-importer
+node bin/sylu-import.mjs --help
 ```
 
-## 后端本地运行
-
-需要本机已安装并启动 MySQL 8+。
+在服务器上从零部署（Debian 12，需 root）：
 
 ```bash
-cd server
-npm install
-cp .env.example .env        # 填写数据库口令与 JWT_SECRET
-
-# 建库建账号（示例，口令自己换）
-#   CREATE DATABASE sylu_oj DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-#   CREATE USER 'sylu_oj'@'localhost' IDENTIFIED BY '你的口令';
-#   GRANT ALL PRIVILEGES ON sylu_oj.* TO 'sylu_oj'@'localhost';
-
-npm start                   # 默认 http://localhost:3000
+sudo -i
+cd /root && git clone <本仓库> sylu-oj && cd sylu-oj
+bash deploy/preflight.sh          # 先体检，关键项不通过就停
+bash deploy/install-hydro.sh      # 用 Hydro 官方脚本安装
+bash deploy/configure.sh          # 品牌与站点配置引导
 ```
 
-验证：`curl http://localhost:3000/api/ping` 应返回 `{"message":"数据库连通",...}`。
-
-前端每个页面脚本都有 `demoMode` 开关：`true` 用本地占位数据（无需后端），`false` 调用接口。
-要联调就把它改成 `false`，并让 `endpoint` 指向后端地址。**注意：目前有 8 个脚本硬编码了
-`http://localhost:3000`，部署前需改为相对路径 `/api`（配合 nginx 反代）。**
+完整步骤、版本记录、升级与回滚流程见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+验收标准与逐条勾选表见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。
 
 ## 配色
 
-校色取自校徽：
+取自校徽，用法有分工，避免整页红绿棕同时大量出现：
 
 | 颜色 | 色值 | 用途 |
 |---|---|---|
-| 校红 | `#b12d28` | 按钮行动色 |
-| 校棕 | `#231815` | 文字/导航 |
-| 校绿 | `#485742` | 区块背景（统计条、页脚） |
-
-## 部署
-
-- **前端（纯静态）**：GitHub Pages → Settings → Pages → Source 选择 `frontend` 目录；或任意静态托管
-- **后端**：Node 进程用 `pm2` / `systemd` 守护；MySQL 同机部署，只监听 `127.0.0.1`，公网只开 80 / 443
-- **nginx**：托管 `frontend/` 静态文件，并把 `/api` 反向代理到 `http://127.0.0.1:3000`
-- **备份**：`mysqldump` + cron 每日一次，保留最近 7 份（并留一份异地/本地副本）
-
-## 当前进度
-
-| 模块 | 状态 |
-|---|---|
-| 前端 10 个页面 | ✅ 完成（风格统一、响应式、无障碍与 XSS 防护逐页核对） |
-| 后端 12 个接口 | ✅ 完成（Express + mysql2 + JWT） |
-| 数据库 8 张表 | ✅ 已建表并灌入种子数据 |
-| **判题机** | ⬜ 未开始——「提交代码 → 判题 → 回写结果」这条链路尚未打通 |
-| 提交页 / 判题结果页 | ⬜ 未开始（题目详情页的提交框界面已就绪） |
-| 静态文案页 | ⬜ 未开始（使用帮助 / 常见问题 / 关于本站 / 联系我们 / 用户协议 / 隐私政策） |
-| 题单训练 | ⬜ 未开始 |
-
-待办清单见 [CONTRIBUTING.md 的「当前待办」](./CONTRIBUTING.md#当前待办)。
-
-## 贡献
-
-欢迎参与！提 PR 前请先阅读 [贡献指南（CONTRIBUTING.md）](./CONTRIBUTING.md)，其中有目录约定、代码风格、后端接口契约与提交规范。
+| 校红 | `#b12d28` | 主要操作（按钮、链接强调） |
+| 校棕 | `#231815` | 文本与导航 |
+| 校绿 | `#485742` | 状态与辅助区块 |
 
 ## License
 
-[MIT](./LICENSE)
+本仓库自有代码：[MIT](./LICENSE)。
+
+Hydro 本体为 [AGPL-3.0](https://github.com/hydro-dev/Hydro/blob/master/LICENSE)，以独立进程部署、不作修改，
+站点页脚保留 **Powered by Hydro** 归属声明。详见 [`LICENSES/`](LICENSES/)。
+
+---
+
+## 归档说明
+
+本仓库在采用 Hydro 之前，曾有一套自研的静态前端（10 个页面）与 Express + MySQL 后端。
+它们已完整保留在：
+
+| 位置 | 内容 |
+|---|---|
+| `legacy-homepage/` | 自研静态前端：首页 / 题库 / 题目详情 / 比赛 / 讨论区 / 话题详情 / 排行榜 / 个人主页 / 登录 / 注册，含全部样式与脚本 |
+| `legacy-server/` | 自研 Express 后端：12 个接口、JWT 登录态、MySQL 8 张表的建表与联调代码 |
+| 分支 `archive/static-frontend` | 上述成果被合并进 `legacy-*` 之前的完整历史（`git log archive/static-frontend`） |
+
+`legacy-server/` 已停止发展；`legacy-homepage/` 作为视觉参考保留——其中的设计令牌与页面结构
+已被 `addons/sylu-brand/` 的 Hydro 模板吸收。

@@ -1,0 +1,46 @@
+/* 冻结快照：responsive.css @ fabcca8，同上，只服务 baseline-* 场景。
+   取回方式：git show fabcca8:addons/sylu-brand/public/sylu/css/responsive.css
+*/
+/* 断点集中在一个文件里，移动端改造（P0 第 10 项）只看这里。
+   顺序固定为 800 → 640，窄屏覆盖宽屏，不再像旧文件那样交错穿插。 */
+
+@media (max-width: 800px) {
+  .sylu-hero,
+  .page--homepage .richmedia > div:first-child {
+    grid-template-columns: 1fr;
+    gap: 30px;
+    min-height: auto;
+    padding-top: 36px;
+    padding-bottom: 36px;
+  }
+
+  .page--homepage .richmedia h3 + ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .main { padding-top: 16px; }
+
+  .page--homepage .large-9 > .section:first-child .section__body { padding: 24px 20px 28px; }
+
+  .sylu-hero,
+  .page--homepage .richmedia > div:first-child {
+    margin: -24px -20px 28px;
+    padding: 36px 20px;
+  }
+
+  .sylu-hero h1,
+  .page--homepage .richmedia > div:first-child h1 { font-size: 28px; }
+
+  .page--homepage .richmedia h1 { font-size: 25px; }
+
+  .nav__list--main > .nav__list-item:first-child::after { font-size: 13px; }
+
+  .page--homepage .richmedia h3 + ul,
+  .page--homepage .main > .row > .large-3 { grid-template-columns: 1fr; }
+
+  .page--homepage .richmedia > div:first-child + p {
+    margin: -28px -20px 36px;
+    padding: 28px 20px;
+    font-size: 16px;
+  }
+}

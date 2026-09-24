@@ -1,0 +1,14 @@
+{
+  "name": "sylu-brand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SYLU OJ 品牌与站点信息插件：导航扩展（关于本站 / 平台须知）、非官方免责声明页面、Logo 与 favicon 静态资源覆盖。不修改 Hydro Core。",
+  "main": "index.js",
+  "license": "MIT",
+  "keywords": [
+    "hydro",
+    "hydrooj",
+    "addon",
+    "sylu-oj"
+  ]
+}

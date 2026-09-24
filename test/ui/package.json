@@ -1,0 +1,21 @@
+{
+  "name": "sylu-ui-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "离线渲染沙箱：用真实 Hydro 模板 + sylu-brand addon 模板渲染页面，供 UI 改造目视验收",
+  "type": "commonjs",
+  "scripts": {
+    "assets": "node fetch-assets.js",
+    "render": "node render.js --all",
+    "shot": "node shot.js",
+    "diff": "node diff.js",
+    "compare": "node compare.js",
+    "check": "node check.js"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.1.0",
+    "markdown-it": "^14.1.0",
+    "nunjucks": "^3.2.4",
+    "puppeteer-core": "^25.11.0"
+  }
+}

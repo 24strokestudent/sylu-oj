@@ -1,0 +1,22 @@
+/* 全局基线：只放跨页面共用的底色与字体，页面结构一律归 shell/home/oj。 */
+body {
+  background: var(--sylu-bg);
+  color: var(--sylu-text);
+  font-family: var(--sylu-font-ui);
+}
+
+/* 主行动按钮。上游把 .button.primary 定成 Hydro 蓝（#5f9fd6），
+   于是"过滤""下载""递交"这些按钮和站内红色的搜索键并排时像两个平台拼起来的。
+   选择器刻意照抄上游的 .button:not(.codicon).primary 形式：特异性相同、我们的样式表在后，
+   不需要 !important 就能压住，也避免以后为赢一个选择器而不断加码。 */
+.button:not(.codicon).primary {
+  border-color: var(--sylu-primary);
+  background-color: var(--sylu-primary);
+}
+
+.button:not(.codicon).primary:not(.disabled):hover,
+.button:not(.codicon).primary:not(.disabled):focus {
+  border-color: var(--sylu-primary-hover);
+  background-color: var(--sylu-primary-hover);
+  box-shadow: var(--sylu-glow-primary);
+}

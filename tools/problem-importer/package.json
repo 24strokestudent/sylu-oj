@@ -1,0 +1,24 @@
+{
+  "name": "sylu-problem-importer",
+  "version": "0.1.0",
+  "description": "SYLU OJ 题库导入工具：ZIP 预检 / 预览 / 标准程序验证 / 转换为 Hydro 可导入格式",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "sylu-import": "bin/sylu-import.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "preflight": "node bin/sylu-import.mjs preflight",
+    "preview": "node bin/sylu-import.mjs preview",
+    "convert": "node bin/sylu-import.mjs convert",
+    "verify": "node bin/sylu-import.mjs verify",
+    "selftest": "node test/selftest.mjs"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "license": "MIT"
+}

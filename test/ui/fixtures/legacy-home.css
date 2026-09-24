@@ -1,0 +1,398 @@
+/* 冻结快照：addons/sylu-brand/public/sylu/css/home.css @ fabcca8（首页模板化之前）。
+   只给 test/ui 的 baseline-* 场景用，用来复刻"改造前"首页外观，不随 addon 发布。
+   线上已不再走"公告里塞 Hero + 按 DOM 位置写样式"这条路，因此这段不能留在样式目录里。
+   取回方式：git show fabcca8:addons/sylu-brand/public/sylu/css/home.css
+*/
+/* 首页。分两段：
+   第一段是"目标态"组件样式，绑定自有 .sylu-* 类，只在模板接管首页后可见；
+   第二段 LEGACY 绑定公告富文本的 DOM 位置，因为 Hydro 的 markdown 过滤器会剥掉
+   公告 HTML 的 class（markdown-it-xss.ts:154），所以旧实现只能按位置猜。
+   两段刻意分开标注，模板化完成后 LEGACY 段整体删除。 */
+
+/* ---------- 版面 ---------- */
+.page--homepage .main {
+  padding-top: 0;
+  background: var(--sylu-surface);
+}
+
+.page--homepage .main > .row { max-width: 1180px; }
+
+/* 主栏与侧栏改为整幅堆叠，侧栏自身再分两列 */
+.page--homepage .main > .row > .large-9,
+.page--homepage .main > .row > .large-3 { width: 100%; float: none; }
+.page--homepage .main > .row > .large-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.page--homepage .large-9 > .section:first-child {
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--sylu-surface);
+  box-shadow: none;
+}
+
+.page--homepage .large-9 > .section:first-child .section__body { padding: 34px 38px 40px; }
+
+/* ---------- 侧栏卡片 ---------- */
+.page--homepage .large-3 .section.side {
+  overflow: hidden;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-container);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.page--homepage .large-3 .section__header {
+  border-bottom: 1px solid var(--sylu-border);
+  background: var(--sylu-surface);
+}
+
+.page--homepage .large-3 .section__title { color: var(--sylu-ink); }
+
+/* ---------- 公告富文本排版 ---------- */
+.page--homepage .richmedia h1,
+.page--homepage .richmedia h2,
+.page--homepage .richmedia h3 { color: var(--sylu-ink); }
+
+.page--homepage .richmedia h1 {
+  margin-top: 0;
+  font-size: 30px;
+  letter-spacing: .02em;
+}
+
+.page--homepage .richmedia h2:first-child {
+  position: relative;
+  margin-bottom: 12px;
+  color: var(--sylu-ink);
+  font-size: 32px;
+  letter-spacing: .02em;
+}
+
+.page--homepage .richmedia h2:first-child::after {
+  content: "WELCOME TO SYLU OJ";
+  display: block;
+  margin-top: 6px;
+  color: var(--sylu-success);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .22em;
+}
+
+.page--homepage .richmedia h2 {
+  margin-top: 30px;
+  padding-left: 12px;
+  border-left: 3px solid var(--sylu-primary);
+  font-size: 19px;
+}
+
+.page--homepage .richmedia h3:first-of-type {
+  margin-bottom: 36px;
+  font-size: 30px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.page--homepage .richmedia a,
+.page--homepage .section__body a { color: var(--sylu-link); }
+
+.page--homepage .richmedia a:hover,
+.page--homepage .section__body a:hover { color: var(--sylu-primary); }
+
+.page--homepage .richmedia blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  border-left: 4px solid var(--sylu-success);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-success-soft);
+}
+
+/* 核心功能卡片：由 h3 后紧跟的列表呈现 */
+.page--homepage .richmedia h3 + ul {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.page--homepage .richmedia h3 + ul li {
+  min-height: 76px;
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-container);
+  background: linear-gradient(145deg, #fff, #f8faf7);
+  box-shadow: 0 4px 14px rgba(38, 50, 31, .06);
+}
+
+.page--homepage .richmedia h3 + ul li::before {
+  content: "";
+  display: block;
+  width: 26px;
+  height: 3px;
+  margin-bottom: 9px;
+  border-radius: var(--sylu-radius-pill);
+  background: var(--sylu-primary);
+}
+
+.page--homepage .richmedia h3 + ul li a {
+  color: var(--sylu-ink);
+  font-weight: 700;
+}
+
+.page--homepage .richmedia h3 + ul li:hover {
+  border-color: rgba(177, 45, 40, .35);
+  box-shadow: 0 8px 20px rgba(177, 45, 40, .10);
+}
+
+/* ---------- 最新题目：长题名与时间分行 ---------- */
+.page--homepage .col--problem-name p {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 0;
+}
+
+.page--homepage .col--problem-name p + p { border-top: 1px solid var(--sylu-border); }
+
+.page--homepage .col--problem-name p > span {
+  float: none !important;
+  color: var(--sylu-muted);
+  font-size: 12px;
+}
+
+/* ---------- 目标态：模板接管后的首屏组件 ---------- */
+.sylu-hero {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 64px;
+  align-items: center;
+  min-height: 500px;
+  margin: -34px -38px 34px;
+  padding: 70px 38px;
+  border-bottom: 1px solid var(--sylu-border);
+  background:
+    radial-gradient(640px 240px at 90% 0%, rgba(35, 24, 21, .11), transparent 65%),
+    linear-gradient(160deg, #f2f6ef, #fff 65%);
+}
+
+.sylu-hero > div { min-width: 0; }
+
+.sylu-hero-kicker {
+  margin: 0 0 12px;
+  color: var(--sylu-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.sylu-hero h1 {
+  margin: 0 0 14px;
+  color: var(--sylu-ink);
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.sylu-hero h1 em {
+  color: var(--sylu-ink);
+  font-style: normal;
+}
+
+.sylu-hero-desc {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: #596058;
+}
+
+.sylu-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sylu-hero-actions a {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--sylu-primary);
+  border-radius: var(--sylu-radius-pill);
+  font-weight: 700;
+}
+
+.sylu-hero-actions a:first-child {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary);
+}
+
+.sylu-hero-actions a:last-child {
+  color: var(--sylu-primary);
+  background: transparent;
+}
+
+.sylu-code-window {
+  overflow: hidden;
+  border: 1px solid rgba(35, 24, 21, .12);
+  border-radius: var(--sylu-radius-card);
+  background: #1f251c;
+  box-shadow: var(--sylu-shadow-code);
+}
+
+.sylu-code-bar {
+  padding: 10px 14px;
+  color: #d9cfc9;
+  background: #2b3127;
+  font-size: 12px;
+}
+
+.sylu-code-window pre {
+  margin: 0;
+  padding: 24px;
+  color: #f5eee8;
+  font: 13px/1.9 var(--sylu-font-code);
+}
+
+.sylu-code-result {
+  padding: 9px 14px;
+  color: #d5e5ce;
+  background: #33412f;
+  font-size: 12px;
+}
+
+/* ---------- LEGACY(公告首屏)：按 DOM 位置复刻上面的首屏 ----------
+   根因：markdown-it-xss.ts 的 safeAttrValue 只放行白名单 class，公告里的
+   .sylu-hero 会被剥掉，所以只能靠 .richmedia > div:first-child 定位。
+   首页模板化（覆盖 main.html + partials/homepage/*）后本段整体删除。 */
+.page--homepage .richmedia > div:first-child {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 64px;
+  align-items: center;
+  min-height: 500px;
+  margin: -34px -38px 34px;
+  padding: 70px 38px;
+  border-bottom: 1px solid var(--sylu-border);
+  background:
+    radial-gradient(640px 240px at 90% 0%, rgba(35, 24, 21, .11), transparent 65%),
+    linear-gradient(160deg, #f2f6ef, #fff 65%);
+}
+
+.page--homepage .richmedia > div:first-child > div { min-width: 0; }
+
+.page--homepage .richmedia > div:first-child > div:first-child p:first-child {
+  margin: 0 0 12px;
+  color: var(--sylu-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.page--homepage .richmedia > div:first-child h1 {
+  margin: 0 0 14px;
+  color: var(--sylu-ink);
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.page--homepage .richmedia > div:first-child h1 em {
+  color: var(--sylu-ink);
+  font-style: normal;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child p:nth-of-type(2) {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: #596058;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--sylu-primary);
+  border-radius: var(--sylu-radius-pill);
+  font-weight: 700;
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a:first-child {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary);
+}
+
+.page--homepage .richmedia > div:first-child > div:first-child > div a:last-child {
+  color: var(--sylu-primary);
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child {
+  overflow: hidden;
+  border: 1px solid rgba(35, 24, 21, .12);
+  border-radius: var(--sylu-radius-card);
+  background: #1f251c;
+  box-shadow: var(--sylu-shadow-code);
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child > div {
+  padding: 10px 14px;
+  color: #d9cfc9;
+  background: #332622;
+  font-size: 12px;
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child > div:first-child { background: #2b3127; }
+
+.page--homepage .richmedia > div:first-child > div:last-child > div:last-child {
+  color: #d5e5ce;
+  background: #33412f;
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child pre {
+  margin: 0;
+  padding: 24px;
+  color: #f5eee8;
+  background: #1f251c;
+  font: 13px/1.9 var(--sylu-font-code);
+}
+
+/* 示例区会被 Prism 包一层 code-toolbar；只修首页，题目页的复制按钮要保留 */
+.page--homepage .richmedia > div:first-child > div:last-child .code-toolbar {
+  padding: 0;
+  background: #1f251c;
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child pre,
+.page--homepage .richmedia > div:first-child > div:last-child pre code {
+  overflow-wrap: anywhere;
+  border: 0;
+  border-radius: 0;
+  color: #f5eee8;
+  background: #1f251c;
+  text-shadow: none;
+  white-space: pre-wrap;
+}
+
+.page--homepage .richmedia > div:first-child > div:last-child .code-toolbar .toolbar { display: none !important; }
+
+/* 首屏下方的整幅绿色收束条 */
+.page--homepage .richmedia > div:first-child + p {
+  margin: -34px -38px 64px;
+  padding: 38px;
+  background: var(--sylu-success);
+  color: var(--sylu-surface);
+  font-size: 20px;
+  text-align: center;
+}
+
+/* ---------- LEGACY(条件隐藏业务模块)：应由首页配置关掉模块，而不是用 :has 选择器藏起来 ---------- */
+.page--homepage .section.side:has(.group-list:empty) { display: none; }
+
+.page--homepage .large-3 .section.side:has(.section__body[name="hitokoto"]) { display: none; }

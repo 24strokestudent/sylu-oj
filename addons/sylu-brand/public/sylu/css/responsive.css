@@ -1,0 +1,113 @@
+/* 断点集中在一个文件里，移动端改造（P0 第 10 项）只看这里。
+   顺序固定为 1024 → 800 → 640 → 600，窄屏覆盖宽屏，不再像旧文件那样交错穿插。 */
+
+@media (max-width: 1024px) {
+  .sylu-home__modules { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 800px) {
+  .sylu-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    min-height: auto;
+    padding-top: 36px;
+    padding-bottom: 36px;
+  }
+
+  .sylu-entries { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .sylu-home { padding: 0 14px 28px; }
+
+  .sylu-about { padding: 0 14px; }
+
+  .sylu-hero { padding: 30px 20px; }
+
+  .sylu-hero-title { font-size: 28px; }
+
+  .sylu-band {
+    padding: 20px 14px;
+    font-size: 16px;
+  }
+
+  .sylu-entries { grid-template-columns: minmax(0, 1fr); }
+
+  .sylu-brand { margin-right: 8px; }
+
+  .sylu-brand__name { font-size: 14px; }
+
+  .sylu-brand__tagline { font-size: 11px; }
+
+  /* 题面在窄屏要收掉两侧留白：容器本身只剩 14px 边距，
+     模板里那层 .richmedia 与 .problem-content 的内边距再叠加就会把正文挤成一条。 */
+  .problem-content { padding: 0; font-size: 14.5px; }
+
+  .problem-content .richmedia { padding: 1rem .75rem; }
+}
+
+/* 600px 不是随手挑的：theme.css 正是在这个宽度把顶栏收进抽屉
+   （`@media(max-width:600px){.nav.slideout-menu{display:none}.header--mobile{display:block}}`），
+   改由处在文档流里的 .header--mobile 占位，所以从这里开始 .main 不必再让出导航高度。
+   之前这条写在 640 的块里，留下 601–640px 的空档：那段宽度上导航仍然是 fixed 的，
+   却没有对应的净空，首行照样被盖住。 */
+@media (max-width: 600px) {
+  .main { padding-top: 16px; }
+
+  /* 上游在这个宽度把 .section 拉到容器边缘（margin-left/right:-.9375rem），
+     配上本站的描边与圆角会变成"卡片左右各切掉一条边"。归零后交给 .main 的留白。 */
+  .page--problem_main .section,
+  .page--problem_detail .section,
+  .page--record_main .section,
+  .page--record_detail .section {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* 题库：上游在这里藏掉了 状态/难度 两列，但"我做没做过"和"这题多难"
+     恰恰是手机上选题要看的两件事（计划 §10）。重新放出来，代价是必须压缩：
+     状态列只留图标 + 分数（英文状态词在 390px 下会把题名挤没），难度列收窄。 */
+  .page--problem_main .col--status {
+    display: table-cell;
+    width: 4.5rem;
+  }
+
+  .page--problem_main .record-status--text { font-size: 0; }
+
+  .page--problem_main .record-status--text > span { font-size: 13px; }
+
+  .page--problem_main .col--difficulty {
+    display: table-cell;
+    width: 2.75rem;
+  }
+
+  /* 表头里的"显示标签"开关是 float:right 的小胶囊，而 .data-table 的 th 带 nowrap，
+     窄屏下浮层会直接压在"题目"两个字上。只让表头允许折行，正文单元格仍走省略号。 */
+  .page--problem_main .data-table th,
+  .page--record_main .data-table th { white-space: normal; }
+
+  /* 记录列表：状态列上游给的是 10.625rem（170px），在 390px 里占掉近半屏，
+     题名会被省略号截到看不清。同样压成图标 + 分数。 */
+  .page--record_main .col--status { width: 5.5rem; }
+
+  .page--record_main .record-status--text { font-size: 0; }
+
+  .page--record_main .record-status--text > span { font-size: 13px; }
+
+  /* 搜索行：题目统计与排序下拉都是绝对定位的，窄屏下会互相压住。
+     统计改回文档流并排到最前，下拉收窄后贴住搜索按钮。 */
+  .search { flex-wrap: wrap; }
+
+  .search > div {
+    position: static;
+    width: 100%;
+    order: -1;
+    margin-bottom: 6px;
+  }
+
+  .search-sort {
+    right: 37px;
+    width: 96px;
+    font-size: 13px;
+  }
+}

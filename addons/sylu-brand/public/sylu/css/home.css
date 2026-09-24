@@ -1,0 +1,282 @@
+/* 首页。首屏、绿色条与快捷入口绑定 addons/sylu-brand/templates/main.html 里的
+   .sylu-* 类名；动态模块只按 .section / .side 这类语义类排版，不再按 DOM 位置猜测。 */
+
+/* ---------- 版面 ---------- */
+/* 让出导航高度这件事统一由 shell.css 的 .main 负责，首页不再单独归零：
+   顶栏是 fixed 的半透明白条，归零的结果是首屏卡片的上边框和圆角被它切掉。 */
+.page--homepage .main {
+  background: var(--sylu-surface);
+}
+
+.sylu-home {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+/* ---------- 动态模块 ---------- */
+.sylu-home__modules {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 28px;
+}
+
+.sylu-home__col {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.sylu-home__col .section {
+  margin-bottom: 0;
+  overflow: hidden;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-container);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.sylu-home__col .section__header {
+  border-bottom: 1px solid var(--sylu-border);
+  background: var(--sylu-surface);
+}
+
+.sylu-home__col .section__title { color: var(--sylu-ink); }
+
+/* 上游给排行榜的用户名列写了 17.5rem，放进窄侧栏会把 RP 列挤出容器 */
+.sylu-home__col .col--user { width: 7.5rem; }
+
+.sylu-home__col .col--rp { width: 3.5rem; }
+
+/* ---------- 公告富文本排版 ---------- */
+/* 公告正文只放纯文本与标题：class 会被 markdown 过滤器剥掉，样式只能挂在语义标签上。 */
+.page--homepage .richmedia h1,
+.page--homepage .richmedia h2,
+.page--homepage .richmedia h3 { color: var(--sylu-ink); }
+
+.page--homepage .richmedia h2:first-child {
+  margin-top: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--sylu-primary);
+  font-size: 22px;
+  letter-spacing: .02em;
+}
+
+.page--homepage .richmedia h3 {
+  margin-top: 26px;
+  padding-left: 12px;
+  border-left: 3px solid var(--sylu-primary);
+  font-size: 18px;
+}
+
+.page--homepage .richmedia a,
+.page--homepage .section__body a { color: var(--sylu-link); }
+
+.page--homepage .richmedia a:hover,
+.page--homepage .section__body a:hover { color: var(--sylu-primary); }
+
+.page--homepage .richmedia blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  border-left: 4px solid var(--sylu-success);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-success-soft);
+}
+
+/* ---------- 最新题目：长题名与时间分行 ---------- */
+.page--homepage .col--problem-name p {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 0;
+}
+
+.page--homepage .col--problem-name p + p { border-top: 1px solid var(--sylu-border); }
+
+.page--homepage .col--problem-name p > span {
+  float: none !important;
+  color: var(--sylu-muted);
+  font-size: 12px;
+}
+
+/* ---------- 首屏 ---------- */
+.sylu-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: 56px;
+  align-items: center;
+  min-height: 460px;
+  margin-top: 0;
+  padding: 48px 44px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-card);
+  background:
+    radial-gradient(640px 240px at 90% 0%, rgba(35, 24, 21, .11), transparent 65%),
+    linear-gradient(160deg, #f2f6ef, #fff 65%);
+}
+
+.sylu-hero__text { min-width: 0; }
+
+.sylu-hero-kicker {
+  margin: 0 0 12px;
+  color: var(--sylu-success);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .22em;
+}
+
+.sylu-hero-title {
+  margin: 0 0 14px;
+  color: var(--sylu-ink);
+  font-size: clamp(28px, 3.2vw, 42px);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.sylu-hero-title em {
+  color: var(--sylu-primary);
+  font-style: normal;
+}
+
+.sylu-hero-desc {
+  max-width: 520px;
+  margin: 0 0 22px;
+  color: var(--sylu-muted);
+}
+
+.sylu-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sylu-hero-btn {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid var(--sylu-primary);
+  border-radius: var(--sylu-radius-pill);
+  font-weight: 700;
+}
+
+.sylu-hero-btn--primary {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary);
+}
+
+.sylu-hero-btn--primary:hover {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary-hover);
+}
+
+.sylu-hero-btn--ghost {
+  color: var(--sylu-primary);
+  background: transparent;
+}
+
+.sylu-hero-btn--ghost:hover {
+  color: var(--sylu-primary-hover);
+  background: var(--sylu-success-soft);
+}
+
+.sylu-code-window {
+  overflow: hidden;
+  border: 1px solid rgba(35, 24, 21, .12);
+  border-radius: var(--sylu-radius-card);
+  background: #1f251c;
+  box-shadow: var(--sylu-shadow-code);
+}
+
+.sylu-code-bar {
+  padding: 10px 14px;
+  color: #d9cfc9;
+  background: #2b3127;
+  font-size: 12px;
+}
+
+.sylu-code-window pre {
+  margin: 0;
+  padding: 24px;
+  font: 13px/1.9 var(--sylu-font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Prism 会给 code 自带配色，不覆盖就会在深色窗口里糊成一片 */
+.sylu-code-window pre,
+.sylu-code-window pre code {
+  border: 0;
+  border-radius: 0;
+  color: #f5eee8;
+  background: transparent;
+  text-shadow: none;
+}
+
+.sylu-code-result {
+  padding: 9px 14px;
+  color: #d5e5ce;
+  background: #33412f;
+  font-size: 12px;
+}
+
+/* ---------- 绿色收束条 ---------- */
+.sylu-band {
+  margin: 24px 0 0;
+  padding: 26px 20px;
+  border-radius: var(--sylu-radius-container);
+  background: var(--sylu-success);
+  color: var(--sylu-surface);
+  font-size: 19px;
+  text-align: center;
+  letter-spacing: .06em;
+}
+
+/* ---------- 快捷入口 ---------- */
+.sylu-entries {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.sylu-entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon title" "icon desc";
+  gap: 2px 14px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-card);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.sylu-entry__icon {
+  grid-area: icon;
+  color: var(--sylu-primary);
+  font-size: 24px;
+}
+
+.sylu-entry__title {
+  grid-area: title;
+  color: var(--sylu-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sylu-entry__desc {
+  grid-area: desc;
+  color: var(--sylu-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sylu-entry:hover {
+  border-color: rgba(177, 45, 40, .35);
+  box-shadow: 0 8px 20px rgba(177, 45, 40, .10);
+}
+
+.sylu-entry:hover .sylu-entry__title { color: var(--sylu-primary); }

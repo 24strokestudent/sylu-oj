@@ -1,0 +1,95 @@
+/* 页面外壳：主内容区、导航、页脚。全部绑定 Hydro 的稳定类名，或本站模板自己的
+   .sylu-* 类名；不再出现按 DOM 位置猜的选择器。 */
+/* 导航是 position:fixed（theme.css 顶层 `.nav{position:fixed}`，并用
+   `margin-bottom:-2.8125rem` 把自己的占位抵消掉），它不占文档流，
+   所以每个页面都得自己让出导航高度——上游就是靠 `.main{padding:3.4375rem 0}`
+   （≥1000px 时 4rem）做到这一点的。这里曾写死 28px，比 45px 的导航还矮，
+   结果是所有非首页页面（关于页、题库、提交记录…）的第一行被压在导航条下面。
+   首页也走这一条：home.css 里曾另写 .page--homepage .main{padding-top:0}，
+   结果是首屏卡片的上边框和圆角被 fixed 的半透明导航切掉，现已删除。 */
+.main {
+  padding-top: calc(var(--sylu-nav-h) + 10px);
+  padding-bottom: 40px;
+}
+
+.nav {
+  background: rgba(255, 255, 255, .97);
+  border-bottom: 1px solid var(--sylu-border);
+  box-shadow: var(--sylu-shadow-nav);
+}
+
+/* 42px 的 logo 撑不进 45px 的导航条：上游给 .nav 的是 height:2.8125rem，
+   而品牌区是"logo + 两行文字"，实测会把链接盒子顶到 55px，副标题正好压在
+   导航下边框上。所以 logo 收进导航高度，品牌链接也显式锁一行高。 */
+.nav__logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+/* 品牌区：DOM 来自 addons/sylu-brand/templates/partials/nav.html。
+   这里是本站第一处"类名对得上模板"的导航样式——之前站名是伪元素 content 塞的，
+   读屏读不到、窄屏没法单独处理，而且必须依赖"它是第一个 li"这个位置假设。 */
+.sylu-brand {
+  margin-right: 14px;
+}
+
+.sylu-brand__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--sylu-nav-h);
+  color: var(--sylu-ink);
+}
+
+.sylu-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sylu-brand__name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.sylu-brand__tagline {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sylu-muted);
+}
+
+.sylu-brand__link:hover .sylu-brand__name {
+  color: var(--sylu-primary);
+}
+
+.nav__item {
+  color: var(--sylu-ink);
+  transition: color .18s ease, background-color .18s ease;
+}
+
+.nav__item:hover,
+.nav__item.nav--active {
+  color: var(--sylu-primary);
+  background: #f8eeec;
+}
+
+.nav__item--round {
+  color: var(--sylu-primary);
+  border-color: var(--sylu-primary);
+}
+
+.nav__item--round:hover {
+  color: var(--sylu-surface);
+  background: var(--sylu-primary);
+}
+
+.footer {
+  border-top: 1px solid var(--sylu-border);
+  background: var(--sylu-surface);
+}
+
+.footer__extra-link-item {
+  color: var(--sylu-muted);
+}

@@ -1,0 +1,537 @@
+/* C 级业务页（题库 / 题面 / 提交记录 / 提交详情 / 比赛 / 作业 / 训练 / 讨论 / 排名 / 登录背景）。
+   计划 §10 §11 §13 §14，以及 2026-09-21 补齐的六页。
+   这些页面属 C 级：只用 CSS 改造，不覆盖上游模板，所以这里的选择器全部来自
+   .ref/Hydro/packages/ui-default/templates 的原文类名，改名或换结构都会静默失效。
+   窄屏的断点规则统一放 responsive.css。
+
+   作用域分两种，是刻意的：
+     - 版面类规则（卡片、表格列宽、题面排版）一律挂在 .page--<对应页面> 上，
+       名单与 test/ui/render.js 的场景一一对应：没截过图的页面不顺手改（后台 manage 至今未验）。
+     - 判题状态色、分页、侧栏菜单、搜索控件是上游的共享组件，不限定页面，
+       这样比赛/作业里的同一枚状态格子也一起换成品牌色。
+   例外是分类侧栏（.group-list/.chip-list）：同一个 partial 也出现在首页，
+   而首页已经单独签核过，所以它限定在题库，改首页要动 home.css。
+   这条边界由 test/ui/compare.js 兜底：home-*/about/baseline 与上一版必须逐像素一致。 */
+
+/* ---------- 区块卡片 ---------- */
+/* 上游 .section 是"白底 + 大片蓝灰投影、无描边、无圆角"，和首页那套
+   描边 + 圆角 + 柔和投影的卡片是两种语言——计划 §10 说的"与首页视觉割裂"，
+   主要就割在这里。名单只放沙箱里真截过图、目视验收过的页面：
+   比赛/作业/训练/讨论/排名是 2026-09-21 补齐的六页，后台（manage）仍未验，
+   所以不在这里。新增一个页面作用域的前提是它在 render.js 里有场景。 */
+.page--problem_main .section,
+.page--problem_detail .section,
+.page--record_main .section,
+.page--record_detail .section,
+.page--contest_main .section,
+.page--contest_detail .section,
+.page--homework_main .section,
+.page--training_main .section,
+.page--discussion_main .section,
+.page--ranking .section {
+  overflow: hidden;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-container);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.page--problem_main .section__header,
+.page--record_main .section__header,
+.page--record_detail .section__header,
+.page--problem_detail .section__header,
+.page--contest_main .section__header,
+.page--homework_main .section__header,
+.page--training_main .section__header,
+.page--discussion_main .section__header,
+.page--ranking .section__header {
+  border-bottom: 1px solid var(--sylu-border);
+}
+
+/* 标题条里塞了 .section__tools（按钮组）时上游靠 padding-bottom:0 收边，
+   加了描边后会出现"标题下有横线、按钮贴着线"的挤压，这里补回呼吸空间。 */
+.page--problem_main .section__header,
+.page--record_main .section__header,
+.page--record_detail .section__header {
+  padding-bottom: .9375rem;
+}
+
+.page--problem_main .section__title,
+.page--problem_detail .section__title,
+.page--record_main .section__title,
+.page--record_detail .section__title,
+.page--contest_main .section__title,
+.page--contest_detail .section__title,
+.page--homework_main .section__title,
+.page--training_main .section__title,
+.page--discussion_main .section__title,
+.page--ranking .section__title {
+  color: var(--sylu-ink);
+}
+
+/* ---------- 判题状态 ---------- */
+/* 上游把这几个文字色写成 !important，不带 !important 的覆盖不会生效，
+   也不会报错——只会得到"改了但没改"的假结论。 */
+.record-status--text.pass { color: var(--sylu-status-pass) !important; }
+.record-status--text.fail { color: var(--sylu-status-fail) !important; }
+.record-status--text.progress { color: var(--sylu-status-progress) !important; }
+.record-status--text.pending { color: var(--sylu-status-pending) !important; }
+.record-status--text.ignored { color: var(--sylu-status-ignored) !important; }
+
+.record-status--icon.pass:before { color: var(--sylu-status-pass); }
+.record-status--icon.fail:before { color: var(--sylu-status-fail); }
+.record-status--icon.progress:before { color: var(--sylu-status-progress); }
+.record-status--icon.pending:before { color: var(--sylu-status-pending); }
+.record-status--icon.ignored:before { color: var(--sylu-status-ignored); }
+
+.record-status--border.pass { border-left-color: var(--sylu-status-pass); }
+.record-status--border.fail { border-left-color: var(--sylu-status-fail); }
+.record-status--border.progress { border-left-color: var(--sylu-status-progress); }
+.record-status--border.pending { border-left-color: var(--sylu-status-pending); }
+.record-status--border.ignored { border-left-color: var(--sylu-status-ignored); }
+
+/* 整格淡底：状态列是这几张表里唯一需要"扫一眼就分出来"的列，
+   只靠左侧 3px 色条在长表里不够。文字始终保留（计划 §13：颜色只是辅助）。 */
+td.record-status--border.pass { background: var(--sylu-status-pass-soft); }
+td.record-status--border.fail { background: var(--sylu-status-fail-soft); }
+td.record-status--border.progress { background: var(--sylu-status-progress-soft); }
+td.record-status--border.pending { background: var(--sylu-status-pending-soft); }
+td.record-status--border.ignored { background: var(--sylu-status-ignored-soft); }
+
+/* ---------- 表格通用 ---------- */
+.page--problem_main .data-table,
+.page--record_main .data-table,
+.page--record_detail .data-table {
+  font-size: 13px;
+}
+
+.page--problem_main .data-table tbody tr,
+.page--record_main .data-table tbody tr {
+  transition: background-color .15s ease;
+}
+
+.page--problem_main .data-table tbody tr:hover,
+.page--record_main .data-table tbody tr:hover {
+  background: var(--sylu-success-soft);
+}
+
+.page--problem_main .col--pid,
+.page--record_main .col--case,
+.page--record_detail .col--case {
+  color: var(--sylu-muted);
+  font-family: var(--sylu-font-code);
+}
+
+.page--problem_main .col--problem-name a,
+.page--record_main .col--problem-name a {
+  color: var(--sylu-ink);
+  font-weight: 600;
+}
+
+.page--problem_main .col--problem-name a:hover,
+.page--record_main .col--problem-name a:hover {
+  color: var(--sylu-primary);
+}
+
+.page--problem_main .col--ac-tried,
+.page--problem_main .col--difficulty,
+.page--record_main .col--time,
+.page--record_main .col--memory,
+.page--record_main .col--submit-at {
+  color: var(--sylu-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 难度是选题的第一依据，上游把它和"AC/尝试"涂成同样的灰，权重不够 */
+.page--problem_main .col--difficulty {
+  color: var(--sylu-text);
+  font-weight: 700;
+}
+
+.page--problem_main .col--status__text { line-height: 1.9; }
+
+/* 题库的状态列。上游给 8.75rem，配上图标和分数之后"Wrong Answer / Time Exceeded"
+   会被省略号切掉尾字母——状态词是学生判断"该不该重做这题"的直接依据，
+   宁可让题名多截两个字。窄屏下 responsive.css 会把它压回图标 + 分数。 */
+.page--problem_main .col--status { width: 10rem; }
+
+/* 递交时间。上游给 .col--submit-at 的 7.1875rem 装不下 "2026-9-22 4:35:01"，
+   配合 .data-table 的 nowrap+省略号，桌面端也被切成 "2026-9-22 4..."；
+   时间戳是查记录的主要线索，桌面宽度下直接放宽到能放下整串。 */
+.page--record_main .col--submit-at { width: 9rem; }
+
+/* ---------- 标签（要轻，计划 §10） ---------- */
+.problem__tag-item {
+  border-radius: var(--sylu-radius-pill);
+  background: var(--sylu-bg);
+  color: var(--sylu-muted);
+  font-size: 12px;
+}
+
+.problem__tag-item.interactive:hover {
+  background: var(--sylu-success-soft);
+  color: var(--sylu-ink);
+}
+
+.problem__tag-link {
+  border-radius: var(--sylu-radius-pill);
+  background: transparent;
+  color: var(--sylu-muted) !important;
+  font-size: 12px;
+}
+
+.problem__tag-link:hover {
+  background: var(--sylu-primary);
+  color: var(--sylu-surface) !important;
+}
+
+/* "显示标签 / 隐藏标签"是表格里的动作，不是标签本身 */
+.toggle-tag {
+  padding: 2px 8px;
+  border: 1px solid var(--sylu-border-strong);
+  border-radius: var(--sylu-radius-pill);
+  color: var(--sylu-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.toggle-tag:hover {
+  border-color: var(--sylu-primary);
+  color: var(--sylu-primary);
+}
+
+/* ---------- 搜索与筛选 ---------- */
+/* 上游的搜索按钮是 Hydro 的青 #00b4cc、排序下拉贴着它排，和本站的红色主色是两套。 */
+.search > input {
+  border: 1px solid var(--sylu-border-strong);
+  border-radius: var(--sylu-radius-input) 0 0 var(--sylu-radius-input);
+  color: var(--sylu-text);
+  font-size: 14px;
+}
+
+.search > button {
+  border: 1px solid var(--sylu-primary);
+  border-radius: 0 var(--sylu-radius-input) var(--sylu-radius-input) 0;
+  background: var(--sylu-primary);
+  font-size: 16px;
+}
+
+.search > button:hover {
+  border-color: var(--sylu-primary-hover);
+  background: var(--sylu-primary-hover);
+}
+
+.search-sort {
+  color: var(--sylu-text);
+  font-size: 14px;
+}
+
+/* 题目统计（"9 道题"）压在搜索框里，绝对定位到右侧：给它一个可读的字号 */
+.search > div {
+  right: 180px;
+  color: var(--sylu-muted);
+  font-size: 14px;
+}
+
+.page--record_main .filter-user,
+.page--record_main label {
+  color: var(--sylu-muted);
+  font-size: 13px;
+}
+
+/* ---------- 侧栏菜单 ---------- */
+/* 上游 hover 是 Hydro 蓝 #4690d0，题详侧栏又是学生最常点的区域 */
+.page--problem_main .menu__link,
+.page--problem_detail .menu__link,
+.page--record_detail .menu__link {
+  color: var(--sylu-text);
+}
+
+.page--problem_main .menu__link:not(.disabled):hover,
+.page--problem_detail .menu__link:not(.disabled):hover,
+.page--record_detail .menu__link:not(.disabled):hover {
+  border-left-color: var(--sylu-primary);
+  background: var(--sylu-success-soft);
+  color: var(--sylu-ink);
+}
+
+.page--problem_detail .menu__link.highlight {
+  border-left-color: var(--sylu-primary);
+  background: var(--sylu-success-soft);
+  color: var(--sylu-primary);
+  font-weight: 700;
+}
+
+/* ---------- 分页 ---------- */
+.pager__item.current {
+  color: var(--sylu-primary) !important;
+  border-bottom-color: var(--sylu-primary) !important;
+}
+
+.pager__item.link:hover {
+  border-bottom-color: var(--sylu-primary);
+  color: var(--sylu-ink);
+}
+
+/* ---------- 题面（计划 §11） ---------- */
+/* 题面要像技术文档，不是一堆卡片：只调层级与宽度，不切块。 */
+.problem-content {
+  padding: 4px 8px 8px;
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.problem-content .richmedia { padding: 1.2rem .9375rem; }
+
+.problem-content h1,
+.problem-content h2,
+.problem-content h3,
+.problem-content h4 {
+  margin: 1.6em 0 .7em;
+  color: var(--sylu-ink);
+  line-height: 1.45;
+}
+
+.problem-content h1 { font-size: 22px; }
+.problem-content h2 { font-size: 19px; }
+.problem-content h3 { font-size: 17px; }
+
+/* 题面里最常见的是"题目描述/输入/输出/样例"这种平级小节，
+   用左侧主色短条给出层级，比放大字号更省空间（也与首页公告一致）。 */
+.problem-content h2,
+.problem-content h3 {
+  padding-left: 10px;
+  border-left: 3px solid var(--sylu-primary);
+}
+
+.problem-content h2:first-child,
+.problem-content h3:first-child { margin-top: 0; }
+
+.problem-content p { margin: 0 0 .9em; }
+
+.problem-content :not(pre) > code {
+  padding: .1em .35em;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-bg);
+  color: var(--sylu-ink);
+  font-family: var(--sylu-font-code);
+  font-size: .92em;
+}
+
+/* 样例块：上游只给了灰底 pre，加描边后"输入/输出"两块更容易对上号 */
+.problem-content pre {
+  margin: 0 0 1.1em;
+  padding: 12px 14px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-bg);
+  color: var(--sylu-ink);
+  font-family: var(--sylu-font-code);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+
+.problem-content table {
+  width: 100%;
+  margin: 0 0 1.1em;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.problem-content th,
+.problem-content td {
+  padding: 6px 10px;
+  border: 1px solid var(--sylu-border);
+  text-align: left;
+}
+
+.problem-content th {
+  background: var(--sylu-bg);
+  font-weight: 700;
+}
+
+/* 图片不能撑破题面：markdown 里的示意图常常按原尺寸输出 */
+.problem-content img { max-width: 100%; height: auto; }
+
+.problem-content blockquote.note,
+.problem-content blockquote.warn {
+  margin: 1.1em 0;
+  padding: 12px 16px;
+  border-radius: var(--sylu-radius-input);
+}
+
+.problem-content blockquote.note {
+  border-left: 4px solid var(--sylu-link);
+  background: var(--sylu-status-progress-soft);
+}
+
+.problem-content blockquote.warn {
+  border-left: 4px solid var(--sylu-status-fail);
+  background: var(--sylu-status-fail-soft);
+}
+
+/* 题头：#1003 · 标题 与下面的指标条之间要有分隔，上游只靠间距 */
+.page--problem_detail .section__header { padding-bottom: .625rem; }
+
+.page--problem_detail .section__header .section__title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.star { color: var(--sylu-border-strong); }
+.star:hover { color: var(--sylu-primary); }
+.star.activated { color: var(--sylu-primary); }
+
+/* ---------- 提交详情（计划 §14） ---------- */
+/* 顶部状态条是这页的第一信息：分数 + 状态要一眼读到，其余靠后 */
+.page--record_detail #status .section__header {
+  padding-top: 1.125rem;
+  padding-bottom: 1.125rem;
+}
+
+.page--record_detail #status .section__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.page--record_detail .compiler-text,
+.page--record_detail .judge-text {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-bg);
+  color: var(--sylu-ink);
+  font-family: var(--sylu-font-code);
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* CE 时编译输出就是结论本身，上游默认把高度压到 15.625rem 再叠遮罩；
+   这里放宽，学生不必为了看第一行报错去点展开。 */
+.hasjs .collapsed #status:not([data-status="7"]) .compiler-text {
+  max-height: 24rem;
+}
+
+.page--record_detail .subtask {
+  background-color: var(--sylu-bg) !important;
+  font-weight: 700;
+}
+
+.page--record_detail .record_detail__table td,
+.page--record_detail .record_detail__table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.page--record_detail .message {
+  margin-left: 8px;
+  color: var(--sylu-muted);
+  font-family: var(--sylu-font-code);
+  font-size: 12px;
+}
+
+/* 提交的代码：行号块与题面样例用同一套代码语言 */
+.page--record_detail pre.line-numbers,
+.page--record_detail .section__body > pre {
+  padding: 14px 16px;
+  border: 1px solid var(--sylu-border);
+  border-radius: var(--sylu-radius-input);
+  background: var(--sylu-bg);
+  font-family: var(--sylu-font-code);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+/* ---------- 分类侧栏 ---------- */
+/* 限定在题库：上游 partials/category.html 同时被首页右侧用到，
+   首页是上一阶段签核过的页面，跟着这里改就会破坏"改版前后逐像素一致"。 */
+.page--problem_main .group-list__item { margin-bottom: 1.25rem; }
+
+.page--problem_main .group-list__item .section__title {
+  color: var(--sylu-ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.page--problem_main .chip-list__item a {
+  color: var(--sylu-link);
+  font-size: 13px;
+}
+
+.page--problem_main .chip-list__item a:hover { color: var(--sylu-primary); }
+
+/* ---------- 比赛横幅 ---------- */
+/* 列表页顶部那两块"正在进行 / 即将开始"是上游最抢眼的非品牌色：
+   粉红与天蓝的径向渐变，配一枚荧光黄按钮（#f6df45），和站内其余页面
+   不是一套语言。语义只有两个（进行中=主色、未开始=信息蓝），
+   所以直接换成同名令牌，并把上游的渐变图撤掉——只覆盖 background 会被
+   它单独声明的 background-image 留着，必须显式 none。
+   上游这里没有 border，卡片规则会给横幅描一圈浅灰边，压在品牌色上很脏，
+   所以把描边透明掉，圆角和投影保留。 */
+.page--contest_main .section--contest { border-color: transparent; }
+
+.page--contest_main .section--contest.live {
+  background-color: var(--sylu-primary);
+  background-image: none;
+}
+
+.page--contest_main .section--contest.ready {
+  background-color: var(--sylu-link);
+  background-image: none;
+}
+
+/* "查看详情"压在两种品牌色上，白底深字在两边都有足够对比；
+   上游的 hover 是"更亮的黄 + 黄色光晕"，这里换成抬升阴影。 */
+.page--contest_main .section--contest .detail-button {
+  color: var(--sylu-ink);
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-card);
+}
+
+.page--contest_main .section--contest .detail-button:hover {
+  background: var(--sylu-surface);
+  box-shadow: var(--sylu-shadow-raised);
+}
+
+/* 横幅里的信息图标原本是黄色（#ffeb81），在白字行里比文字还亮，跟着文字走。 */
+.page--contest_main .section--contest .info .icon {
+  color: var(--sylu-surface);
+  opacity: .85;
+}
+
+/* ---------- 训练进度条 ---------- */
+/* 上游用 #2ecc40 的荧光绿配 #eee 的灰槽，和记录页/题库的状态色对不上；
+   换成"通过"色与描边色，进度语义不变。 */
+.page--training_main .training__progress-bar { background: var(--sylu-border); }
+.page--training_main .training__progress-track { background-color: var(--sylu-status-pass); }
+
+/* ---------- 登录页背景 ---------- */
+/* 登录页走 layout/immersive.html：上游把整块画布铺成一张 Hydro 的蓝色风景照
+   （#80b2d5 + immersive-background.jpg），与品牌层毫无关系。
+   换成墨色底：.immersive--content 的白字、以及 base.css 的主色按钮在它上面都读得清。
+   选择器与上游同形（类 + id），靠加载顺序覆盖，不用 !important。 */
+.layout--immersive #panel {
+  background: var(--sylu-ink);
+  /* theme.css 里还有一条同特异性的 @media (min-resolution:1.5dppx) 规则，
+     在高倍屏上把 @2x 照片塞回 background-image。出图固定 deviceScaleFactor 1，
+     沙箱量不到这一条，所以 background-image 必须显式关掉（媒体查询不加特异性，
+     本站样式表在 theme.css 之后，后写覆盖先写）。 */
+  background-image: none;
+}
+
+/* 登录与注册的测试期说明放在表单底部，保持在深色画布上可读且不抢主按钮。 */
+.sylu-auth-notice {
+  margin: 1rem 0 0;
+  color: var(--sylu-surface);
+  opacity: .82;
+  font-size: .875rem;
+  line-height: 1.6;
+  text-align: center;
+}
