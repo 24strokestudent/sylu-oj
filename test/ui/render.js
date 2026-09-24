@@ -14,7 +14,6 @@ const yaml = require('js-yaml');
 
 const H = require('./lib/hydro');
 const D = require('./lib/data');
-const GATES = require('./lib/gates');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const ADDON = path.join(ROOT, 'addons', 'sylu-brand');

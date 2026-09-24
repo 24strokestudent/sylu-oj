@@ -128,6 +128,20 @@ ref 的当前样式，所以拿 HEAD 之后的 ref 比基线，量到的是"冻�
 上游模板来自 `.ref/Hydro`（gitignore 的只读参考）。找不到时设 `SYLU_HYDRO_REF` 指向
 `Hydro/packages/ui-default/templates` 的父目录。
 
+### 准备上游参考副本（首次必做）
+
+`SYLU_HYDRO_REF` 指向的是 **Hydro 仓库根目录**（代码里会拼 `packages/ui-default`），
+上游远端没有 4.58.5 的 git tag，所以用 npm 取**精确版本**最稳：
+
+```bash
+mkdir -p ../../.ref/Hydro/packages/ui-default
+npm pack @hydrooj/ui-default@4.58.5
+tar xzf hydrooj-ui-default-4.58.5.tgz -C ../../.ref/Hydro/packages/ui-default --strip-components=1
+```
+
+版本必须与线上一致（线上 `@hydrooj/ui-default` = 4.58.5，见 `docs/DEPLOY.md` 的版本记录表），
+否则 `check.js` 的覆盖漂移闸门（`checkOverrideDrift`）会因上游本身不同而误报。
+
 ## fixtures/：冻结的改造前样式
 
 首页模板化之后，`public/sylu/css/` 里那套"按 DOM 位置猜公告"的样式被整体删除了；
