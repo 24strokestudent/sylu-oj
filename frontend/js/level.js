@@ -15,31 +15,11 @@
   };
 
   /* ----------------------------------------------------------
-     占位数据（接入后端后由 GET /api/rank 返回，字段同名即可）
-     字段：username 用户名 / nickname 昵称 / college 学院
-           solved 通过题数 / submissions 提交次数 / accepted 通过次数
+     占位数据来自 js/users-data.js（与个人主页共用同一份）
+     接入后端后由 GET /api/rank 返回，字段同名即可
+     该文件缺失时列表显示空状态，不会报错
      ---------------------------------------------------------- */
-  var PLACEHOLDER_RANK = [
-    { username: 'chen_rui', nickname: '陈锐', college: '计算机科学与工程学院', solved: 16, submissions: 38, accepted: 29 },
-    { username: 'sylu_2026', nickname: '算法小白', college: '信息科学与工程学院', solved: 15, submissions: 44, accepted: 30 },
-    { username: 'zhao_min', nickname: '赵敏', college: '计算机科学与工程学院', solved: 14, submissions: 33, accepted: 24 },
-    { username: 'li_hao', nickname: '李昊', college: '自动化与电气工程学院', solved: 13, submissions: 41, accepted: 27 },
-    { username: 'wang_ke', nickname: '王珂', college: '信息科学与工程学院', solved: 12, submissions: 29, accepted: 21 },
-    { username: 'sun_yi', nickname: '孙一', college: '机械工程学院', solved: 11, submissions: 35, accepted: 22 },
-    { username: 'zhou_lin', nickname: '周琳', college: '计算机科学与工程学院', solved: 11, submissions: 26, accepted: 19 },
-    { username: 'xiao_yu', nickname: '肖宇', college: '其他学院', solved: 10, submissions: 31, accepted: 18 },
-    { username: 'huang_tao', nickname: '黄涛', college: '信息科学与工程学院', solved: 9, submissions: 24, accepted: 15 },
-    { username: 'lin_xi', nickname: '林夕', college: '自动化与电气工程学院', solved: 8, submissions: 22, accepted: 14 },
-    { username: 'gao_fan', nickname: '高帆', college: '机械工程学院', solved: 8, submissions: 30, accepted: 16 },
-    { username: 'meng_qi', nickname: '孟琪', college: '计算机科学与工程学院', solved: 7, submissions: 19, accepted: 12 },
-    { username: 'du_yu', nickname: '杜宇', college: '其他学院', solved: 6, submissions: 21, accepted: 11 },
-    { username: 'feng_lei', nickname: '冯磊', college: '信息科学与工程学院', solved: 5, submissions: 16, accepted: 9 },
-    { username: 'tang_xin', nickname: '唐欣', college: '自动化与电气工程学院', solved: 4, submissions: 13, accepted: 7 },
-    { username: 'bai_yun', nickname: '白云', college: '机械工程学院', solved: 3, submissions: 11, accepted: 5 },
-    { username: 'yan_ning', nickname: '闫宁', college: '其他学院', solved: 2, submissions: 9, accepted: 3 },
-    { username: 'newbie_01', nickname: '新同学', college: '信息科学与工程学院', solved: 1, submissions: 5, accepted: 1 },
-    { username: 'newbie_01', nickname: 'zhtjjk', college: '国际工程学院', solved: 1, submissions: 5, accepted: 1 }
-  ];
+  var PLACEHOLDER_RANK = window.SYLU_USERS || [];
 
   var els = {
     body: document.getElementById('rankBody'),
@@ -71,6 +51,11 @@
 
   function pctText(value) {
     return Math.round(value * 100) + '%';
+  }
+
+  // 个人主页地址（个人主页用 ?username= 定位）
+  function profileUrl(username) {
+    return 'user.html?username=' + encodeURIComponent(username);
   }
 
   // 通过题数降序 → 提交次数升序 → 通过率降序
@@ -144,8 +129,9 @@
     tr.appendChild(tdRank);
 
     var tdUser = document.createElement('td');
-    var wrap = document.createElement('div');
+    var wrap = document.createElement('a');
     wrap.className = 'rank-user';
+    wrap.href = profileUrl(row.username);
     var avatar = document.createElement('span');
     avatar.className = 'rank-avatar';
     avatar.setAttribute('aria-hidden', 'true');

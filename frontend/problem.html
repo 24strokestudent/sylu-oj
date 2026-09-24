@@ -1,0 +1,185 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>题目详情 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 题目详情——查看题面、输入输出格式与样例，在线提交代码并查看评测结果。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="题目详情 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="bank.html" class="active">题库</a>
+        <a href="competition.html">比赛</a>
+        <a href="talk.html">讨论</a>
+        <a href="level.html">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 面包屑 ==================== -->
+  <div class="container">
+    <nav class="crumbs" aria-label="面包屑导航">
+      <a href="index.html">首页</a>
+      <span aria-hidden="true">/</span>
+      <a href="bank.html">题库</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page" id="crumbCode">题目详情</span>
+    </nav>
+  </div>
+
+  <!-- ==================== 题目主体 ==================== -->
+  <section class="problem" id="problem">
+    <div class="container problem-layout" id="problemLayout">
+
+      <!-- 左：题面与提交 -->
+      <article class="problem-main" id="problemMain">
+
+        <div class="problem-card">
+          <h1 class="problem-title" id="problemTitle">加载中…</h1>
+          <div class="problem-meta" id="problemMeta"></div>
+
+          <div class="problem-body" id="problemBody"></div>
+          <div class="problem-samples" id="problemSamples"></div>
+        </div>
+
+        <nav class="problem-nav" id="problemNav" aria-label="题目切换"></nav>
+
+        <!-- 提交代码 -->
+        <section class="submit-card" aria-labelledby="submitTitle">
+          <h2 class="submit-title" id="submitTitle">提交代码</h2>
+
+          <!-- 提示条（由 js/problem.js 填充：演示模式 / 校验失败等） -->
+          <div class="form-alert" id="submitAlert" role="alert" aria-live="polite"></div>
+
+          <div class="submit-row">
+            <div class="field">
+              <label for="submitLanguage">语言</label>
+              <div class="input-wrap">
+                <select id="submitLanguage">
+                  <option value="cpp">C++</option>
+                  <option value="c">C</option>
+                  <option value="java">Java</option>
+                  <option value="python">Python 3</option>
+                  <option value="go">Go</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="submitCode">代码<span class="hint">最多 64 KB</span></label>
+            <textarea id="submitCode" class="code-input" rows="12" maxlength="65536"
+              spellcheck="false" autocomplete="off"
+              placeholder="在这里粘贴或输入你的代码…"></textarea>
+          </div>
+
+          <div class="submit-actions">
+            <p class="submit-hint">提交代码需要登录；判题功能待后端接入后开放</p>
+            <button type="button" class="btn btn-primary" id="submitBtn">提交</button>
+          </div>
+        </section>
+      </article>
+
+      <!-- 右：题目信息 -->
+      <aside class="problem-side" id="problemSide">
+        <div class="panel">
+          <h3 class="panel-title">题目信息</h3>
+          <ul class="info-list" id="problemInfo"></ul>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">我的状态</h3>
+          <p class="info-status" id="myStatus"></p>
+          <p class="info-note" id="myStatusNote"></p>
+          <a href="login.html" class="btn btn-outline" id="myStatusAction">登录查看进度</a>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 题目不存在时的提示（默认隐藏） -->
+    <div class="container">
+      <div class="state-card" id="problemMissing" hidden>
+        <p id="problemMissingText">题目不存在或已下线。</p>
+        <a href="bank.html" class="btn btn-primary">返回题库</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/problems-data.js"></script>
+  <script src="js/problem.js"></script>
+
+</body>
+
+</html>

@@ -758,7 +758,8 @@ img {
 
 .page-head-meta code,
 .rank-note code,
-.bank-note code {
+.bank-note code,
+.profile-note code {
   font-family: "SF Mono", Menlo, Consolas, monospace;
   font-size: 12px;
   background: var(--brown-light);
@@ -879,6 +880,10 @@ img {
   font-weight: 600;
 }
 
+.rank-user:hover strong {
+  color: var(--brand-red);
+}
+
 .rank-user small {
   display: block;
   font-size: 12px;
@@ -984,6 +989,587 @@ img {
     align-items: flex-start;
     flex-direction: column;
     gap: 14px;
+  }
+}
+
+/* ============================================================
+   个人主页（user）
+   复用 .crumbs / .stats / .data-card / .data-table / .tag / .chip
+   ============================================================ */
+
+.profile {
+  padding: 16px 0 76px;
+  background: var(--bg);
+}
+
+/* 页面内的统计条收成圆角卡片（首页那处是全幅通栏） */
+.profile .stats {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* 头部资料卡 */
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 24px 28px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--green-light);
+  color: var(--green);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.profile-id {
+  flex: 1;
+  min-width: 200px;
+}
+
+.profile-id h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  color: var(--green-deeper);
+}
+
+.profile-account {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.profile-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.profile-rank {
+  text-align: right;
+}
+
+.profile-rank b {
+  display: block;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--brown);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-rank span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Tab 导航 */
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 22px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--brown);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--green-deeper);
+  font-weight: 600;
+  border-bottom-color: var(--brand-red);
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.tab-panel .panel-title {
+  margin-top: 0;
+}
+
+/* 分布条（难度 / 知识点） */
+.dist-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.dist-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 76px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dist-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.dist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.dist-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 判题结果标签 */
+.verdict {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.verdict-ok    { background: #e5f2e5; color: #3c7a3c; }
+.verdict-bad   { background: #fbe6e3; color: #b3453a; }
+.verdict-warn  { background: #fdf3dc; color: #9a7718; }
+.verdict-muted { background: var(--brown-light); color: var(--muted); }
+
+/* 已通过题目 */
+.solved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.solved-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  font-size: 14px;
+}
+
+.solved-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.solved-list a {
+  color: var(--green-deeper);
+}
+
+.solved-list a:hover {
+  color: var(--brand-red);
+}
+
+.solved-list .num {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.profile-note {
+  margin: 16px 2px 0;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+/* ---------- 个人主页响应式 ---------- */
+
+@media (max-width: 620px) {
+  .profile {
+    padding: 8px 0 56px;
+  }
+
+  .profile-head {
+    padding: 20px 18px;
+  }
+
+  .profile-rank {
+    text-align: left;
+  }
+
+  .dist-row {
+    grid-template-columns: 48px 1fr 64px;
+  }
+}
+
+/* ============================================================
+   题目详情页（problem）
+   复用 .page-head 的配色变量、.panel、.field/.input-wrap、.btn、.tag、.chip
+   ============================================================ */
+
+/* 面包屑 */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.crumbs a:hover {
+  color: var(--brand-red);
+}
+
+.crumbs span[aria-current] {
+  color: var(--brown);
+  font-weight: 600;
+}
+
+.problem {
+  padding: 16px 0 76px;
+  background: var(--bg);
+}
+
+.problem-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+  padding-top: 16px;
+}
+
+.problem-main {
+  min-width: 0;
+}
+
+.problem-card {
+  padding: 26px 28px 28px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.problem-title {
+  margin: 0 0 12px;
+  font-size: 23px;
+  line-height: 1.4;
+  color: var(--green-deeper);
+}
+
+.problem-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 题面正文 */
+.problem-body {
+  margin-top: 22px;
+}
+
+.problem-body h2 {
+  margin: 24px 0 8px;
+  font-size: 16.5px;
+  color: var(--green-deeper);
+}
+
+.problem-body h2:first-child {
+  margin-top: 0;
+}
+
+.problem-body p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+.problem-body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: var(--brown-light);
+  color: var(--brown);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+/* 样例 */
+.problem-samples {
+  margin-top: 24px;
+}
+
+.sample {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sample + .sample {
+  margin-top: 14px;
+}
+
+.sample-head {
+  padding: 8px 14px;
+  background: var(--green-light);
+  color: var(--green-deeper);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.sample-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.sample-grid > div + div {
+  border-left: 1px solid var(--border);
+}
+
+.sample-label {
+  display: block;
+  padding: 8px 14px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.sample pre {
+  margin: 0;
+  padding: 6px 14px 12px;
+  overflow-x: auto;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+/* 上一题 / 下一题 */
+.problem-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+/* 提交代码 */
+.submit-card {
+  margin-top: 24px;
+  padding: 24px 28px 26px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.submit-title {
+  margin: 0 0 16px;
+  font-size: 17px;
+  color: var(--green-deeper);
+}
+
+.submit-row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.code-input {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+  background: #fbfdfa;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  resize: vertical;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.code-input:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(72, 87, 66, 0.13);
+}
+
+.submit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.submit-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 右侧信息面板 */
+.problem-side {
+  position: sticky;
+  top: 92px;
+}
+
+.problem-side .panel + .panel {
+  margin-top: 20px;
+}
+
+.problem-side .panel-list {
+  margin-bottom: 0;
+}
+
+.info-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.info-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  color: var(--muted);
+}
+
+.info-list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.info-list b {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.info-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.info-status .bank-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.info-note {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* 页面级空状态 / 缺失提示卡片（题目详情、个人主页共用） */
+.state-card {
+  padding: 52px 20px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.state-card p {
+  margin: 0 0 18px;
+}
+
+/* 设置了 display 的元素必须显式处理 [hidden]，
+   否则 UA 的 [hidden] { display: none } 会被 .problem-layout 的 display: grid 覆盖 */
+.problem-layout[hidden],
+.state-card[hidden] {
+  display: none;
+}
+
+/* ---------- 题目详情页响应式 ---------- */
+
+@media (max-width: 980px) {
+  .problem-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .problem-side {
+    position: static;
+  }
+}
+
+@media (max-width: 620px) {
+  .problem {
+    padding: 8px 0 56px;
+  }
+
+  .problem-card,
+  .submit-card {
+    padding: 20px 18px 22px;
+  }
+
+  .problem-title {
+    font-size: 20px;
+  }
+
+  .sample-grid,
+  .submit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sample-grid > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--border);
   }
 }
 

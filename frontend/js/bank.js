@@ -15,31 +15,11 @@
   };
 
   /* ----------------------------------------------------------
-     占位数据（接入后端后由 GET /api/problems 返回，字段同名即可）
-     字段：code 题号 / title 标题 / difficulty 难度
-           tags 知识点数组 / submissions 提交次数 / accepted 通过次数
-           status 提交状态（solved 已通过 / attempted 尝试过 / none 未尝试，
-                  登录后应随当前用户变化，未登录时全部为 none）
-     16 道题的提交与通过合计分别为 235 / 137，与首页统计条一致
+     占位数据来自 js/problems-data.js（与题目详情页共用同一份）
+     接入后端后由 GET /api/problems 返回，字段同名即可
+     该文件缺失时列表显示空状态，不会报错
      ---------------------------------------------------------- */
-  var PLACEHOLDER_PROBLEMS = [
-    { code: 'CS001-01-001', title: 'A+B 问题', difficulty: '简单', tags: ['模拟'], submissions: 30, accepted: 22, status: 'solved' },
-    { code: 'CS001-01-002', title: '闰年判断', difficulty: '简单', tags: ['模拟'], submissions: 26, accepted: 18, status: 'solved' },
-    { code: 'CS001-01-003', title: '最大公约数与最小公倍数', difficulty: '简单', tags: ['数学'], submissions: 22, accepted: 16, status: 'solved' },
-    { code: 'CS001-01-004', title: '斐波那契数列', difficulty: '简单', tags: ['数学'], submissions: 20, accepted: 14, status: 'solved' },
-    { code: 'CS001-01-005', title: '质数判断', difficulty: '中等', tags: ['数学'], submissions: 24, accepted: 9, status: 'attempted' },
-    { code: 'CS001-01-006', title: '字符串反转', difficulty: '简单', tags: ['字符串'], submissions: 18, accepted: 13, status: 'solved' },
-    { code: 'CS001-01-007', title: '统计单词个数', difficulty: '中等', tags: ['字符串'], submissions: 16, accepted: 12, status: 'attempted' },
-    { code: 'CS001-01-008', title: '冒泡排序', difficulty: '简单', tags: ['排序'], submissions: 15, accepted: 7, status: 'none' },
-    { code: 'CS001-01-009', title: '二分查找', difficulty: '中等', tags: ['二分'], submissions: 12, accepted: 9, status: 'none' },
-    { code: 'CS001-01-010', title: '前缀和入门', difficulty: '中等', tags: ['前缀和'], submissions: 11, accepted: 5, status: 'attempted' },
-    { code: 'CS001-01-011', title: '并查集入门', difficulty: '中等', tags: ['并查集'], submissions: 10, accepted: 4, status: 'none' },
-    { code: 'CS001-01-012', title: '最短路（Dijkstra）', difficulty: '困难', tags: ['图论'], submissions: 9, accepted: 3, status: 'none' },
-    { code: 'CS001-01-013', title: '0-1 背包', difficulty: '中等', tags: ['动态规划'], submissions: 8, accepted: 2, status: 'none' },
-    { code: 'CS001-01-014', title: '最长上升子序列', difficulty: '困难', tags: ['动态规划'], submissions: 6, accepted: 1, status: 'attempted' },
-    { code: 'CS001-01-015', title: '拓扑排序', difficulty: '困难', tags: ['图论'], submissions: 5, accepted: 1, status: 'none' },
-    { code: 'CS001-01-016', title: '字符串哈希', difficulty: '困难', tags: ['字符串'], submissions: 3, accepted: 1, status: 'none' }
-  ];
+  var PLACEHOLDER_PROBLEMS = window.SYLU_PROBLEMS || [];
 
   var DIFFICULTY_TAG_CLASS = {
     '简单': 'tag-easy',
@@ -133,6 +113,11 @@
     });
   }
 
+  // 题目详情页地址（详情页从查询参数读取题号）
+  function detailUrl(code) {
+    return 'problem.html?code=' + encodeURIComponent(code);
+  }
+
   function normalize(row, index) {
     var tags = row.tags;
     if (typeof tags === 'string') tags = tags.split(/[,，\s]+/);
@@ -175,10 +160,9 @@
 
   function buildCodeCell(problem) {
     var td = document.createElement('td');
-    // 题目详情页待做，先沿用站内其它占位链接的写法
     var link = document.createElement('a');
     link.className = 'chip chip-mono bank-code';
-    link.href = '#';
+    link.href = detailUrl(problem.code);
     link.textContent = problem.code;
     td.appendChild(link);
     return td;
@@ -188,7 +172,7 @@
     var td = document.createElement('td');
     var link = document.createElement('a');
     link.className = 'bank-title';
-    link.href = '#';
+    link.href = detailUrl(problem.code);
     link.textContent = problem.title;
     td.appendChild(link);
     return td;

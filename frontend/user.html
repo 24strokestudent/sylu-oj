@@ -1,0 +1,255 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>个人主页 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 个人主页——查看用户的通过题数、提交记录、比赛记录与已通过题目。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="个人主页 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="bank.html">题库</a>
+        <a href="competition.html">比赛</a>
+        <a href="talk.html">讨论</a>
+        <a href="level.html" class="active">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 面包屑 ==================== -->
+  <div class="container">
+    <nav class="crumbs" aria-label="面包屑导航">
+      <a href="index.html">首页</a>
+      <span aria-hidden="true">/</span>
+      <a href="level.html">排名</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page" id="crumbUser">个人主页</span>
+    </nav>
+  </div>
+
+  <!-- ==================== 个人主页 ==================== -->
+  <main class="profile" id="profile">
+    <div class="container" id="profileLayout">
+
+      <!-- 资料头部 -->
+      <section class="profile-head">
+        <span class="profile-avatar" id="profileAvatar" aria-hidden="true"></span>
+        <div class="profile-id">
+          <h1 id="profileNickname">加载中…</h1>
+          <p class="profile-account" id="profileAccount"></p>
+          <div class="profile-tags" id="profileTags"></div>
+        </div>
+        <div class="profile-rank">
+          <b id="profileRank">—</b>
+          <span>全站排名</span>
+        </div>
+      </section>
+
+      <!-- 数字条（复用首页统计条样式） -->
+      <section class="stats">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-num" id="statSolved">0</div>
+            <div class="stat-label">通过题数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="statSubmissions">0</div>
+            <div class="stat-label">提交次数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="statAccepted">0</div>
+            <div class="stat-label">通过次数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="statRate">0%</div>
+            <div class="stat-label">通过率</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 导航 -->
+      <div class="tabs" role="tablist" aria-label="个人主页内容">
+        <button type="button" class="tab" role="tab" id="tabOverview" aria-controls="panelOverview" aria-selected="true">概览</button>
+        <button type="button" class="tab" role="tab" id="tabSubmissions" aria-controls="panelSubmissions" aria-selected="false" tabindex="-1">提交记录</button>
+        <button type="button" class="tab" role="tab" id="tabContests" aria-controls="panelContests" aria-selected="false" tabindex="-1">比赛记录</button>
+        <button type="button" class="tab" role="tab" id="tabSolved" aria-controls="panelSolved" aria-selected="false" tabindex="-1">已通过</button>
+      </div>
+
+      <!-- 概览 -->
+      <section class="tab-panel" role="tabpanel" id="panelOverview" aria-labelledby="tabOverview" tabindex="0">
+        <h2 class="panel-title">难度分布</h2>
+        <div class="dist-list" id="difficultyDist"></div>
+
+        <h2 class="panel-title">知识点分布</h2>
+        <div class="tag-list" id="tagDist"></div>
+
+        <h2 class="panel-title">最近提交</h2>
+        <div class="data-card">
+          <div class="table-scroll">
+            <table class="data-table">
+              <caption class="visually-hidden">最近的提交记录</caption>
+              <thead>
+                <tr>
+                  <th scope="col">题目</th>
+                  <th scope="col">结果</th>
+                  <th scope="col">语言</th>
+                  <th scope="col" class="num">耗时</th>
+                  <th scope="col" class="num">内存</th>
+                  <th scope="col">时间</th>
+                </tr>
+              </thead>
+              <tbody id="recentBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 提交记录 -->
+      <section class="tab-panel" role="tabpanel" id="panelSubmissions" aria-labelledby="tabSubmissions" tabindex="0" hidden>
+        <div class="data-card">
+          <div class="table-scroll">
+            <table class="data-table">
+              <caption class="visually-hidden">提交记录</caption>
+              <thead>
+                <tr>
+                  <th scope="col">题目</th>
+                  <th scope="col">结果</th>
+                  <th scope="col">语言</th>
+                  <th scope="col" class="num">耗时</th>
+                  <th scope="col" class="num">内存</th>
+                  <th scope="col">时间</th>
+                </tr>
+              </thead>
+              <tbody id="submissionBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="profile-note">
+          为保证公平，源码仅本人可见；其他人只能看到结果、语言、耗时与内存。
+          接入后端后由 <code>GET /api/users/:username/submissions</code> 分页返回。
+        </p>
+      </section>
+
+      <!-- 比赛记录 -->
+      <section class="tab-panel" role="tabpanel" id="panelContests" aria-labelledby="tabContests" tabindex="0" hidden>
+        <div class="data-card">
+          <div class="table-scroll">
+            <table class="data-table">
+              <caption class="visually-hidden">参赛记录</caption>
+              <thead>
+                <tr>
+                  <th scope="col">比赛</th>
+                  <th scope="col">赛制</th>
+                  <th scope="col" class="num">名次</th>
+                  <th scope="col" class="num">通过题数</th>
+                  <th scope="col" class="num">得分</th>
+                  <th scope="col">时间</th>
+                </tr>
+              </thead>
+              <tbody id="contestBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="profile-note">
+          接入后端后由 <code>GET /api/users/:username/contests</code> 返回。
+        </p>
+      </section>
+
+      <!-- 已通过 -->
+      <section class="tab-panel" role="tabpanel" id="panelSolved" aria-labelledby="tabSolved" tabindex="0" hidden>
+        <div class="data-card">
+          <ul class="solved-list" id="solvedList"></ul>
+        </div>
+        <p class="profile-note" id="solvedNote"></p>
+      </section>
+
+    </div>
+
+    <!-- 用户不存在时的提示（默认隐藏） -->
+    <div class="container">
+      <div class="state-card" id="profileMissing" hidden>
+        <p id="profileMissingText">用户不存在。</p>
+        <a href="level.html" class="btn btn-primary">返回排行榜</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/problems-data.js"></script>
+  <script src="js/users-data.js"></script>
+  <script src="js/user.js"></script>
+
+</body>
+
+</html>
