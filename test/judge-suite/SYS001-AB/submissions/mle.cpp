@@ -1,16 +1,9 @@
-// 预期结果：Memory Limit Exceeded（持续申请并写入，避免被优化掉）
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
+// 预期结果：Memory Limit Exceeded（触碰超过题目限制的静态内存，避免 malloc 失败被误判为 RE）
+#include <cstddef>
+
+static volatile unsigned char memory[512ULL * 1024 * 1024];
 
 int main() {
-    const size_t chunk = 32 * 1024 * 1024;
-    for (int i = 0; i < 64; i++) {
-        char* p = (char*)malloc(chunk);
-        if (!p) return 1;
-        memset(p, i & 0xff, chunk);
-        printf("%d\n", i);
-        fflush(stdout);
-    }
+    for (std::size_t i = 0; i < sizeof(memory); i += 4096) memory[i] = static_cast<unsigned char>(i);
     return 0;
 }

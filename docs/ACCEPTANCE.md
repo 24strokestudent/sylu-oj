@@ -137,7 +137,7 @@ node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出�
 | `ce.cpp` | C++17 | Compile Error | | |
 | `re.cpp` | C++17 | Runtime Error | | |
 | `tle.cpp` | C++17 | Time Limit Exceeded | | |
-| `mle.cpp` | C++17 | Memory Limit Exceeded | | |
+| `mle.cpp` | C++17 | Memory Limit Exceeded | 已修正验收用例，需部署后复核 | |
 | `ole.cpp` | C++17 | Output Limit Exceeded | | |
 | `ac.py` | Python 3 | Accepted | | |
 | `wa.py` | Python 3 | Wrong Answer | | |
