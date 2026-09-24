@@ -150,7 +150,6 @@ node compare.js <git-ref>       # 与某版本比像素（证明"这次改动没
 
 | 优先级 | 事项 | 依据 |
 |---|---|---|
-| 🔴 | `test/ui/check.js` 有 1 项未通过：`contest-upcoming-student` 未渲染参赛表单（侧栏整块为空，缺 `data-contest-attend`），导致该场景前几条断言失去意义 | 本机跑 `check.js` 复现 |
 | 🟠 | 真机 smoke test 未做：未开赛比赛直链的后端闸门、榜单页、题单详情、讨论详情 | `docs/UI-FUNCTION-BASELINE.md` |
 | 🟠 | 管理后台 `/manage` 仍是上游原样（未做品牌化） | `addons/sylu-brand/README.md` |
 | 🟡 | C 级页面里"必须动 DOM 才能做"的条目（通过率列、难度文字分级、状态/时间筛选下拉、"只看我的"）本轮未做 | `test/ui/README.md` |

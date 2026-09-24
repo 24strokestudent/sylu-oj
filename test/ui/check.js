@@ -566,10 +566,15 @@ function checkContestGates() {
             bad++;
         }
     }
-    // 未开始的那一页必须仍然给得出"参赛"这条路径，否则上面两条 false 是页面整个没渲染导致的假通过
+    // 未开始的那一页必须仍然给得出"参赛"这条路径，否则上面两条 false 是页面整个没渲染导致的假通过。
+    // 上游把报名表单放在 partials/contest_sidebar.html：未报名 + 未结束 + 有 PERM_ATTEND_CONTEST 时输出
+    //   <form action=".../contest/<tid>" method="POST"><input type="hidden" name="operation" value="attend">
+    // 它与 contest_problemlist 链接出自同一个 if，正是本条要的语义。
+    // 注意：早期这里查的是 data-contest-attend，但上游 4.58.5（整份模板与仓库都搜过）并无该属性，
+    // 断言恒为 false；改为按真实存在的表单标记判定。
     const upcoming = read('contest-upcoming-student') || '';
-    if (!/data-contest-attend/.test(upcoming)) {
-        fail('contest-upcoming-student.html 没有参赛表单：侧栏整块没渲染，前面几条 false 不可信');
+    if (!/name="operation"\s+value="attend"/.test(upcoming)) {
+        fail('contest-upcoming-student.html 没有参赛表单（缺 operation=attend）：侧栏整块没渲染，前面几条 false 不可信');
         bad++;
     }
     // 指定分组的比赛（夹具 CONTEST_DOCS.grouped）只该出现在有 PERM_VIEW_HIDDEN_CONTEST 的页面
