@@ -26,6 +26,7 @@ const ADDON = path.join(ROOT, 'addons', 'sylu-brand');
 const ALLOWED_OVERRIDES = [
     'main.html',
     'partials/nav.html',
+    'partials/login_dialog.html',
     'login.html',
     'user_login.html',
     'user_register.html',

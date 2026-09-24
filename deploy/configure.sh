@@ -9,6 +9,8 @@
 #   bash deploy/configure.sh                       # 打印配置清单（只读，不改任何东西）
 #   bash deploy/configure.sh --apply \
 #        --site-url http://1.2.3.4/                # 写入品牌设置（§30 §32 §34 §40）
+#   bash deploy/configure.sh --test-registration --site-url http://<IP>/
+#                                                  # 测试期免邮箱验证，默认配置保留现有验证设置
 #   bash deploy/configure.sh --install-addon       # 安装插件并同步应用品牌设置
 #   bash deploy/configure.sh --verify --url https://oj.example.edu.cn/
 #                                                  # 校验线上页面是否符合规范
@@ -29,6 +31,7 @@ APPLY=0
 VERIFY=0
 SITE_URL=""
 RESTART_NEEDED=0
+TEST_REGISTRATION=0
 
 # 只要安装插件，就必须同时应用 CSS 链接等原生设置；否则插件会加载但首页仍是无样式状态。
 if [ "$INSTALL_ADDON" = 1 ] && [ "$APPLY" = 0 ]; then
@@ -39,6 +42,7 @@ fi
 while [ $# -gt 0 ]; do
     case "$1" in
         --apply) APPLY=1; shift ;;
+        --test-registration) TEST_REGISTRATION=1; APPLY=1; shift ;;
         --install-addon) INSTALL_ADDON=1; shift ;;
         --verify) VERIFY=1; shift ;;
         --url | --site-url) SITE_URL="${2:-}"; shift 2 ;;
@@ -209,7 +213,9 @@ ABOUT
     apply_setting server.url "$SITE_URL" || APPLY_FAILED=1
     apply_setting server.language zh_CN || APPLY_FAILED=1
     # 测试期不发送注册验证邮件；注册页会直接进入密码设置步骤。
-    apply_setting smtp.verify false || APPLY_FAILED=1
+    if [ "$TEST_REGISTRATION" = 1 ]; then
+        apply_setting smtp.verify false || APPLY_FAILED=1
+    fi
     apply_setting ui-default.footer_extra_html "$FOOTER_HTML" || APPLY_FAILED=1
     apply_setting ui-default.about "$ABOUT_MD" || APPLY_FAILED=1
 

@@ -527,11 +527,11 @@ Using mongodb external event bus
 `/register` 不是一次 POST 就建号，而是：
 
 1. `POST /register {mail}` → 生成 token；
-   当前 `deploy/configure.sh --apply` 会把 `smtp.verify` 写为 `false`，因此直接 **302 到 `/register/<code>`**，
+   测试期使用 `deploy/configure.sh --test-registration --site-url http://<IP>/` 把 `smtp.verify` 写为 `false`，因此直接 **302 到 `/register/<code>`**，
    不发送邮箱验证码；
 2. `POST /register/<code> {password, verifyPassword, uname}` → 建号并自动登录。
 
-页面会明确提示“测试期间无需邮箱验证码”。第一步仍受 Hydro 原生注册限流约束：
+页面会明确提示“测试期间无需邮箱验证码”。普通 `--apply` 保留现有验证设置；恢复时用 `hydrooj cli system set smtp.verify true` 并配置 SMTP，重启后页面自动恢复发送验证邮件。第一步仍受 Hydro 原生注册限流约束：
 同一邮箱短时间重复提交可能返回错误页；测试时使用未注册邮箱即可。
 写自动化脚本连续注册多个账号时，务必用**不同的邮箱**。
 

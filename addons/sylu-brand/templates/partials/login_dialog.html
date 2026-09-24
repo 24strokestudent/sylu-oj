@@ -1,0 +1,57 @@
+<div class="dialog dialog--signin" style="display:none">
+  <div class="dialog__content">
+    {% if model.system.get('server.login') and handler.user.hasPriv(PRIV.PRIV_REGISTER_USER) %}
+    <div class="dialog--signin__bg">
+      <div class="dialog--signin__side">
+        <h1>{{ _("Don't have an account?") }}</h1>
+        <p>{{ _('By signing up a {0} universal account, you can submit code and join discussions in all online judging services provided by us.').format((handler.domain|default({ui:[]})).ui.name|default(model.system.get('server.name'))) }}</p>
+        <div><a href="{{ url('user_register') }}" class="inverse rounded button">{{ _('Sign Up Now') }}</a></div>
+      </div>
+    </div>
+    {% endif %}
+    <div class="dialog--signin__main">
+      <form action="{{ url('user_login') }}" method="post">
+        <div class="dialog--signin__close-container supplementary">
+          <a name="dialog--signin__close" href="javascript:;">{{ _('CLOSE') }}</a>
+        </div>
+        <h1 class="dialog--signin__title">{{ _('SIGN IN') }}</h1>
+        <p class="dialog--signin__note">{{ _('Using your {0} universal account').format(model.system.get('server.name')) }}</p>
+        {% if model.system.get('server.login') %}
+        <div class="row"><div class="columns">
+          <label class="material textbox">
+            {{ _('Email') }}
+            <input name="uname" type="email" data-autofocus autocomplete="email" inputmode="email" required>
+          </label>
+        </div></div>
+        <div class="row"><div class="columns">
+          <label class="material textbox">
+            {{ _('Password') }}
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+        </div></div>
+        <div class="row"><div class="columns">
+          <label class="checkbox">
+            <input type="checkbox" name="rememberme" class="checkbox">{{ _('Remember me') }}
+          </label>
+        </div></div>
+        <div class="row"><div class="columns">
+          <input type="hidden" name="tfa" value="">
+          <input type="hidden" name="authnChallenge" value="">
+          <input type="submit" value="{{ _('Login') }}" name="login_submit" class="expanded rounded primary button">
+        </div></div>
+        {% endif %}
+        {%- for v in loginMethods|default(handler.loginMethods) -%}
+        <div class="row"><div class="columns">
+          <a href="{{ url('user_oauth', type=v.id, query={redirect: handler.request.path}) }}" class="expanded rounded button">{{ _(v.text) }}</a>
+        </div></div>
+        {%- endfor -%}
+        <div class="row"><div class="columns">
+          <div class="supplementary text-center">
+            <a {% if not model.system.get('smtp.user') %}data-lostpass href="#"{% else %}href="{{ url('user_lostpass') }}"{% endif %}>{{ _('Forgot password or username?') }}</a>
+          </div>
+        </div></div>
+        <p class="supplementary text-center">使用注册邮箱和密码登录。</p>
+      </form>
+    </div>
+  </div>
+</div>
