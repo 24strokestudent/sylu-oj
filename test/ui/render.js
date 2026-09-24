@@ -14,6 +14,7 @@ const yaml = require('js-yaml');
 
 const H = require('./lib/hydro');
 const D = require('./lib/data');
+const GATES = require('./lib/gates');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const ADDON = path.join(ROOT, 'addons', 'sylu-brand');
@@ -254,6 +255,7 @@ const PAGE_BODIES = {
     'discussion_main_or_node.html': () => D.discussionListBody(),
     'ranking.html': () => D.rankingBody(),
     'user_login.html': () => D.loginBody(),
+    'user_register.html': () => ({}),
 };
 
 function stateFor(sc, config) {
@@ -333,6 +335,7 @@ const SCENARIOS = {
     'ranking-guest': { role: 'guest', addon: true, page: 'ranking.html' },
     // 登录页走的是 layout/immersive.html（另一套无导航版式），单独验证品牌层没漏挂。
     'login-guest': { role: 'guest', addon: true, page: 'user_login.html' },
+    'register-guest': { role: 'guest', addon: true, page: 'user_register.html' },
 };
 const HERO = { bulletin: D.HERO_BULLETIN };
 const PLAIN = { bulletin: D.BULLETIN };

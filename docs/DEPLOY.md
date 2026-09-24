@@ -522,17 +522,17 @@ Using mongodb external event bus
 也不要 `tail -1`（会拿到日志尾巴）。`deploy/lib/common.sh` 里的做法是：
 优先直连 MongoDB 只读查询，兜底才走 CLI 并用 `grep -xE '[0-9]+' | tail -1` 取最后一行纯数字。
 
-### 6.10 注册是「两步 token」流程，且按邮箱限流
+### 6.10 测试期注册免邮箱验证（仍保留两步表单）
 
 `/register` 不是一次 POST 就建号，而是：
 
 1. `POST /register {mail}` → 生成 token；
-   **若 SMTP 未配置**（`smtp.verify=true` 但 `smtp.user` 为空）→ 直接 **302 到 `/register/<code>`**，
-   token 就在 URL 里，**不收邮件也能注册**；
+   当前 `deploy/configure.sh --apply` 会把 `smtp.verify` 写为 `false`，因此直接 **302 到 `/register/<code>`**，
+   不发送邮箱验证码；
 2. `POST /register/<code> {password, verifyPassword, uname}` → 建号并自动登录。
 
-坑在限流：第一步有 `limitRate('send_mail', 60, 1, mail)`，
-**同一个邮箱 60 秒内只能申请一次 token**，第二次会返回错误页。
+页面会明确提示“测试期间无需邮箱验证码”。第一步仍受 Hydro 原生注册限流约束：
+同一邮箱短时间重复提交可能返回错误页；测试时使用未注册邮箱即可。
 写自动化脚本连续注册多个账号时，务必用**不同的邮箱**。
 
 ---

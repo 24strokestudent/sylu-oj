@@ -27,6 +27,8 @@ const ALLOWED_OVERRIDES = [
     'main.html',
     'partials/nav.html',
     'login.html',
+    'user_login.html',
+    'user_register.html',
     'user/settings.html',
     'sylu/about.html',
     // 这两页是 C 级（§49 默认只许改 CSS），例外只为赛前数据脱敏这一处，
@@ -413,7 +415,8 @@ const TIER_C_MARKERS = {
     'discuss-guest': ['class="section__list discussion__list"'],
     'ranking-student': ['class="data-table"', 'class="col--rp"'],
     'ranking-guest': ['class="data-table"', 'class="col--rp"'],
-    'login-guest': ['class="immersive--content immersive--center"', 'name="password"'],
+    'login-guest': ['class="immersive--content immersive--center"', 'name="password"', 'autocomplete="email"', 'sylu-auth-notice'],
+    'register-guest': ['class="immersive--content immersive--center"', 'name="mail"', 'type="email"', 'sylu-auth-notice'],
 };
 
 function checkTierC() {

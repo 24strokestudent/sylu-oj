@@ -208,6 +208,8 @@ ABOUT
     apply_setting server.name "$SYLU_SITE_NAME" || APPLY_FAILED=1
     apply_setting server.url "$SITE_URL" || APPLY_FAILED=1
     apply_setting server.language zh_CN || APPLY_FAILED=1
+    # 测试期不发送注册验证邮件；注册页会直接进入密码设置步骤。
+    apply_setting smtp.verify false || APPLY_FAILED=1
     apply_setting ui-default.footer_extra_html "$FOOTER_HTML" || APPLY_FAILED=1
     apply_setting ui-default.about "$ABOUT_MD" || APPLY_FAILED=1
 
@@ -273,6 +275,7 @@ cat <<'EOF'
 
   注册规则（§10）：
      · 允许正常注册，注册后默认普通用户
+     · 测试期关闭邮箱验证：注册页会直接进入密码设置，不会发送验证码邮件
      · 前端**绝对禁止**提交 role=admin / role=teacher —— 身份只能由服务端权限控制
 
   教师授权（§11，V1 人工授权）：

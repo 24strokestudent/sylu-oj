@@ -1,0 +1,22 @@
+{% extends "layout/immersive.html" %}
+{% block content %}
+<div class="row"><div class="columns">
+  <div class="immersive--content immersive--center">
+    <h1>{{ _('Sign Up') }}</h1>
+    <form method="POST">
+      <div class="row"><div class="columns">
+        <label class="inverse material textbox">
+          {{ _('Email') }}
+          <input name="mail" type="email" autofocus autocomplete="email" inputmode="email" required>
+        </label>
+      </div></div>
+      <div class="row"><div class="columns">
+        <div class="text-center">
+          <input id="submit" type="submit" value="继续注册" class="inverse expanded rounded primary button">
+        </div>
+      </div></div>
+      <p class="sylu-auth-notice" role="status">测试期间无需邮箱验证码。提交邮箱后会直接进入密码设置，注册完成即可使用邮箱和密码登录。</p>
+    </form>
+  </div>
+</div></div>
+{% endblock %}

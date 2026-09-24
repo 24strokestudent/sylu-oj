@@ -525,3 +525,13 @@ td.record-status--border.ignored { background: var(--sylu-status-ignored-soft); 
      本站样式表在 theme.css 之后，后写覆盖先写）。 */
   background-image: none;
 }
+
+/* 登录与注册的测试期说明放在表单底部，保持在深色画布上可读且不抢主按钮。 */
+.sylu-auth-notice {
+  margin: 1rem 0 0;
+  color: var(--sylu-surface);
+  opacity: .82;
+  font-size: .875rem;
+  line-height: 1.6;
+  text-align: center;
+}
