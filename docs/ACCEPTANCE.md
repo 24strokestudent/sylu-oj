@@ -137,7 +137,7 @@ node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出�
 | `ce.cpp` | C++17 | Compile Error | | |
 | `re.cpp` | C++17 | Runtime Error | | |
 | `tle.cpp` | C++17 | Time Limit Exceeded | | |
-| `mle.cpp` | C++17 | Memory Limit Exceeded | 已修正验收用例，需部署后复核 | |
+| `mle.cpp` | C++17 | 当前内嵌 Sandbox 实际为 Runtime Error | 已实测；不能作为 MLE 证据 | |
 | `ole.cpp` | C++17 | Output Limit Exceeded | | |
 | `ac.py` | Python 3 | Accepted | | |
 | `wa.py` | Python 3 | Wrong Answer | | |
@@ -145,6 +145,7 @@ node test/ui/render.js --all && node test/ui/shot.js --widths 1440,390   # 出�
 
 - [ ] 全部吻合（或差异已记录并确认属于版本行为差异）
 
+> 当前内嵌 Sandbox 中，`mle.cpp` 实测为 Runtime Error，`ole.cpp` 实测为 Memory Exceeded；这两个结果不能证明 MLE/OLE 分类已通过。需要独立评测机或明确支持对应资源状态的 Sandbox 后再补验。
 > `ole.cpp` 在部分版本会被判 **TLE** 而不是 OLE —— 这属于 Hydro 的行为差异。
 > **如实记录实际结果**，不要为了"看起来一致"去改判题逻辑。
 
