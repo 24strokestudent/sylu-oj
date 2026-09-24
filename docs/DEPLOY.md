@@ -175,6 +175,7 @@ Caddy 会自动申请并续期 Let's Encrypt 证书。注意：
 
 ```bash
 bash deploy/configure.sh --install-addon
+# --install-addon 会同时应用品牌设置、CSS 链接并等待 Hydro 就绪
 ```
 
 这一步做两件事：**打印控制面板里要改的原生设置清单**，以及（可选）登记 `sylu-brand` 插件。
@@ -577,13 +578,13 @@ Using mongodb external event bus
 | --- | --- | --- |
 | `deploy/update.sh`（§47 升级） | ⚠️ 未验证 | 需要真的发一次新版本才能试；**且升级会推进 `db.ver`，属单向操作** |
 | `deploy/rollback.sh`（§49 回滚） | ⚠️ 只验证了 `--list` 只读模式 | 同上 |
-| `deploy/restore-check.sh`（§46 恢复演练） | ⚠️ 未验证 | 目前还没有第一份备份（§45 第 8 步未执行） |
-| `deploy/backup.sh` + 异地副本 | ⚠️ 未执行 | 还没跑过一次真备份，异地副本也没有 |
+| `deploy/restore-check.sh`（§46 恢复演练） | ⚠️ 需本轮实测 | 恢复演练必须在独立临时库执行并记录结果 |
+| `deploy/backup.sh` + 异地副本 | ⚠️ 待生产配置 | 本机备份可验证，异地副本仍需配置 |
 | 域名与 HTTPS（§41） | ⚠️ 临时 IP 入口 | `http://101.42.27.44/` 可用；443 已监听但裸 IP 内部证书不适合作为生产 HTTPS，**上线前必须配置域名证书** |
-| `addons/sylu-brand` 插件 | ✅ 已安装并验证 | `/sylu/about`、导航「关于本站」、`/sylu-brand.css`、`/sylu-logo.svg` 均已生效；Hydro 原生题库/提交/比赛/后台结构保留 |
+| `addons/sylu-brand` 插件 | ✅ 已安装并验证 | `/sylu/about`、导航「关于本站」、`/sylu/css/*.css`、`/sylu-logo.svg` 均已生效；Hydro 原生题库/提交/比赛/后台结构保留 |
 | 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
 
-**IP 内测状态（2026-09-21）**：`http://101.42.27.44/` 已可用，首页、题库、训练、比赛、作业、排名、登录、注册和状态页均已实测。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已导入并实测 C++ Accepted、Wrong Answer、TLE、Python Accepted；备份已重新生成并完成临时 MongoDB 恢复核对。当前仍属于 IP 内测，不宣称公网生产上线。
+**IP 内测状态**：`http://101.42.27.44/` 已可用，首页、题库、训练、比赛、作业、排名、登录、注册和状态页均已实测。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已实测 C++ Accepted、Wrong Answer、TLE、Python Accepted，并完成网络与文件隔离探针验证。备份新鲜度、异地副本和完整恢复启动演练仍需单独记录，当前仍属于 IP 内测，不宣称公网生产上线。
 
 IP 内测仍保留以下上线前工作：配置域名与 HTTPS、异地备份副本、完整人工恢复启动演练、教师作业与比赛链路验收，以及逐项执行沙箱网络测试。
 上线判定请看 `docs/ACCEPTANCE.md`（§72）。

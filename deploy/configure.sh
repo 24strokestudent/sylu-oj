@@ -9,7 +9,7 @@
 #   bash deploy/configure.sh                       # 打印配置清单（只读，不改任何东西）
 #   bash deploy/configure.sh --apply \
 #        --site-url http://1.2.3.4/                # 写入品牌设置（§30 §32 §34 §40）
-#   bash deploy/configure.sh --install-addon       # 额外安装 sylu-brand 插件
+#   bash deploy/configure.sh --install-addon       # 安装插件并同步应用品牌设置
 #   bash deploy/configure.sh --verify --url https://oj.example.edu.cn/
 #                                                  # 校验线上页面是否符合规范
 #
@@ -28,6 +28,13 @@ INSTALL_ADDON=0
 APPLY=0
 VERIFY=0
 SITE_URL=""
+RESTART_NEEDED=0
+
+# 只要安装插件，就必须同时应用 CSS 链接等原生设置；否则插件会加载但首页仍是无样式状态。
+if [ "$INSTALL_ADDON" = 1 ] && [ "$APPLY" = 0 ]; then
+    APPLY=1
+    log_info "--install-addon 将同时执行 --apply，确保品牌样式与插件一起生效。"
+fi
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -242,13 +249,8 @@ BULLETIN
         die "配置写入未全部生效，已拒绝重启并返回失败。"
     fi
 
-    # server.url 会被部分组件在启动时读入并缓存，改完重启一次最稳
-    log_info "重启 hydrooj 使 server.url 生效 ..."
-    if hydro_restart hydrooj; then
-        log_ok "已重启 hydrooj"
-    else
-        log_warn "自动重启失败，请手动执行：pm2 restart hydrooj"
-    fi
+    # server.url 会被部分组件在启动时读入并缓存，和插件合并到脚本末尾统一重启。
+    RESTART_NEEDED=1
 
     if hydro_sys_set ui-default.nav_logo_dark /sylu-logo.svg; then
         log_ok "ui-default.nav_logo_dark 已指向 SYLU 品牌资源"
@@ -310,13 +312,34 @@ if [ "$INSTALL_ADDON" = 1 ]; then
     log_info "不作用：站点名称、Logo、页脚 —— 那些用上面第 1 步的原生设置"
     record_note "configure.sh 安装 sylu-brand 插件"
     hydrooj addon add "$ADDON_DIR"
-    log_ok "已登记插件。接下来需要重启 Hydro 使其生效："
-    log_info "  pm2 restart hydrooj      # 或 systemctl restart hydro"
-    log_warn "重启后请检查浏览器是否出现「Addon load fail」通知；"
-    log_warn "若失败，站点本身不受影响，按 addons/sylu-brand/README.md 排查。"
+    RESTART_NEEDED=1
+    log_ok "已登记插件，脚本结束前会统一重启并等待 Hydro 就绪。"
 else
     log_info "未指定 --install-addon，跳过。"
     log_info "要装请执行：bash deploy/configure.sh --install-addon"
+fi
+
+# 应用设置和插件注册都完成后只重启一次，并等待端口恢复，避免刚重启就被误判为失败。
+if [ "$RESTART_NEEDED" = 1 ]; then
+    log_step "4b. 重启并等待 Hydro 就绪"
+    if hydro_restart hydrooj; then
+        log_ok "已重启 hydrooj"
+    else
+        die "自动重启 hydrooj 失败，请检查 pm2/systemd 状态后重试。"
+    fi
+    READY_TIMEOUT="${SYLU_CONFIGURE_READY_TIMEOUT:-60}"
+    READY_CODE="000"
+    for _ in $(seq 1 "$READY_TIMEOUT"); do
+        READY_CODE="$(hydro_http_probe 'http://127.0.0.1:8888/')"
+        case "$READY_CODE" in
+            200 | 301 | 302 | 303) break ;;
+        esac
+        sleep 1
+    done
+    case "$READY_CODE" in
+        200 | 301 | 302 | 303) log_ok "Hydro 已就绪（HTTP ${READY_CODE}）" ;;
+        *) die "等待 ${READY_TIMEOUT}s 后 Hydro 仍未就绪（最后状态 ${READY_CODE}）。" ;;
+    esac
 fi
 
 # ============================================================
@@ -345,7 +368,7 @@ if [ "$VERIFY" = 1 ]; then
             pk_fail "页脚找不到 Powered by Hydro —— 违反 §31 与上游版权声明，必须恢复"
         fi
 
-        if grep -qi '沈阳理工大学' "$PAGE_FILE"; then
+        if grep -qiE '沈阳理工大学|沈阳理工[[:space:]]*OJ|SYLU[[:space:]]*OJ' "$PAGE_FILE"; then
             if grep -qiE '非官方|不是.*官方|学生维护' "$PAGE_FILE"; then
                 pk_pass "已声明非官方定位（§30）"
             else
@@ -355,7 +378,9 @@ if [ "$VERIFY" = 1 ]; then
             pk_warn "页面未出现校名（可能还没设 server.name）"
         fi
 
-        if grep -q 'foo\|example\.com\|TODO\|lorem' "$PAGE_FILE"; then
+        # 去掉标签后按完整单词匹配，避免把正常的 footer 误判成 foo 占位文本。
+        PAGE_TEXT="$(sed -E 's/<[^>]+>/ /g' "$PAGE_FILE")"
+        if printf '%s\n' "$PAGE_TEXT" | grep -qiE '(^|[^[:alnum:]_])(foo|TODO|lorem)([^[:alnum:]_]|$)|example\.com'; then
             pk_warn "页面含占位文本（foo/example/TODO/lorem），上线前需清理（§65）"
         else
             pk_pass "未发现明显占位文本"
