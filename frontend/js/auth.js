@@ -9,9 +9,8 @@
   /* ---------- 配置 ---------- */
   var CONFIG = {
     // 后端接口地址：server/ 提供该接口后，把 demoMode 改为 false 即可联调
-    endpoint: '/api/auth/register',
-    // 演示模式：后端尚未接入时，本地模拟注册成功，方便预览完整流程
-    demoMode: true,
+    endpoint: 'http://localhost:3000/api/auth/register',
+    demoMode: false,
     // 演示模式下模拟请求耗时
     minDelayMs: 900
   };

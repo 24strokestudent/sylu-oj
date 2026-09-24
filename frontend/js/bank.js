@@ -8,10 +8,8 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供该接口后，把 demoMode 改为 false 即可联调
-    endpoint: '/api/problems',
-    // 演示模式：后端尚未接入时使用下方占位数据
-    demoMode: true
+    endpoint: 'http://localhost:3000/api/problems',
+    demoMode: false
   };
 
   /* ----------------------------------------------------------

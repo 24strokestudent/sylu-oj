@@ -8,34 +8,16 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供该接口后，把 demoMode 改为 false 即可联调
-    endpoint: '/api/topics',
-    // 演示模式：后端尚未接入时使用下方占位数据
-    demoMode: true
+    endpoint: 'http://localhost:3000/api/topics',
+    demoMode: false
   };
 
   /* ----------------------------------------------------------
-     占位数据（接入后端后由 GET /api/topics 返回，字段同名即可）
-     字段：title 标题 / category 分类 / author 作者 / college 学院
-           problem 关联题目（可空） / replies 回复 / views 浏览 / likes 点赞
-           createdAgo 发布于多少分钟前 / lastReplyAgo 最后回复于多少分钟前
+     占位数据来自 js/topics-data.js（与话题详情页共用同一份）
+     接入后端后由 GET /api/topics 返回，字段同名即可
+     该文件缺失时列表显示空状态，不会报错
      ---------------------------------------------------------- */
-  var PLACEHOLDER_TOPICS = [
-    { id: 1, title: '「A+B 问题」的三种读入方式与性能对比', category: '题解', author: '陈锐', college: '计算机科学与工程学院', problem: 'CS001-01-005', replies: 12, views: 240, likes: 18, createdAgo: 2880, lastReplyAgo: 45 },
-    { id: 2, title: '评测结果是 Runtime Error，本地能过，求帮忙看看', category: '求助', author: '新同学', college: '信息科学与工程学院', problem: 'CS001-01-003', replies: 8, views: 156, likes: 3, createdAgo: 180, lastReplyAgo: 12 },
-    { id: 3, title: '2026 秋季学期 OJ 平台升级公告', category: '公告', author: '系统管理员', college: '其他学院', problem: '', replies: 3, views: 512, likes: 9, createdAgo: 10080, lastReplyAgo: 4320 },
-    { id: 4, title: '并查集路径压缩的两种写法与复杂度分析', category: '题解', author: '赵敏', college: '计算机科学与工程学院', problem: 'CS001-01-004', replies: 9, views: 198, likes: 14, createdAgo: 1440, lastReplyAgo: 120 },
-    { id: 5, title: '大家平时都用什么编辑器写题？', category: '闲聊', author: '白云', college: '机械工程学院', problem: '', replies: 21, views: 330, likes: 11, createdAgo: 720, lastReplyAgo: 30 },
-    { id: 6, title: '为什么浮点数比较总是 WA？', category: '求助', author: '闫宁', college: '其他学院', problem: 'CS001-01-002', replies: 6, views: 121, likes: 2, createdAgo: 300, lastReplyAgo: 90 },
-    { id: 7, title: '二分答案的边界处理模板（附例题）', category: '题解', author: '周琳', college: '计算机科学与工程学院', problem: 'CS001-01-005', replies: 15, views: 287, likes: 23, createdAgo: 4320, lastReplyAgo: 60 },
-    { id: 8, title: '第 X 届程序设计竞赛报名开启', category: '公告', author: '系统管理员', college: '其他学院', problem: '', replies: 5, views: 402, likes: 7, createdAgo: 8640, lastReplyAgo: 2880 },
-    { id: 9, title: '内存超限该怎么优化？', category: '求助', author: '冯磊', college: '信息科学与工程学院', problem: 'CS001-01-004', replies: 4, views: 88, likes: 1, createdAgo: 240, lastReplyAgo: 150 },
-    { id: 10, title: '前缀和与差分：从入门到熟练', category: '题解', author: '王珂', college: '信息科学与工程学院', problem: 'CS001-01-003', replies: 11, views: 205, likes: 16, createdAgo: 5760, lastReplyAgo: 240 },
-    { id: 11, title: '新生赛都准备得怎么样了', category: '闲聊', author: '唐欣', college: '自动化与电气工程学院', problem: '', replies: 17, views: 190, likes: 8, createdAgo: 1440, lastReplyAgo: 20 },
-    { id: 12, title: '编译错误看不懂，求翻译一下这几行', category: '求助', author: '孟琪', college: '计算机科学与工程学院', problem: 'CS001-01-001', replies: 2, views: 64, likes: 0, createdAgo: 90, lastReplyAgo: 55 },
-    { id: 13, title: '动态规划状态设计的通用思路', category: '题解', author: '李昊', college: '自动化与电气工程学院', problem: 'CS001-01-005', replies: 13, views: 265, likes: 19, createdAgo: 7200, lastReplyAgo: 480 },
-    { id: 14, title: '关于新生账号统一注册的通知', category: '公告', author: '系统管理员', college: '其他学院', problem: '', replies: 1, views: 356, likes: 4, createdAgo: 12960, lastReplyAgo: 12000 }
-  ];
+  var PLACEHOLDER_TOPICS = window.SYLU_TOPICS || [];
 
   var CATEGORY_ITEM_CLASS = {
     '题解': 'is-solution',
@@ -89,6 +71,23 @@
     return text.length > max ? text.slice(0, max) + '…' : text;
   }
 
+  // 话题详情页地址（详情页用 ?id= 定位）
+  function topicUrl(id) {
+    return 'topic.html?id=' + encodeURIComponent(id);
+  }
+
+  // 个人主页地址：用户数据里存在该用户名时才返回，否则返回空串（渲染成纯文本）
+  function profileUrlFor(username) {
+    if (!username) return '';
+    var users = window.SYLU_USERS || [];
+    for (var i = 0; i < users.length; i++) {
+      if (users[i].username === username) {
+        return 'user.html?username=' + encodeURIComponent(username);
+      }
+    }
+    return '';
+  }
+
   function sortTopics(topics, key) {
     var copy = topics.slice();
     copy.sort(function (a, b) {
@@ -121,6 +120,7 @@
       title: String(row.title || '未命名话题'),
       category: String(row.category || '闲聊'),
       author: String(row.author || row.nickname || '匿名用户'),
+      authorUsername: String(row.authorUsername || ''),
       college: String(row.college || ''),
       problem: row.problem ? String(row.problem) : '',
       replies: Number(row.replies) || 0,
@@ -144,7 +144,17 @@
 
     var author = document.createElement('span');
     author.className = 'topic-author';
-    author.textContent = topic.author;
+    var authorLink = profileUrlFor(topic.authorUsername);
+    if (authorLink) {
+      // 有对应用户名时链到个人主页（系统管理员等不在用户数据里的保持纯文本）
+      var link = document.createElement('a');
+      link.className = 'topic-author';
+      link.href = authorLink;
+      link.textContent = topic.author;
+      author = link;
+    } else {
+      author.textContent = topic.author;
+    }
     meta.appendChild(author);
 
     if (topic.college) {
@@ -188,9 +198,8 @@
 
     var title = document.createElement('h3');
     title.className = 'topic-title';
-    // 话题详情页待做，先沿用站内其它占位链接的写法
     var link = document.createElement('a');
-    link.href = '#';
+    link.href = topicUrl(topic.id);
     link.textContent = topic.title;
     title.appendChild(link);
 
@@ -242,7 +251,7 @@
     }).slice(0, 5).forEach(function (topic) {
       var li = document.createElement('li');
       var link = document.createElement('a');
-      link.href = '#';
+      link.href = topicUrl(topic.id);
       var title = document.createElement('strong');
       title.textContent = truncate(topic.title, 16);
       var rate = document.createElement('span');
@@ -260,18 +269,23 @@
     els.authors.textContent = '';
 
     var counts = {};
+    var usernameOf = {};
     topics.forEach(function (topic) {
       counts[topic.author] = (counts[topic.author] || 0) + 1;
+      if (!usernameOf[topic.author] && topic.authorUsername) {
+        usernameOf[topic.author] = topic.authorUsername;
+      }
     });
 
     Object.keys(counts).map(function (name) {
-      return { name: name, count: counts[name] };
+      return { name: name, count: counts[name], username: usernameOf[name] || '' };
     }).sort(function (a, b) {
       return b.count - a.count || a.name.localeCompare(b.name, 'zh');
     }).slice(0, 3).forEach(function (author) {
       var li = document.createElement('li');
-      var link = document.createElement('a');
-      link.href = '#';
+      var profileUrl = profileUrlFor(author.username);
+      var link = document.createElement(profileUrl ? 'a' : 'span');
+      if (profileUrl) link.href = profileUrl;
       var name = document.createElement('strong');
       name.textContent = author.name;
       var rate = document.createElement('span');

@@ -9,15 +9,12 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供接口后，把 demoMode 改为 false 即可联调
-    // 约定：GET /api/users/:username
-    //       GET /api/users/:username/submissions?page=1
-    //       GET /api/users/:username/contests
-    endpoint: '/api/users',
-    // 演示模式：后端尚未接入时使用 js/users-data.js 的占位数据
-    demoMode: true,
-    // 未指定 ?username= 时展示的占位用户（接入登录态后改为当前登录用户）
-    defaultUsername: 'sylu_2026'
+    endpoint: 'http://localhost:3000/api/users',
+    demoMode: false,
+    defaultUsername: (function () {
+      try { return window.localStorage.getItem('sylu_user') || 'sylu_2026'; }
+      catch (e) { return 'sylu_2026'; }
+    })()
   };
 
   var VERDICT_LABEL = {
@@ -522,6 +519,9 @@
   /* ---------- 初始化 ---------- */
 
   function render(user, users, problems) {
+    // 重新加载成功时恢复可见性（否则首次失败后重试会一直卡在缺失卡片上）
+    if (els.layout) els.layout.removeAttribute('hidden');
+    if (els.missing) els.missing.setAttribute('hidden', 'hidden');
     renderHead(user, rankOf(users, user));
     renderDistribution(user, problems);
     renderSubmissionTable(els.recentBody, user.recent.slice(0, 5), user.nickname + ' 暂无提交记录');

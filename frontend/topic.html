@@ -1,0 +1,184 @@
+<!doctype html>
+<html class="no-js" lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <title>话题详情 · SYLU OJ | 沈阳理工大学在线评测系统</title>
+  <meta name="description" content="SYLU OJ 讨论区话题详情——查看话题正文与回复，参与题解分享、问题求助与交流。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="话题详情 · SYLU OJ | 沈阳理工大学在线评测系统">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="icon.png">
+
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="icon" href="favicon.ico">
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/main.css">
+
+  <meta name="theme-color" content="#231815">
+</head>
+
+<body>
+
+  <!-- ==================== 页面加载动画 ==================== -->
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader-inner">
+      <svg class="preloader-svg" viewBox="0 0 100 100" fill="none">
+        <g id="loaderGroup">
+          <path id="loaderPath" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" opacity="0.1"></path>
+        </g>
+      </svg>
+      <div class="preloader-title">SYLU OJ</div>
+      <div class="preloader-tag">r = a cos(k&theta;)</div>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="navbar" id="navbar">
+    <div class="container nav-inner">
+      <a class="brand" href="index.html">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" class="brand-logo" width="40" height="40">
+        <span class="brand-text">
+          <strong>SYLU OJ</strong>
+          <small>沈阳理工大学在线评测系统</small>
+        </span>
+      </a>
+
+      <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="nav-links" id="navLinks">
+        <a href="index.html">首页</a>
+        <a href="bank.html">题库</a>
+        <a href="competition.html">比赛</a>
+        <a href="talk.html" class="active">讨论</a>
+        <a href="level.html">排名</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a href="login.html" class="btn btn-ghost">登录</a>
+        <a href="register.html" class="btn btn-primary">注册</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 面包屑 ==================== -->
+  <div class="container">
+    <nav class="crumbs" aria-label="面包屑导航">
+      <a href="index.html">首页</a>
+      <span aria-hidden="true">/</span>
+      <a href="talk.html">讨论区</a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page" id="crumbTopic">话题详情</span>
+    </nav>
+  </div>
+
+  <!-- ==================== 话题主体 ==================== -->
+  <main class="topic" id="topic">
+    <div class="container topic-layout" id="topicLayout">
+
+      <!-- 左：主题帖 + 回复 + 回复框 -->
+      <div class="topic-main">
+
+        <article class="topic-post">
+          <div id="topicCategory"></div>
+          <h1 id="topicTitle">加载中…</h1>
+          <div class="topic-post-meta" id="topicMeta"></div>
+          <div class="topic-body" id="topicBody"></div>
+
+          <div class="topic-actions">
+            <button type="button" class="like-btn" id="likeBtn">👍 点赞 <b id="likeCount">0</b></button>
+            <a href="#replyForm" class="btn btn-ghost">写回复</a>
+          </div>
+        </article>
+
+        <section class="reply-section" aria-labelledby="replyTitle">
+          <h2 class="reply-title" id="replyTitle">全部回复 <span id="replyCount"></span></h2>
+          <p class="profile-note" id="replyNote"></p>
+          <div class="reply-list" id="replyList"></div>
+        </section>
+
+        <section class="reply-form" id="replyForm" aria-labelledby="replyFormTitle">
+          <h2 id="replyFormTitle">发表回复</h2>
+
+          <!-- 提示条（由 js/topic.js 填充：演示模式 / 校验失败等） -->
+          <div class="form-alert" id="replyAlert" role="alert" aria-live="polite"></div>
+
+          <div class="field">
+            <label for="replyBody">回复内容<span class="hint">请友善交流，题解建议附上思路</span></label>
+            <textarea id="replyBody" class="code-input" rows="5" maxlength="2000"
+              spellcheck="false" placeholder="写下你的回复…"></textarea>
+          </div>
+
+          <div class="submit-actions">
+            <p class="submit-hint">回复需要登录；发帖与回复功能待后端接入后开放</p>
+            <button type="button" class="btn btn-primary" id="replyBtn">发表回复</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 右：作者 / 关联题目 / 相关话题 -->
+      <aside class="topic-side">
+        <div class="panel">
+          <h3 class="panel-title">关于作者</h3>
+          <div class="topic-author-card" id="authorCard"></div>
+          <p class="info-note" id="authorNote"></p>
+          <a href="user.html" class="btn btn-outline" id="authorAction" hidden>查看主页</a>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">关联题目</h3>
+          <p class="info-note" id="problemNote"></p>
+          <a href="problem.html" class="btn btn-outline" id="problemAction" hidden>去做这道题</a>
+        </div>
+
+        <div class="panel">
+          <h3 class="panel-title">相关话题</h3>
+          <ul class="panel-list" id="relatedTopics"></ul>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 话题不存在时的提示（默认隐藏） -->
+    <div class="container">
+      <div class="state-card" id="topicMissing" hidden>
+        <p id="topicMissingText">话题不存在或已删除。</p>
+        <a href="talk.html" class="btn btn-primary">返回讨论区</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 页脚 ==================== -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="沈阳理工大学-logo.svg" alt="沈阳理工大学" width="32" height="32">
+        <p><strong>SYLU OJ</strong> · 沈阳理工大学在线评测系统</p>
+        <p class="footer-meta">© <span id="year"></span> 沈阳理工大学 · 版权所有</p>
+      </div>
+      <div class="footer-links">
+        <a href="#">使用帮助</a>
+        <a href="#">常见问题</a>
+        <a href="#">关于本站</a>
+        <a href="#">联系我们</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/vendor/modernizr-3.11.2.min.js"></script>
+  <script src="js/plugins.js"></script>
+  <script src="js/loader.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/problems-data.js"></script>
+  <script src="js/users-data.js"></script>
+  <script src="js/topics-data.js"></script>
+  <script src="js/topic.js"></script>
+
+</body>
+
+</html>

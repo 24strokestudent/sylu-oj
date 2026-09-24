@@ -274,6 +274,9 @@
   }
 
   function render(problem, problems) {
+    // 重新加载成功时恢复可见性（否则首次失败后重试会一直卡在缺失卡片上）
+    if (els.layout) els.layout.removeAttribute('hidden');
+    if (els.missing) els.missing.setAttribute('hidden', 'hidden');
     document.title = problem.code + ' ' + problem.title + ' · SYLU OJ | 沈阳理工大学在线评测系统';
     if (els.crumb) els.crumb.textContent = problem.code;
     els.title.textContent = problem.title;

@@ -8,10 +8,8 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供该接口后，把 demoMode 改为 false 即可联调
-    endpoint: '/api/contests',
-    // 演示模式：后端尚未接入时使用下方占位数据
-    demoMode: true
+    endpoint: 'http://localhost:3000/api/contests',
+    demoMode: false
   };
 
   /* ----------------------------------------------------------
@@ -189,7 +187,35 @@
     row.appendChild(val);
     return row;
   }
+  function registerContest(contestId, btn) {
+    var token = null;
+    try { token = window.localStorage.getItem('sylu_token'); } catch (e) {}
+    if (!token) { window.location.href = 'login.html'; return; }
 
+    btn.disabled = true;
+    btn.textContent = '报名中…';
+
+    fetch('http://localhost:3000/api/contests/' + contestId + '/register', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        return { ok: r.ok, data: d };
+      });
+    }).then(function (res) {
+      if (res.ok) {
+        btn.textContent = '已报名 ✓';
+      } else {
+        btn.disabled = false;
+        btn.textContent = '报名';
+        window.alert(res.data.error || '报名失败');
+      }
+    }).catch(function () {
+      btn.disabled = false;
+      btn.textContent = '报名';
+      window.alert('网络错误，请确认后端已启动');
+    });
+  }
   function renderContest(contest) {
     var card = document.createElement('article');
     card.className = 'comp-card';
@@ -252,10 +278,24 @@
     var foot = document.createElement('div');
     foot.className = 'comp-card-foot';
     var action = STATUS_ACTION[contest.status];
-    var button = document.createElement('a');
-    button.className = 'btn ' + action.className;
-    button.href = action.href;
-    button.textContent = action.label;
+    var token = null;
+    try { token = window.localStorage.getItem('sylu_token'); } catch (e) {}
+
+    var button;
+    if (token && contest.status === 'upcoming') {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn ' + action.className;
+      button.textContent = action.label;
+      button.addEventListener('click', function () {
+        registerContest(contest.id, button);
+      });
+    } else {
+      button = document.createElement('a');
+      button.className = 'btn ' + action.className;
+      button.href = action.href;
+      button.textContent = action.label;
+    }
     foot.appendChild(button);
     card.appendChild(foot);
 

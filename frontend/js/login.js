@@ -8,15 +8,12 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供该接口后，把 demoMode 改为 false 即可联调
-    endpoint: '/api/auth/login',
-    // 演示模式：后端尚未接入时，本地模拟登录成功，方便预览完整流程
-    demoMode: true,
-    // 演示模式下模拟请求耗时
+    endpoint: 'http://localhost:3000/api/auth/login',
+    demoMode: false,
+    redirectOnSuccess: 'index.html',
+    // 演示模式下模拟请求耗时（demoMode 为 true 时生效）
     minDelayMs: 900,
-    // 登录成功后的跳转地址，留空则停留在成功提示页（接入后端后可设为 index.html）
-    redirectOnSuccess: '',
-    // “记住我的用户名”使用的本地存储键
+    // 「记住我的用户名」使用的本地存储键（代码里引用了，必须定义）
     rememberKey: 'sylu_oj_login_id'
   };
 
@@ -259,9 +256,18 @@
 
     setLoading(true);
 
-    requestLogin(payload).then(function () {
+    requestLogin(payload).then(function (data) {
       setLoading(false);
       persistRemembered(loginId);
+
+      // 保存登录令牌，之后请求带上它
+      if (data && data.token) {
+        try {
+          window.localStorage.setItem('sylu_token', data.token);
+          window.localStorage.setItem('sylu_user', data.username || loginId);
+        } catch (e) {}
+      }
+
       form.classList.add('is-hidden');
 
       if (CONFIG.redirectOnSuccess) {

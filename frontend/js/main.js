@@ -81,4 +81,35 @@
       el.textContent = el.getAttribute('data-count');
     });
   }
-})();
+  /* ---------- 登录状态：顶栏显示当前用户 ---------- */
+  var navActions = document.querySelector('.nav-actions');
+  var token = null;
+  var username = null;
+  try {
+    token = window.localStorage.getItem('sylu_token');
+    username = window.localStorage.getItem('sylu_user');
+  } catch (e) {}
+
+  if (navActions && token && username) {
+    navActions.innerHTML = '';
+
+    var userLink = document.createElement('a');
+    userLink.href = 'user.html?username=' + encodeURIComponent(username);
+    userLink.className = 'btn btn-ghost';
+    userLink.textContent = '👤 ' + username;
+
+    var logoutBtn = document.createElement('button');
+    logoutBtn.type = 'button';
+    logoutBtn.className = 'btn btn-primary';
+    logoutBtn.textContent = '退出';
+    logoutBtn.addEventListener('click', function () {
+      try {
+        window.localStorage.removeItem('sylu_token');
+        window.localStorage.removeItem('sylu_user');
+      } catch (e) {}
+      window.location.reload();
+    });
+
+    navActions.appendChild(userLink);
+    navActions.appendChild(logoutBtn);
+  }})();
