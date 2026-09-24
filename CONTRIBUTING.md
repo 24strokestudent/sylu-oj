@@ -23,10 +23,11 @@
 
 | 方向 | 现状                                            | 适合入手 |
 |---|-----------------------------------------------|---|
-| 前端页面 | 首页、题库、题目详情、注册、登录、排行榜、个人主页、比赛、讨论区已完成 | 提交与判题、题单训练、静态文案页 |
-| 后端 API | `server/` 目前只有 `package.json`，还没有 `server.js` | 按[接口契约](#后端接口契约)实现接口 |
-| 数据落库 | 未开始                                           | 用户、题目、提交记录、话题等表结构 |
-| 文档与题解 | 持续需要                                          | 使用帮助、常见问题、题解内容 |
+| 前端页面 | 10 个页面已完成（首页 / 题库 / 题目详情 / 比赛 / 讨论区 / 话题详情 / 排行榜 / 个人主页 / 登录 / 注册） | 提交页与判题结果页、题单训练、静态文案页 |
+| 后端 API | 12 个接口已实现（见[接口契约](#后端接口契约)） | `/api/submissions`、判题机、给 GET 路由补 try/catch |
+| 数据库 | 8 张表已建并灌入种子数据 | 测试点表、统计汇总表 |
+| **判题机** | 未开始 | 取任务 → 编译 → 限时限内存运行 → 输出比对 → 回写 `verdict` |
+| 文档与题解 | 持续需要 | 使用帮助、常见问题、题解内容 |
 
 前端目前是**纯静态页面**：无框架、无构建步骤，双击 `frontend/index.html` 就能跑。
 
@@ -50,24 +51,35 @@ npm run dev
 sylu-oj/
 ├── frontend/                     # 前端（纯静态，可直接部署）
 │   ├── index.html                # 首页
-│   ├── level.html                # 排行榜
-│   ├── talk.html                 # 讨论区
-│   ├── login.html                # 登录
-│   ├── register.html             # 注册
+│   ├── bank.html problem.html    # 题库 / 题目详情
+│   ├── competition.html          # 比赛
+│   ├── talk.html topic.html      # 讨论区 / 话题详情
+│   ├── level.html user.html      # 排行榜 / 个人主页
+│   ├── login.html register.html  # 登录 / 注册
 │   ├── css/
 │   │   ├── normalize.css         # 第三方重置样式
 │   │   └── main.css              # 全站样式（各页面共用，按页分节注释）
 │   ├── js/
-│   │   ├── main.js               # 全站交互：页脚年份 / 导航滚动 / 移动端菜单 / 数字滚动
+│   │   ├── main.js               # 全站交互：页脚年份 / 导航 / 登录态 / 数字滚动
 │   │   ├── loader.js             # 玫瑰曲线加载动画
-│   │   ├── auth.js               # 注册页逻辑
-│   │   ├── login.js              # 登录页逻辑
-│   │   ├── level.js              # 排行榜逻辑
-│   │   ├── talk.js               # 讨论区逻辑
+│   │   ├── auth.js login.js      # 注册 / 登录
+│   │   ├── bank.js problem.js    # 题库 / 题目详情
+│   │   ├── competition.js        # 比赛
+│   │   ├── talk.js topic.js      # 讨论区 / 话题详情（发帖弹窗逻辑在 talk.js）
+│   │   ├── level.js user.js      # 排行榜 / 个人主页
+│   │   ├── problems-data.js      # 16 道题的完整题面（题库页与详情页共用）
+│   │   ├── users-data.js         # 19 位用户（排行榜与个人主页共用）
+│   │   ├── topics-data.js        # 14 个话题正文 + 回复（列表页与详情页共用）
 │   │   ├── plugins.js            # 第三方插件占位（目前只有 console 兜底）
 │   │   └── vendor/               # Modernizr
 │   └── 沈阳理工大学-logo.svg
-└── server/                       # 后端（开发中，仅有 package.json）
+└── server/                       # 后端（Node.js + Express + MySQL）
+    ├── server.js                 # 路由入口（12 个接口）
+    ├── db.js                     # mysql2 连接池
+    ├── middleware/auth.js        # JWT 登录态校验
+    ├── routes/auth.js            # 注册 / 登录
+    ├── .env.example              # 环境变量模板（.env 已被 gitignore）
+    └── package.json
 ```
 
 ## 代码风格与约定
@@ -104,6 +116,9 @@ sylu-oj/
 
 - 响应式断点统一用 `@media (max-width: 980px)` 与 `@media (max-width: 620px)`
 - 不写行内 `style`（JS 动态宽度除外，如通过率进度条）
+- ⚠️ **给元素设了 `display` 就要显式处理 `[hidden]`**：UA 的 `[hidden] { display: none }` 优先级更低，
+  被 `display: grid` / `inline-block` 覆盖后 `hidden` 属性会失效。项目里已按需补了
+  `.problem-layout[hidden]`、`.state-card[hidden]`、`.btn[hidden]`，新增同类元素时要一起补
 
 ### JavaScript
 
@@ -145,7 +160,12 @@ sylu-oj/
 
 ## 后端接口契约
 
-九个页面的接口调用已经写好，只差后端。前端在 `demoMode: true` 时使用占位数据；后端实现后把对应脚本的 `demoMode` 改成 `false` 即可联调，也支持在控制台热切换：
+前端的接口调用已全部写好，后端已实现其中 12 个（下表用「状态」列标注）。
+
+每个页面脚本都有 `demoMode` 开关：`true` 用本地占位数据（无需后端），`false` 调用接口。可在控制台热切换：
+
+⚠️ 目前 8 个脚本已是 `demoMode: false` 且把 `endpoint` 硬编码成了 `http://localhost:3000`——
+**部署前必须改成相对路径 `/api`**（配合 nginx 反代）。
 
 ```js
 SYLU_AUTH_CONFIG.demoMode  = false;                                  // 注册
@@ -156,21 +176,32 @@ SYLU_COMP_CONFIG.demoMode  = false; SYLU_COMP_CONFIG.reload();       // 比赛
 SYLU_BANK_CONFIG.demoMode  = false; SYLU_BANK_CONFIG.reload();       // 题库
 SYLU_PROBLEM_CONFIG.demoMode = false; SYLU_PROBLEM_CONFIG.reload();   // 题目详情
 SYLU_USER_CONFIG.demoMode    = false; SYLU_USER_CONFIG.reload();      // 个人主页
+SYLU_TOPIC_CONFIG.demoMode   = false; SYLU_TOPIC_CONFIG.reload();     // 话题详情
 ```
 
-| 页面 | 方法 | 路径 | 请求体 | 成功返回 |
-|---|---|---|---|---|
-| 注册 | `POST` | `/api/auth/register` | `{ username, nickname, studentId, college, email, password }` | 任意 JSON（`200` / `201`） |
-| 登录 | `POST` | `/api/auth/login` | `{ loginId, password, remember }` | 任意 JSON（如 `{ token }`） |
-| 排行榜 | `GET` | `/api/rank` | 无 | `[...]` 或 `{ list: [...] }` |
-| 讨论区 | `GET` | `/api/topics` | 无 | `[...]` 或 `{ topics: [...] }` |
-| 比赛 | `GET` | `/api/contests` | 无 | `[...]` 或 `{ contests: [...] }` |
-| 题库 | `GET` | `/api/problems` | 无 | `[...]` 或 `{ problems: [...] }` |
-| 题目详情 | `GET` | `/api/problems?code=CS001-01-001` | 无 | 单题对象或 `[...]` |
-| 个人主页 | `GET` | `/api/users/:username` | 无 | 单用户对象 |
-| 提交记录 | `GET` | `/api/users/:username/submissions` | `?page=1` | `[...]` 或 `{ list: [...] }` |
-| 比赛记录 | `GET` | `/api/users/:username/contests` | 无 | `[...]` |
-| 提交代码 | `POST` | `/api/submissions` | `{ problemCode, language, sourceCode }` | 任意 JSON（`201`） |
+| 页面 | 方法 | 路径 | 请求体 | 成功返回 | 状态 |
+|---|---|---|---|---|---|
+| 连通性 | `GET` | `/api/ping` | 无 | `{ message, result }` | ✅ |
+| 注册 | `POST` | `/api/auth/register` | `{ username, nickname, studentId, college, email, password }` | `{ id, username }` | ✅ |
+| 登录 | `POST` | `/api/auth/login` | `{ loginId, password }`（`loginId` 可为用户名 / 邮箱 / 学号） | `{ token, username, nickname }` | ✅ |
+| 题库 | `GET` | `/api/problems` | 无 | `[...]` | ✅ |
+| 题目详情 | `GET` | `/api/problems?code=CS001-01-001` | 无 | 单题对象或 `[...]` | ⬜ |
+| 排行榜 | `GET` | `/api/rank` | 无 | `[...]` | ✅ |
+| 比赛 | `GET` | `/api/contests` | 无 | `[...]` | ✅ |
+| 比赛报名 | `POST` | `/api/contests/:id/register` | 无（需登录） | 任意 JSON | ✅ |
+| 讨论区 | `GET` | `/api/topics` | 无 | `[...]` | ✅ |
+| 话题详情 | `GET` | `/api/topics/:id` | 无 | `{ ...话题, replies: [...] }` | ✅ |
+| 发帖 | `POST` | `/api/topics` | `{ title, category, content }`（需登录） | `{ ok, id }` | ✅ |
+| 回复 | `POST` | `/api/topics/:id/replies` | `{ body }`（需登录） | 任意 JSON | ✅ |
+| 点赞 | `POST` | `/api/topics/:id/like` | 无（需登录） | `{ likes }` | ✅ |
+| 个人主页 | `GET` | `/api/users/:username` | 无 | 单用户对象 | ✅ |
+| 提交记录 | `GET` | `/api/users/:username/submissions` | `?page=1` | `[...]` 或 `{ list: [...] }` | ⬜ |
+| 比赛记录 | `GET` | `/api/users/:username/contests` | 无 | `[...]` | ⬜ |
+| 提交代码 | `POST` | `/api/submissions` | `{ problemCode, language, sourceCode }` | `{ id }`（`201`） | ⬜ |
+
+**登录态**：需要登录的接口用 `Authorization: Bearer <token>`（`token` 由 `/api/auth/login` 返回，
+前端存在 `localStorage` 的 `sylu_token`，用户名存在 `sylu_user`）。后端中间件 `middleware/auth.js`
+校验失败时返回 `401 { error }`。
 
 **列表接口的字段**（以各脚本 `normalize()` 为准，缺失字段有默认值，不会白屏）：
 
@@ -185,9 +216,12 @@ SYLU_USER_CONFIG.demoMode    = false; SYLU_USER_CONFIG.reload();      // 个人�
   - 提交记录字段：`code`、`verdict`（`AC` / `WA` / `TLE` / `MLE` / `RE` / `CE` / `PE` / `OLE` / `SE` / `PD` / `JD`）、`language`、`timeUsedMs`、`memoryUsedKb`、`minutesAgo`
   - 个人主页以 `?username=` 定位；**源码只有本人可见**，取源码的接口必须鉴权
 
-**错误约定**：统一返回 `{ "message": "给用户看的中文提示" }`，前端会优先显示它；没有 `message` 时按状态码兜底（`401` → 用户名或密码错误、`403` → 账号不可用、`429` → 尝试过于频繁、`5xx` → 服务器异常）。
+**错误约定**：后端目前返回 `{ "error": "给用户看的中文提示" }`；前端读取时写成 `data.message || data.error`，
+两种字段都能显示。**建议新接口统一用 `message`**，老接口可保持不变（前端已兼容）。
 
-**会话**：请求都带 `credentials: 'same-origin'`，建议用同域 Cookie 保存会话。
+**登录态**：JWT 放在 `Authorization: Bearer <token>` 头里，不用 Cookie；因此跨域调试时
+`Access-Control-Allow-Origin` 要允许前端来源（`.env` 里有 `CORS_ORIGIN`，但 `server.js` 目前是
+`app.use(cors())` 全开，上线前应收窄）。
 
 **推荐实现栈**（`server/package.json` 已备好依赖）：Express + `mysql2` + `jsonwebtoken` + `bcryptjs`，加 `helmet` / `cors` / `express-rate-limit`；数据库与 JWT 密钥放 `server/.env`（勿提交），路由统一挂 `/api` 前缀。
 
@@ -237,9 +271,26 @@ docs: 补充贡献指南与后端接口契约
 - [ ] 列表页：搜索、筛选、排序、空结果状态各试一遍
 - [ ] 窄屏（`< 620px`）下布局不溢出，宽表格可横向滚动
 - [ ] 无 `console.log` / `debugger` / 调试用 `alert` 残留
-- [ ] 没有把真实账号、数据库口令、JWT 密钥等敏感信息写进代码
+- [ ] 没有把真实账号、数据库口令、JWT 密钥等敏感信息写进代码（`.env` 已被 gitignore，只提交 `.env.example`）
+- [ ] 新增的**后端 async 路由也包在 `try/catch` 里**（Express 4 不会自动捕获，漏了会让进程直接退出）
+- [ ] 前端没有新增硬编码的 `http://localhost:3000`（统一走 `CONFIG.endpoint`，部署前改为相对路径 `/api`）
+- [ ] 后端改动了字段时，同步更新本文档的[接口契约](#后端接口契约)
 
 > 想帮忙补自动化测试？目前的验证方式是「jsdom 加载真实页面 + 真实脚本，模拟输入并断言渲染结果与错误分支」。欢迎把它固化进仓库并接上 `npm test`。
+
+## 当前待办
+
+按优先级排列，欢迎认领：
+
+| 优先级 | 事项 | 说明 |
+|---|---|---|
+| 🔴 | 给 7 个 GET 路由补 `try/catch` | `server.js` 里 `/api/ping`、`/api/problems`、`/api/contests`、`/api/rank`、`/api/topics`、`/api/topics/:id`、`/api/users/:username`——数据库异常目前会变成 unhandled rejection，Node 18+ 会终止进程 |
+| 🟠 | 前端端点改为相对路径 | 8 个脚本硬编码 `http://localhost:3000`，部署前抽成统一配置（或直接写 `/api`） |
+| 🟠 | 发帖弹窗的键盘与焦点行为 | `Esc` 关闭、点击遮罩关闭、打开时聚焦首个字段、关闭后归还焦点、`Tab` 限制在弹窗内；另需锁定背景滚动 |
+| 🟡 | `:root` 补 `--overlay` 变量 | 遮罩目前写死 `rgba(35, 24, 21, 0.5)`（即校棕加透明度） |
+| 🟡 | `/api/topics/:id` 收窄 `SELECT t.*` | 改成显式列名，避免返回无关字段 |
+| ⬜ | 判题机 | 「提交 → 编译 → 限时运行 → 比对 → 回写 verdict」，是功能闭环的最后一块 |
+| ⬜ | 静态文案页 | 使用帮助 / 常见问题 / 关于本站 / 联系我们 / 用户协议 / 隐私政策（页脚与表单里的死链来源） |
 
 ## 贡献者
 
