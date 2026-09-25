@@ -606,3 +606,4 @@ IP 内测仍保留以下上线前工作：配置域名与 HTTPS、异地备份�
 - Hydro 源码：https://github.com/hydro-dev/Hydro （AGPL-3.0）
 - 许可与合规说明：见仓库 `LICENSES/README.md`
 - 验收清单：见 `docs/ACCEPTANCE.md`
+- 上线执行清单（按顺序、带命令）：见 `docs/LAUNCH-CHECKLIST.md`

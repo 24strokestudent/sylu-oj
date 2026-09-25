@@ -64,3 +64,5 @@ bash test/judge-suite/check-fixtures.sh --with-heavy # 额外跑 TLE/MLE/OLE/RE
 
 **红线**：只要 `filesystem_test` 或 `network_test` 有任何一项成功，
 **Judge 一律不得上线**（§16）。这不是"建议优化"，是上线门槛。
+
+操作步骤（怎么建探针题、怎么判、怎么记录）见 [`sandbox-suite/README.md`](./sandbox-suite/README.md)。

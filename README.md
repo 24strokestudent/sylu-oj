@@ -113,6 +113,8 @@ docker compose -f deploy/docker/docker-compose.yml logs -f hydro
 | 异地备份副本 | 本机备份已验证；异地副本与完整恢复启动演练未做 |
 | 管理后台品牌化 | `/manage` 仍是上游原样 |
 
+> **执行版清单**（按顺序做、每项带命令与通过标准）见 [`docs/LAUNCH-CHECKLIST.md`](docs/LAUNCH-CHECKLIST.md)。
+
 ## 配色
 
 取自校徽，用法有分工，避免整页红绿棕同时大量出现：
