@@ -102,7 +102,7 @@ RUN chmod 0755 /usr/local/bin/sylu-entrypoint
 WORKDIR /opt/sylu-oj
 EXPOSE 8888
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=10 \
     CMD curl -fsS -o /dev/null http://127.0.0.1:8888/ || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/sylu-entrypoint"]
