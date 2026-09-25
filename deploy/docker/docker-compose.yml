@@ -1,0 +1,106 @@
+# SYLU OJ · Docker Compose 部署
+#
+# 用法（在仓库根目录）：
+#   cp deploy/docker/.env.example deploy/docker/.env
+#   $EDITOR deploy/docker/.env                 # 至少改数据库口令与站点地址
+#   docker compose -f deploy/docker/docker-compose.yml up -d --build
+#   docker compose -f deploy/docker/docker-compose.yml logs -f hydro
+#
+# 组件：
+#   caddy  唯一对外入口（80/443，HTTPS 自动签发）
+#   hydro  Hydro Web + 内嵌评测机 + go-judge 沙箱（8888，仅内网）
+#   mongo  MongoDB（27017，仅内网，绝不对外，对应 §42）
+#
+# 数据卷：mongo-data / hydro-data / hydro-files / hydro-backups / hydro-static
+
+name: sylu-oj
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?请在 deploy/docker/.env 设置 MONGO_ROOT_PASSWORD}
+      MONGO_HYDRO_PASSWORD: ${HYDRO_MONGO_PASSWORD:?请在 deploy/docker/.env 设置 HYDRO_MONGO_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/10-sylu-hydro-user.js:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' -u \"$$MONGO_INITDB_ROOT_USERNAME\" -p \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin | grep -q 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    networks: [sylu]
+
+  hydro:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        HYDROOJ_VERSION: ${HYDROOJ_VERSION:-5.0.7}
+        HYDRO_UI_VERSION: ${HYDRO_UI_VERSION:-4.58.5}
+        HYDRO_JUDGE_VERSION: ${HYDRO_JUDGE_VERSION:-4.0.6}
+        HYDRO_FPS_VERSION: ${HYDRO_FPS_VERSION:-1.6.0}
+        HYDRO_A11Y_VERSION: ${HYDRO_A11Y_VERSION:-0.0.4}
+        GO_JUDGE_VERSION: ${GO_JUDGE_VERSION:-1.12.3}
+        MONGO_TOOLS_VERSION: ${MONGO_TOOLS_VERSION:-100.13.0}
+    image: sylu-oj/hydro:${SYLU_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: mongodb://hydro:${HYDRO_MONGO_PASSWORD:?}@mongo:27017/hydro
+      SYLU_SITE_NAME: ${SYLU_SITE_NAME:-SYLU OJ}
+      SYLU_SITE_URL: ${SYLU_SITE_URL:-}
+      SYLU_BRAND_ADDON: ${SYLU_BRAND_ADDON:-1}
+      SYLU_SANDBOX_TMPFS: ${SYLU_SANDBOX_TMPFS:-512m}
+      TZ: ${TZ:-Asia/Shanghai}
+    # go-judge 沙箱要求：特权 + 主机 cgroup 命名空间 + 足够的 /dev/shm。
+    # 缺失会表现为提交后 RE / 一直 Pending（见 docs/DEPLOY.md §16）。
+    privileged: true
+    cgroup: host
+    shm_size: ${HYDRO_SHM_SIZE:-1g}
+    volumes:
+      - hydro-data:/root/.hydro
+      - hydro-static:/root/.hydro/static
+      - hydro-files:/data/file
+      - hydro-backups:/var/backups/sylu-oj
+    expose:
+      - "8888"
+    # 调试时可临时对外发布 8888（默认关闭）
+    # ports:
+    #   - "127.0.0.1:8888:8888"
+    networks: [sylu]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [hydro]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - hydro-static:/srv/hydro:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [sylu]
+
+volumes:
+  mongo-data:
+  hydro-data:
+  hydro-static:
+  hydro-files:
+  hydro-backups:
+  caddy-data:
+  caddy-config:
+
+networks:
+  sylu:
+    driver: bridge

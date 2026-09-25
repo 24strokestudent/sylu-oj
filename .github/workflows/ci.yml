@@ -1,0 +1,121 @@
+name: CI
+
+# SYLU OJ · 持续集成
+#
+# 覆盖两类检查：
+#   1. 既有测试：部署脚本回归、题库导入工具自测、判题用例本地校验
+#   2. Docker 部署：镜像可构建、compose 配置合法、栈可启动探活
+#
+# 说明：docker-smoke 目前是"观察项"（continue-on-error），
+# 因为 go-judge 沙箱依赖宿主 cgroup / 特权容器，需要先在真实 CI 上观察若干轮，
+# 稳定后再把 continue-on-error 去掉，升级为上线门禁。
+
+on:
+  push:
+    branches: [main, ci-docker]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-tests:
+    name: 部署脚本回归
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell 语法检查
+        run: |
+          for f in deploy/*.sh deploy/lib/*.sh deploy/docker/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+      - name: Addon JS 语法检查
+        run: |
+          node --check addons/sylu-brand/index.js
+          node --check addons/sylu-brand/brand.js
+      - name: 备份 / 恢复回归
+        run: bash test/deploy-regression.sh
+      - name: 发行版本回归
+        run: bash test/deploy-release-regression.sh
+      - name: 回滚回归
+        run: bash test/deploy-rollback-regression.sh
+
+  problem-importer:
+    name: 题库导入工具自测
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/problem-importer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/problem-importer/package-lock.json
+      - run: npm ci
+      - run: npm run selftest
+
+  judge-fixtures:
+    name: 判题用例本地校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装编译器
+        run: sudo apt-get update && sudo apt-get install -y g++ python3
+      - name: 校验 SYS001 验收集
+        run: bash test/judge-suite/check-fixtures.sh
+
+  docker-build:
+    name: Docker 镜像构建与 compose 校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: 构建 Hydro 镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          push: false
+          tags: sylu-oj/hydro:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: 校验 compose 配置
+        run: |
+          cp deploy/docker/.env.example deploy/docker/.env
+          docker compose -f deploy/docker/docker-compose.yml config -q
+          echo "compose 配置合法"
+
+  docker-smoke:
+    name: Docker 栈启动探活（观察项）
+    runs-on: ubuntu-latest
+    needs: docker-build
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: 生成 CI 用 .env
+        run: |
+          cp deploy/docker/.env.example deploy/docker/.env
+          sed -i 's/^MONGO_ROOT_PASSWORD=.*/MONGO_ROOT_PASSWORD=ci-root/' deploy/docker/.env
+          sed -i 's/^HYDRO_MONGO_PASSWORD=.*/HYDRO_MONGO_PASSWORD=ci-hydro/' deploy/docker/.env
+          sed -i 's/^SITE_ADDRESS=.*/SITE_ADDRESS=:80/' deploy/docker/.env
+      - name: 启动 mongo 与 hydro
+        run: docker compose -f deploy/docker/docker-compose.yml up -d --build --wait --wait-timeout 600 mongo hydro
+      - name: 探活 Web 与沙箱
+        run: |
+          docker compose -f deploy/docker/docker-compose.yml exec -T hydro \
+            curl -fsS -o /dev/null http://127.0.0.1:8888/
+          echo "Hydro Web 200"
+          docker compose -f deploy/docker/docker-compose.yml exec -T hydro \
+            curl -fsS http://127.0.0.1:5050/version
+          echo "go-judge 沙箱在线"
+      - name: 输出容器日志
+        if: always()
+        run: docker compose -f deploy/docker/docker-compose.yml logs --no-color | tail -200
+      - name: 清理
+        if: always()
+        run: docker compose -f deploy/docker/docker-compose.yml down -v

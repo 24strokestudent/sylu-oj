@@ -1,0 +1,30 @@
+# SYLU OJ · Caddy 反向代理
+#
+# SITE_ADDRESS 由 docker-compose 注入：
+#   内测（裸 IP / 本地） -> :80
+#   生产（自动 HTTPS）   -> oj.example.edu.cn
+# 生产环境只需把 SITE_ADDRESS 改成域名，Caddy 会自动申请并续期 Let's Encrypt 证书。
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# Hydro 的静态资源写在共享卷里，Caddy 直接读；未命中则回退反代。
+	root * /srv/hydro
+	@static file {
+		try_files {path}
+	}
+	handle @static {
+		file_server
+	}
+
+	handle {
+		reverse_proxy hydro:8888 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
