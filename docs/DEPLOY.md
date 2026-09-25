@@ -2,6 +2,9 @@
 
 > 面向：负责把 SYLU OJ 装到服务器上、并长期维护它的人。
 > 目标：**照着做能装出一套能判题、能备份、能回滚的 OJ**，而不是一个只能打开首页的壳。
+>
+> 本文档是**裸机路径**（Nix + pm2 + 主机 Caddy/MongoDB），也是当前线上在跑的那一套。
+> 想用容器部署（Dockerfile + docker-compose，CI 已验证可构建并启动）见 [`DEPLOY-DOCKER.md`](./DEPLOY-DOCKER.md)。
 
 ---
 
@@ -555,6 +558,7 @@ Using mongodb external event bus
 
 **2026-09-20：本文档的部署流程已在真实 Debian 12 服务器（`101.42.27.44`）上跑通第一轮。**
 下方区分「真机实测通过」与「仍待验证」，不混为一谈。
+**2026-09-25 补充**：容器路径（`deploy/docker/`）与 CI 已落地，其验证状态见 §8.1 与 §8.2 中标注日期的行——注意它们**只经过 CI 构建与启动探活**，未做真机判题。
 
 ### 8.1 真机实测通过（Debian 12 / Hydro 5.0.7）
 
@@ -570,6 +574,8 @@ Using mongodb external event bus
 | `tools/problem-importer` | ✅ 已实测：自测 47 项断言全通过；端到端 preflight/convert/verify 跑通 |
 | `test/judge-suite` 题面与用例 | ✅ 已实测：本地校验 10 项全通过（含 WA/AC 判定） |
 | `deploy/secret-scan.sh` | ✅ 已实测：在仓库上运行，结果干净 |
+| `deploy/docker/*`（容器路径） | ✅ 2026-09-25 起 CI 已验证：镜像构建成功、compose 配置合法、`mongo` + `hydro` 栈可启动并探活通过（Web 200、`5050/version` 200） |
+| CI（`.github/workflows/ci.yml`） | ✅ `main` 上 5/5 job 全绿（其中「Docker 栈启动探活」是观察项，见 §8.2） |
 
 ### 8.2 仍待真机验证
 
@@ -579,9 +585,11 @@ Using mongodb external event bus
 | `deploy/rollback.sh`（§49 回滚） | ⚠️ 只验证了 `--list` 只读模式 | 同上 |
 | `deploy/restore-check.sh`（§46 恢复演练） | ✅ 机械校验通过 | 2026-09-24 使用最新本地备份恢复到临时库，20 个 BSON 集合与题目/提交数据齐全；完整启动演练仍需单独环境 |
 | `deploy/backup.sh` + 异地副本 | ⚠️ 本地已验证 | 2026-09-24 本地备份成功，异地副本仍需配置 |
-| 域名与 HTTPS（§41） | ⚠️ 临时 IP 入口 | `http://101.42.27.44/` 可用；443 已监听但裸 IP 内部证书不适合作为生产 HTTPS，**上线前必须配置域名证书** |
+| 域名与 HTTPS（§41） | ⚠️ 未完成 | 仅有裸 IP 入口 `http://101.42.27.44/`；**2026-09-25 实测 443 连接超时**（安全组未放行或 Caddy 未监听），需先排查再配置域名证书。服务器在中国大陆，域名对外服务**必须先 ICP 备案** |
 | `addons/sylu-brand` 插件 | ✅ 已安装并验证 | `/sylu/about`、导航「关于本站」、`/sylu/css/*.css`、`/sylu-logo.svg` 均已生效；Hydro 原生题库/提交/比赛/后台结构保留 |
 | 题库正式导入（§18–§25） | ⚠️ 未执行 | 站点还没有任何正式题目 |
+| Docker 路径的沙箱隔离（§16） | ⚠️ 未验证 | 容器路径**不使用 `~/.hydro/mount.yaml`**，改走 go-judge 内置默认挂载；`test/sandbox-suite/` 的 6 个用例必须在该栈上重跑，否则红线没有证据 |
+| Docker 路径的判题链路 | ⚠️ 未验证 | CI 的「启动栈探活」只证明服务端口活着，**未提交过任何代码**；容器内 SYS001 的判题结果尚未核对 |
 
 **IP 内测状态**：`http://101.42.27.44/` 已可用，首页、题库、训练、比赛、作业、排名、登录、注册和状态页均已实测。Hydro、MongoDB、Caddy、内嵌 Sandbox 均正常，SYS001 已实测 C++ Accepted、Wrong Answer、Compile Error、Runtime Error、TLE、Python Accepted，并完成网络与文件隔离探针验证；MLE/OLE 在当前内嵌 Sandbox 中分别表现为 Runtime Error/Memory Exceeded，已如实记录。2026-09-24 本地备份和临时库机械恢复校验通过，异地副本与完整恢复启动演练仍待配置，当前仍属于 IP 内测，不宣称公网生产上线。
 
