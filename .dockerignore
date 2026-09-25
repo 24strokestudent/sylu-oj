@@ -1,0 +1,26 @@
+# 镜像只需要 addons/sylu-brand 与 deploy/docker/*
+
+.git
+.gitattributes
+.github
+.idea
+.vscode
+.DS_Store
+
+# 归档与文档
+legacy-homepage
+legacy-server
+docs
+
+# 测试与工具不参与镜像构建
+test
+tools
+
+# 依赖与产物
+**/node_modules
+*.log
+
+# 密钥与本地环境变量
+deploy/docker/.env
+**/*.env
+!deploy/docker/.env.example
