@@ -72,10 +72,10 @@ RUN set -eux; \
     rm -rf /tmp/go-judge.tar.gz /tmp/go-judge; \
     hydro-sandbox -version
 
-# ---------- yarn（Hydro 官方用 yarn global add 安装） ----------
-RUN set -eux; \
-    npm install -g yarn@1.22.22; \
-    yarn --version
+# ---------- yarn ----------
+# node:24-bookworm-slim 基础镜像已内置 yarn 1.22.22（/opt/yarn-v1.22.22，bin 在 /usr/local/bin）。
+# 不要再 `npm install -g yarn`：会因 /usr/local/bin/yarn 已存在而报 EEXIST，导致构建失败。
+RUN set -eux; yarn --version
 
 # ---------- Hydro 组件（整组安装，版本与 docs/DEPLOY.md 记录一致） ----------
 COPY deploy/docker/esbuild-resolutions.cjs /tmp/esbuild-resolutions.cjs
