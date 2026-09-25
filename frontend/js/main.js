@@ -64,23 +64,42 @@
     }
     requestAnimationFrame(step);
   }
-
   var statEls = document.querySelectorAll('[data-count]');
-  if (statEls.length && 'IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          animateCount(entry.target);
-          io.unobserve(entry.target);
-        }
+
+  function runStats() {
+    if (statEls.length && 'IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            animateCount(entry.target);
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.4 });
+      statEls.forEach(function (el) { io.observe(el); });
+    } else {
+      statEls.forEach(function (el) {
+        el.textContent = el.getAttribute('data-count');
       });
-    }, { threshold: 0.4 });
-    statEls.forEach(function (el) { io.observe(el); });
-  } else {
-    statEls.forEach(function (el) {
-      el.textContent = el.getAttribute('data-count');
-    });
+    }
   }
+
+  fetch('http://localhost:3000/api/stats')
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var map = {
+        statProblems: 'problems',
+        statUsers: 'users',
+        statSubmissions: 'submissions',
+        statAccepted: 'accepted'
+      };
+      Object.keys(map).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && data[map[id]] != null) el.setAttribute('data-count', data[map[id]]);
+      });
+    })
+    .catch(function () {})
+    .then(runStats);
   /* ---------- 登录状态：顶栏显示当前用户 ---------- */
   var navActions = document.querySelector('.nav-actions');
   var token = null;

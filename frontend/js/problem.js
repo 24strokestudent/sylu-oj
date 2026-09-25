@@ -8,13 +8,11 @@
 
   /* ---------- 配置 ---------- */
   var CONFIG = {
-    // 后端接口地址：server/ 提供接口后，把 demoMode 改为 false 即可联调
-    // 详情接口约定：GET /api/problems?code=CS001-01-001
-    endpoint: '/api/problems',
-    // 提交接口（尚未实现）：POST /api/submissions { problemCode, language, sourceCode }
-    submitEndpoint: '/api/submissions',
-    // 演示模式：后端尚未接入时使用 js/problems-data.js 的占位数据
-    demoMode: true
+    // 详情/列表接口：GET /api/problems?code=P001
+    endpoint: 'http://localhost:3000/api/problems',
+    // 提交接口：POST /api/submissions { problemCode, language, sourceCode }
+    submitEndpoint: 'http://localhost:3000/api/submissions',
+    demoMode: false
   };
 
   var DIFFICULTY_TAG_CLASS = {
@@ -349,9 +347,40 @@
         return;
       }
 
+      var token = null;
+      try { token = window.localStorage.getItem('sylu_token'); } catch (e) {}
+      if (!token) { showAlert('error', '请先登录再提交代码'); return; }
+
       var language = els.language ? els.language.value : '';
-      showAlert('info', '演示模式：判题服务尚未接入，本次提交（' + language + '，' +
-        code.length + ' 字符）未发送。登录并从后端接入 ' + CONFIG.submitEndpoint + ' 后即可真正判题。');
+      var problemCode = codeFromUrl();
+      els.submitBtn.disabled = true;
+
+      fetch(CONFIG.submitEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          problemCode: problemCode,
+          language: language,
+          sourceCode: code
+        })
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      }).then(function (result) {
+        els.submitBtn.disabled = false;
+        if (result.ok) {
+          showAlert('info', '提交成功！状态：等待判题（PD）');
+        } else {
+          showAlert('error', result.data.message || result.data.error || '提交失败');
+        }
+      }).catch(function () {
+        els.submitBtn.disabled = false;
+        showAlert('error', '网络错误，请确认后端已启动');
+      });
     });
   }
 

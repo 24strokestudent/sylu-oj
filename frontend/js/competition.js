@@ -134,7 +134,8 @@
       participants: Number(row.participants) || 0,
       startOffset: Number(row.startOffset) || 0,
       durationMinutes: Number(row.durationMinutes) || 0,
-      status: row.status
+      status: row.status,
+      registered: !!row.registered
     };
     item.status = deriveStatus(item);
     return item;
@@ -282,7 +283,13 @@
     try { token = window.localStorage.getItem('sylu_token'); } catch (e) {}
 
     var button;
-    if (token && contest.status === 'upcoming') {
+    if (contest.registered) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn ' + action.className;
+      button.textContent = '已报名 ✓';
+      button.disabled = true;
+    } else if (token && contest.status === 'upcoming') {
       button = document.createElement('button');
       button.type = 'button';
       button.className = 'btn ' + action.className;
@@ -369,8 +376,13 @@
       return Promise.reject(new Error('当前浏览器不支持 fetch，请升级浏览器后重试'));
     }
 
+    var authToken = null;
+    try { authToken = window.localStorage.getItem('sylu_token'); } catch (e) {}
+    var headers = { Accept: 'application/json' };
+    if (authToken) headers.Authorization = 'Bearer ' + authToken;
+
     return fetch(CONFIG.endpoint, {
-      headers: { Accept: 'application/json' },
+      headers: headers,
       credentials: 'same-origin'
     }).then(function (res) {
       return res.json().catch(function () {

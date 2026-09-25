@@ -34,15 +34,43 @@ app.get('/api/ping', async (req, res) => {
   res.json({ message: '数据库连通', result: rows });
 });
 
-// 题目列表接口
+// 题目接口：带 ?code= 返回单题详情，否则返回列表
 app.get('/api/problems', async (req, res) => {
-  const [rows] = await pool.query(
-    'SELECT id, title, difficulty FROM problems ORDER BY id'
-  );
   const map = { easy: '简单', medium: '中等', hard: '困难' };
+  const code = req.query.code;
+
+  if (code) {
+    const [rows] = await pool.query('SELECT * FROM problems WHERE code = ? LIMIT 1', [code]);
+    const p = rows[0];
+    if (!p) return res.status(404).json({ message: '题目不存在' });
+
+    let samples = p.samples;
+    if (typeof samples === 'string') {
+      try { samples = JSON.parse(samples); } catch (e) { samples = []; }
+    }
+
+    return res.json({
+      code: p.code,
+      title: p.title,
+      difficulty: map[p.difficulty] || '简单',
+      tags: [],
+      submissions: 0,
+      accepted: 0,
+      status: 'none',
+      timeLimitMs: p.time_limit_ms,
+      memoryLimitMb: p.memory_limit_mb,
+      description: p.description || '',
+      inputFormat: p.input_format || '',
+      outputFormat: p.output_format || '',
+      hint: p.hint || '',
+      samples: Array.isArray(samples) ? samples : []
+    });
+  }
+
+  const [rows] = await pool.query('SELECT id, code, title, difficulty FROM problems ORDER BY id');
   res.json(rows.map(function (r) {
     return {
-      code: 'P' + String(r.id).padStart(3, '0'),
+      code: r.code || ('P' + String(r.id).padStart(3, '0')),
       title: r.title,
       difficulty: map[r.difficulty] || '简单',
       tags: [],
@@ -58,8 +86,21 @@ app.listen(port, () => {
   console.log('后端已启动: http://localhost:' + port);
 });
 app.get('/api/contests', async (req, res) => {
+  // 可选登录：带了有效 token 就解析出 userId
+  let userId = null;
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (token) {
+    try { userId = jwt.verify(token, process.env.JWT_SECRET).id; } catch (e) {}
+  }
+
   const [rows] = await pool.query(
-    'SELECT id, title, format, description, problem_count, participants, start_time, duration_minutes FROM contests ORDER BY start_time DESC'
+    `SELECT c.id, c.title, c.format, c.description, c.problem_count, c.participants,
+            c.start_time, c.duration_minutes,
+            (SELECT COUNT(*) FROM contest_registrations r
+              WHERE r.contest_id = c.id AND r.user_id = ?) AS registered
+     FROM contests c
+     ORDER BY c.start_time DESC`,
+    [userId]
   );
   const now = Date.now();
   res.json(rows.map(function (r) {
@@ -71,12 +112,13 @@ app.get('/api/contests', async (req, res) => {
       problems: r.problem_count,
       participants: r.participants,
       startOffset: Math.round((new Date(r.start_time).getTime() - now) / 60000),
-      durationMinutes: r.duration_minutes
+      durationMinutes: r.duration_minutes,
+      registered: !!r.registered
     };
   }));
 });
 const auth = require('./middleware/auth');
-
+const jwt = require('jsonwebtoken');
 app.post('/api/contests/:id/register', auth, async (req, res) => {
   try {
     await pool.query(
@@ -238,4 +280,50 @@ app.post('/api/topics', auth, async (req, res) => {
     console.error(e);
     res.status(500).json({ error: '发帖失败' });
   }
+});
+
+// 提交代码：写入 submissions 表（判题暂为模拟，状态 PD = 等待判题）
+app.post('/api/submissions', auth, async (req, res) => {
+  const { problemCode, language, sourceCode } = req.body || {};
+  if (!problemCode || !sourceCode) {
+    return res.status(400).json({ message: '缺少题号或代码' });
+  }
+
+  const [ps] = await pool.query('SELECT id FROM problems WHERE code = ? LIMIT 1', [problemCode]);
+  if (!ps.length) return res.status(404).json({ message: '题目不存在' });
+
+  try {
+    const [result] = await pool.query(
+      'INSERT INTO submissions (user_id, problem_id, language, code, status) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, ps[0].id, language || 'cpp', sourceCode, 'PD']
+    );
+    res.json({ ok: true, id: result.insertId, status: 'PD' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: '提交失败' });
+  }
+});
+
+// 我的提交记录（需登录）
+app.get('/api/my/submissions', auth, async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT s.id, s.language, s.status, s.created_at, p.code AS problemCode, p.title
+     FROM submissions s
+     LEFT JOIN problems p ON p.id = s.problem_id
+     WHERE s.user_id = ?
+     ORDER BY s.id DESC
+     LIMIT 20`,
+    [req.user.id]
+  );
+  res.json(rows);
+});
+app.get('/api/stats', async (req, res) => {
+  const [rows] = await pool.query(`
+    SELECT
+      (SELECT COUNT(*) FROM problems) AS problems,
+      (SELECT COUNT(*) FROM users) AS users,
+      (SELECT COUNT(*) FROM submissions) AS submissions,
+      (SELECT COUNT(*) FROM submissions WHERE status = 'AC') AS accepted
+  `);
+  res.json(rows[0]);
 });
