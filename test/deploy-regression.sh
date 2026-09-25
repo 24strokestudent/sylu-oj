@@ -96,6 +96,9 @@ expect 1 '旧 ZIP 不得冒充新备份' env NO_ARCHIVE=1 bash "$TMP/deploy/back
 # 避免秒级文件名碰撞，前一份已经过校验，移到隔离测试目录中另存。
 mv "$TMP/backups/"*.zip "$TMP/saved.zip"
 expect 1 '异地上传失败必须返回失败' env SYLU_RESTIC_REPO=mock SYLU_RESTIC_PASS=testing RESTIC_FAIL=1 bash "$TMP/deploy/backup.sh" --offsite
+# 上传失败仍会保留本地 ZIP；同样移走，否则与下一次运行在同一秒内撞名
+# （backup.sh 拒绝覆盖同名备份，会误报为失败）。
+mv "$TMP/backups/"*.zip "$TMP/saved-failed-offsite.zip"
 expect 0 '异地上传成功执行保留策略' env SYLU_RESTIC_REPO=mock SYLU_RESTIC_PASS=testing RESTIC_FAIL=0 bash "$TMP/deploy/backup.sh" --offsite
 grep -qx backup "$TMP/restic.calls"
 grep -q 'forget .*--group-by host ' "$TMP/restic.args" || { echo 'FAIL: 异地保留策略按唯一标签分组'; exit 1; }
