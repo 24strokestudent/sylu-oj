@@ -114,6 +114,8 @@ docker compose -f deploy/docker/docker-compose.yml logs -f hydro
 | 管理后台品牌化 | `/manage` 仍是上游原样 |
 
 > **执行版清单**（按顺序做、每项带命令与通过标准）见 [`docs/LAUNCH-CHECKLIST.md`](docs/LAUNCH-CHECKLIST.md)。
+>
+> 版本与变更记录见 [`CHANGELOG.md`](CHANGELOG.md)；当前内测版为 **v0.1.0-beta.1**。
 
 ## 配色
 
